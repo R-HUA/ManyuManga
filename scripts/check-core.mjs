@@ -53,7 +53,8 @@ function environment() {
   const asset = { Tag: { ALIAS: 1, SECRET: 2, ACCESSIBILITY: 3, CONFLICT_RESOLUTION: 4, RETURN_TYPE: 5 },
     Accessibility: { DEVICE_FIRST_UNLOCKED: 1 }, ConflictResolution: { OVERWRITE: 0 }, ReturnType: { ALL: 0 },
     add: async values => { secrets.set(Buffer.from(values.get(1)).toString(), new Map(values)); },
-    query: async query => { const value = secrets.get(Buffer.from(query.get(1)).toString()); return value ? [value] : []; } };
+    query: async query => { const value = secrets.get(Buffer.from(query.get(1)).toString()); return value ? [value] : []; },
+    remove: async query => { secrets.delete(Buffer.from(query.get(1)).toString()); } };
   const jm = { utf8Encode: value => new Uint8Array(Buffer.from(value)), utf8Decode: value => Buffer.from(value).toString(),
     md5Hex: value => crypto.createHash('md5').update(value).digest('hex'), jmApi: { init: async () => {} } };
   const http = { RequestMethod: { POST: 'POST' }, HttpDataType: { STRING: 'string' }, createHttp: () => ({
@@ -78,7 +79,11 @@ function environment() {
       '@ohos.file.fs': nativeFs, '@ohos.file.picker': { DocumentViewPicker: class { async select() { return state.selected; } async save() { return state.saved; } } },
       '@ohos.zlib': { decompressFile: (...args) => state.unzip(...args) }, '@ohos.net.http': http,
       '@ohos.util': { Base64Helper: class { encodeToStringSync(bytes) { return Buffer.from(bytes).toString('base64'); } } },
-      '@ohos.app.ability.common': {}, '@ohos.multimedia.image': {}
+      '@ohos.app.ability.common': {}, '@ohos.multimedia.image': {},
+      '@ohos.net.connection': {},
+      '@ohos.url': require('node:url'),
+      '@ohos.web.webview': { WebviewController: class {}, WebCookieManager: { fetchCookieSync: () => '', configCookieSync: () => {}, saveCookieSync: () => {} } },
+      '@kit.PerformanceAnalysisKit': { hilog: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } }
     };
     const localRequire = name => name.startsWith('.') ? load(path.resolve(path.dirname(file), name + '.ets')) : native[name] ?? (() => { throw new Error(`未模拟的平台边界：${name}`); })();
     vm.runInThisContext(`(function(exports, require, module) { ${output}\n})`, { filename: file })(module.exports, localRequire, module);
@@ -297,13 +302,46 @@ try {
   await test('备份默认值有效、取消不写入、失败整批回滚', async env => {
     const backup = env.load('data/Backup'); const file = path.join(env.directory, 'backup.json'); env.state.saved = [file];
     assert.ok(await backup.exportBackup()); const document = JSON.parse(fs.readFileSync(file, 'utf8'));
-    assert.equal(JSON.parse(document.values.sources_v1).length, 2); assert.deepEqual(JSON.parse(document.values.library_v1), []);
+    assert.equal(JSON.parse(document.values.sources_v1).length, 3); assert.deepEqual(JSON.parse(document.values.library_v1), []);
     env.state.selected = []; assert.equal(await backup.importBackup(), false);
     const prefs = await env.load('util/Prefs').Prefs.getInstance(); await prefs.putString('library_v1', '["original"]');
     env.state.selected = [file]; env.state.failFlush = true; await assert.rejects(backup.importBackup(), /磁盘/);
     assert.equal(await prefs.getString('library_v1', ''), '["original"]');
     assert.ok(await backup.importBackup()); assert.equal(await prefs.getString('library_v1', ''), '[]');
     document.version = 99; fs.writeFileSync(file, JSON.stringify(document)); await assert.rejects(backup.importBackup(), /有效/);
+  });
+  await test('E-Hentai 复合键解析与默认注册重启语义', async env => {
+    const eh = env.load('data/EhSource');
+    const fromUrl = eh.ehSource.parseIdentity('https://e-hentai.org/g/1234567/a1b2c3d4e5/');
+    assert.equal(fromUrl.gid, 1234567); assert.equal(fromUrl.token, 'a1b2c3d4e5');
+    assert.equal(eh.ehSource.fullKey(fromUrl), 'eh~1234567_a1b2c3d4e5');
+    assert.equal(eh.ehSource.keyFromInput('123456/abcdef1234'), 'eh~123456_abcdef1234');
+    assert.equal(eh.ehSource.keyFromInput(eh.ehSource.fullKey(fromUrl)), 'eh~1234567_a1b2c3d4e5');
+    assert.throws(() => eh.ehSource.parseIdentity('abc'), /无效/);
+    assert.throws(() => eh.ehSource.parseIdentity('123456/short'), /无效/);
+    assert.equal(eh.ehSource.isEhImageUrl('https://ehgt.org/x/y.webp'), true);
+    assert.equal(eh.ehSource.isEhImageUrl('https://e-hentai.org/t/abc.jpg'), true);
+    assert.equal(eh.ehSource.isEhImageUrl('https://foo.hath.network/1.jpg'), false);
+    const secondPage = await eh.ehSource.comments('eh~1234567_a1b2c3d4e5', 2);
+    assert.equal(secondPage.list.length, 0);
+    assert.equal(secondPage.total, 0);
+    const fresh = await env.load('data/Sources').sourceStore.list();
+    assert.ok(fresh.some(x => x.id === 'eh' && x.kind === 'eh' && x.enabled));
+    // 重启语义：预置 prefs 磁盘后重新 load —— 已置补种标记的旧库不复活 EH；未置标记的旧库补种一次
+    const seededSources = JSON.stringify([
+      { id: 'jm', instanceId: 'jm', name: '禁漫', kind: 'jm', endpoint: '', remoteId: '', language: '', auth: 'none', enabled: true, latency: 0 },
+      { id: 'local', instanceId: 'local', name: '本地漫画', kind: 'local', endpoint: '', remoteId: '', language: '', auth: 'none', enabled: true, latency: 0 }
+    ]);
+    const removed = environment();
+    removed.disk.set('sources_v1', seededSources);
+    removed.disk.set('eh_seeded_v1', true);
+    const afterRestart = await removed.load('data/Sources').sourceStore.list();
+    assert.equal(afterRestart.some(x => x.id === 'eh'), false, '用户删除 EH 后重启不应复活');
+    const legacy = environment();
+    legacy.disk.set('sources_v1', seededSources);
+    const upgraded = await legacy.load('data/Sources').sourceStore.list();
+    assert.equal(upgraded.filter(x => x.id === 'eh').length, 1, '旧版本升级应恰好补种一次');
+    assert.equal(legacy.disk.get('eh_seeded_v1'), true);
   });
   console.log(`共 ${checks} 项核心逻辑验证通过（平台接口使用本地替身）。`);
 } finally {

@@ -24,6 +24,7 @@ export struct WorkChapterList {
   preview: (chapter: Chapter) => void = (chapter: Chapter): void => {};
   @Prop aid: string = '';
   @Link comments: Array<CommentItem>;
+  @Prop commentsDone: boolean = false;
   loadComments: () => Promise<void> = async (): Promise<void> => {};
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
 
@@ -145,8 +146,8 @@ export struct WorkChapterList {
           .textAlign(TextAlign.Center)
       }
 
-      // JM Comments Section
-      if (this.album !== null && sourceId(this.aid) === 'jm') {
+      // 评论 Section（JM 漫评 / EH 画廊评论）
+      if (this.album !== null && (sourceId(this.aid) === 'jm' || sourceId(this.aid) === 'eh')) {
         Column({ space: 12 }) {
           Row() {
             Text('读者漫评')
@@ -154,16 +155,26 @@ export struct WorkChapterList {
               .fontWeight(FontWeight.Bold)
               .fontColor(TEXT_MAIN)
               .layoutWeight(1)
-            Text(this.comments.length === 0 ? '加载漫评' : '加载更多')
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(PRIMARY)
-              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-              .borderRadius(14)
-              .backgroundColor(PRIMARY_SOFT)
-              .onClick(() => {
-                this.loadComments();
-              })
+            if (this.commentsDone && this.comments.length === 0) {
+              Text('暂无评论')
+                .fontSize(12)
+                .fontColor(TEXT_SUB)
+            } else if (this.commentsDone) {
+              Text('已全部加载')
+                .fontSize(12)
+                .fontColor(TEXT_SUB)
+            } else {
+              Text(this.comments.length === 0 ? '加载漫评' : '加载更多')
+                .fontSize(12)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(PRIMARY)
+                .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                .borderRadius(14)
+                .backgroundColor(PRIMARY_SOFT)
+                .onClick(() => {
+                  this.loadComments();
+                })
+            }
           }
           .width('100%')
           .margin({ top: 12 })

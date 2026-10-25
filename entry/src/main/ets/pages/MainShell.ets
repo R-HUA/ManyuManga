@@ -12,6 +12,7 @@ import { ExplorePage } from './ExplorePage';
 import { CategoryPage } from './CategoryPage';
 import { ChapterPreviewPage } from './ChapterPreviewPage';
 import { JmSourceSettingsPage } from './JmSourceSettingsPage';
+import { EhBrowsePage } from './eh/EhBrowsePage';
 import { IconCircleButton } from '../common/Components';
 import {
   ROUTE_SEARCH,
@@ -20,6 +21,7 @@ import {
   ROUTE_DOWNLOADS,
   ROUTE_PREVIEW,
   ROUTE_JM_SETTINGS,
+  ROUTE_EH_BROWSE,
   NAV_STACK_DEPTH_KEY,
   MangaRouteParams
 } from '../common/Route';
@@ -184,6 +186,8 @@ export struct MainShell {
       ChapterPreviewPage()
     } else if (name === 'jmBrowse') {
       this.JmBrowseDestination()
+    } else if (name === ROUTE_EH_BROWSE) {
+      EhBrowsePage()
     } else if (name === 'jmSettings' || name === ROUTE_JM_SETTINGS) {
       JmSourceSettingsPage()
     }

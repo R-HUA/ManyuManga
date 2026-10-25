@@ -3,6 +3,8 @@ import fs from '@ohos.file.fs';
 import { jmApi } from './JmApi';
 import { suwayomi } from './Suwayomi';
 import { localSource } from './LocalSource';
+import { ehSource } from './EhSource';
+import { EhSettings } from './eh/EhSettings';
 import { sourceStore, sourceId, nativeId, sourceKey, SourceEntry } from './Sources';
 import { Album, AlbumLite, SearchResult, Chapter, CategoryItem, CommentsResult, DomainSpeed } from '../models/Models';
 import { httpUtil } from '../util/Http';
@@ -17,7 +19,12 @@ export interface SourceAdapter {
 }
 class SourceApi implements SourceAdapter {
   private covers: Map<string, string> = new Map();
-  async init(context?: common.Context): Promise<void> { await jmApi.init(context); }
+  async init(context?: common.Context): Promise<void> {
+    await jmApi.init(context);
+    if (context !== undefined) {
+      await EhSettings.init(context);
+    }
+  }
   private qualify(list: Array<AlbumLite>): Array<AlbumLite> {
     return list.map((item: AlbumLite): AlbumLite => new AlbumLite(sourceKey('jm', item.id),
       item.title, item.author, item.coverUrl, item.category, item.categorySub));
@@ -33,6 +40,7 @@ class SourceApi implements SourceAdapter {
         result = new SearchResult(raw.total, this.qualify(raw.list));
       }
     } else if (source.kind === 'local') { result = await localSource.search(query); }
+    else if (source.kind === 'eh') { result = await ehSource.searchSource(query, page); }
     else { result = await suwayomi.search(source, query, page); }
     await sourceStore.get(source.id);
     source.latency = Date.now() - start;
@@ -50,6 +58,7 @@ class SourceApi implements SourceAdapter {
       album.episodes = album.episodes.map((c: Chapter) => new Chapter(sourceKey(source.id, c.id), c.title, c.sort));
       album.coverUrl = jmApi.albumCoverUrl(nativeId(key));
     } else if (source.kind === 'local') { album = await localSource.album(nativeId(key)); }
+    else if (source.kind === 'eh') { album = await ehSource.album(key); }
     else { album = await suwayomi.album(source, nativeId(key)); }
     await sourceStore.get(source.id);
     this.covers.set(key, album.coverUrl);
@@ -62,6 +71,7 @@ class SourceApi implements SourceAdapter {
     let pages: Array<string>;
     if (source.kind === 'jm') { pages = await jmApi.chapterImages(nativeId(key)); }
     else if (source.kind === 'local') { pages = await localSource.pages(key); }
+    else if (source.kind === 'eh') { pages = await ehSource.chapterImages(key); }
     else { pages = await suwayomi.pages(source, nativeId(key)); }
     await sourceStore.get(source.id);
     if (pages.length === 0) { throw new Error('本章暂无可阅读的页面'); }
@@ -80,7 +90,8 @@ class SourceApi implements SourceAdapter {
     if (offline !== null) { return offline; }
     const source: SourceEntry = await sourceStore.get(sourceId(key));
     const bytes: ArrayBuffer = source.kind === 'jm' ? await jmApi.fetchBytes(this.imageUrl(key, page, attempt))
-      : await this.fetchBytes(page);
+      : (source.kind === 'eh' ? await ehSource.fetchPage(key, page, attempt)
+        : await this.fetchBytes(page));
     await sourceStore.get(source.id);
     return bytes;
   }
@@ -92,6 +103,11 @@ class SourceApi implements SourceAdapter {
         if (fs.readSync(file.fd, buffer) !== buffer.byteLength) { throw new Error('本地漫画页面读取不完整'); }
         return buffer;
       } finally { fs.closeSync(file); }
+    }
+    // E-Hentai 图片域（官方三域 + ehgt 缩略图 CDN）需带 Referer / 登录 Cookie，走专属客户端
+    const ehBytes: ArrayBuffer | null = await ehSource.fetchImageBytes(url);
+    if (ehBytes !== null) {
+      return ehBytes;
     }
     const source: SourceEntry | undefined = (await sourceStore.list()).find((s: SourceEntry) =>
       s.kind === 'suwayomi' && url.startsWith(`${s.endpoint}/`));
@@ -108,7 +124,13 @@ class SourceApi implements SourceAdapter {
   }
   async categories(): Promise<Array<CategoryItem>> { return jmApi.categories(); }
   async comments(key: string, page: number = 1): Promise<CommentsResult> {
-    return sourceId(key) === 'jm' ? jmApi.comments(nativeId(key), page) : new CommentsResult();
+    if (sourceId(key) === 'jm') {
+      return jmApi.comments(nativeId(key), page);
+    }
+    if (sourceId(key) === 'eh') {
+      return ehSource.comments(key, page);
+    }
+    return new CommentsResult();
   }
   async search(query: string, page: number = 1, order: string = 'mr', time: string = 'a', year: string = '', month: string = ''): Promise<SearchResult> {
     const raw: SearchResult = await jmApi.search(query, page, order, time, year, month);

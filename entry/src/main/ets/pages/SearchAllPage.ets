@@ -288,7 +288,8 @@ export struct SearchAllPage {
             ForEach(this.visibleGroups(), (group: SearchGroup) => {
               Column({ space: 12 }) {
                 Row({ space: 8 }) {
-                  Text(group.source.kind === 'jm' ? 'JM' : (group.source.kind === 'local' ? '本地' : '扩展'))
+                  Text(group.source.kind === 'jm' ? 'JM' : (group.source.kind === 'eh' ? 'EH'
+                    : (group.source.kind === 'local' ? '本地' : '扩展')))
                     .fontSize(10)
                     .fontWeight(FontWeight.Bold)
                     .fontColor(group.source.kind === 'jm' ? ACCENT : PRIMARY)

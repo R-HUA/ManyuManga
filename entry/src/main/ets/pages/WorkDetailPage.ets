@@ -36,6 +36,7 @@ export struct WorkDetailPage {
   @State sourceSheet: boolean = false;
   @State comments: Array<CommentItem> = [];
   @State commentPage: number = 0;
+  @State commentsDone: boolean = false;
   @State loadingComments: boolean = false;
   @State busy: boolean = false;
 
@@ -153,6 +154,7 @@ export struct WorkDetailPage {
       this.sourceSheet = false;
       this.comments = [];
       this.commentPage = 0;
+      this.commentsDone = false;
       await this.load(album.id);
       promptAction.showToast({ message: `已切换至 ${this.sourceName}` });
     } catch (e) {
@@ -181,14 +183,22 @@ export struct WorkDetailPage {
   }
 
   private async loadComments(): Promise<void> {
-    if (this.loadingComments) {
+    if (this.loadingComments || this.commentsDone) {
       return;
     }
     this.loadingComments = true;
     try {
+      const before: number = this.comments.length;
       const result: CommentsResult = await sourceApi.comments(this.aid, this.commentPage + 1);
+      if (result.list.length === 0 || (result.total > 0 && before >= result.total)) {
+        this.commentsDone = true;
+        return;
+      }
       this.comments = this.comments.concat(result.list);
       this.commentPage++;
+      if (result.total > 0 && this.comments.length >= result.total) {
+        this.commentsDone = true;
+      }
     } catch (e) {
       this.error = errorMessage(e as Error);
     } finally {
@@ -263,6 +273,7 @@ export struct WorkDetailPage {
       preview: (chapter: Chapter): void => this.preview(chapter),
       aid: this.aid,
       comments: this.$comments,
+      commentsDone: this.commentsDone,
       loadComments: (): Promise<void> => this.loadComments()
     })
   }

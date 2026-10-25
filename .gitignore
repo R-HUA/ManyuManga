@@ -13,4 +13,9 @@
 *.har
 *.hsp
 .DS_Store
-material/
+/.reference/
+/.agents/
+/docs/material/
+# 本地一次性整理脚本（含写死本机路径，勿入库）
+/final-tidy.cjs
+/normalize-split.cjs

@@ -9,6 +9,7 @@ export const ROUTE_READER: string = 'reader';
 export const ROUTE_DOWNLOADS: string = 'downloads';
 export const ROUTE_PREVIEW: string = 'chapterPreview';
 export const ROUTE_JM_SETTINGS: string = 'jmSettings';
+export const ROUTE_EH_BROWSE: string = 'ehBrowse';
 
 /** 导航参数在来源边界之外始终使用完整来源标识。 */
 export interface MangaRouteParams {

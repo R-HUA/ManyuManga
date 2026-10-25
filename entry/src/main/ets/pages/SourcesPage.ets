@@ -1,8 +1,10 @@
 import { SuwayomiConnectSheet } from './sources/SuwayomiConnectSheet';
+import { EhSiteSheet } from './eh/EhSiteSheet';
 import promptAction from '@ohos.promptAction';
 import uiMaterial from '@ohos.arkui.uiMaterial';
 import { SourceEntry, SourceAuth, sourceStore, sourceKey } from '../data/Sources';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
+import { ehSource } from '../data/EhSource';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, ROUTE_EH_BROWSE } from '../common/Route';
 import { suwayomi } from '../data/Suwayomi';
 import { localSource } from '../data/LocalSource';
 import { library } from '../data/Library';
@@ -29,6 +31,8 @@ export struct SourcesPage {
   @State error: string = '';
   @State busy: boolean = false;
   @State jmNumber: string = '';
+  @State ehDirect: string = '';
+  @State ehForm: boolean = false;
   @State globalQuery: string = '';
   private instance: string = '';
 
@@ -100,6 +104,10 @@ export struct SourcesPage {
       this.importLocal();
       return;
     }
+    if (source.kind === 'eh') {
+      this.ehForm = true;
+      return;
+    }
     this.endpoint = source.endpoint;
     this.name = source.name.split(' · ')[0];
     this.instance = source.instanceId;
@@ -121,6 +129,15 @@ export struct SourcesPage {
       error: this.$error,
       busy: this.$busy,
       connect: (): Promise<void> => this.connect()
+    })
+  }
+
+  @Builder
+  private EhSettingsSheet() {
+    EhSiteSheet({
+      close: (): void => {
+        this.ehForm = false;
+      }
     })
   }
 
@@ -239,14 +256,15 @@ export struct SourcesPage {
                 Stack({ alignContent: Alignment.Center }) {
                   SymbolGlyph(source.kind === 'jm'
                     ? $r('sys.symbol.cloud')
-                    : (source.kind === 'local' ? $r('sys.symbol.folder') : $r('sys.symbol.externaldrive')))
+                    : (source.kind === 'local' ? $r('sys.symbol.folder')
+                      : (source.kind === 'eh' ? $r('sys.symbol.rectangle_on_rectangle') : $r('sys.symbol.externaldrive'))))
                     .fontSize(22)
-                    .fontColor([source.kind === 'jm' ? ACCENT : PRIMARY])
+                    .fontColor([source.kind === 'jm' || source.kind === 'eh' ? ACCENT : PRIMARY])
                 }
                 .width(44)
                 .height(44)
                 .borderRadius(14)
-                .backgroundColor(source.kind === 'jm' ? ACCENT_SOFT : PRIMARY_SOFT)
+                .backgroundColor(source.kind === 'jm' || source.kind === 'eh' ? ACCENT_SOFT : PRIMARY_SOFT)
 
                 Column({ space: 4 }) {
                   Row({ space: 6 }) {
@@ -261,7 +279,9 @@ export struct SourcesPage {
                   }
                   Text(source.kind === 'local'
                     ? '本地 CBZ / ZIP 归档与目录'
-                    : (source.kind === 'jm' ? '内置图源 · 精选 / 分类 / 镜像测速' : `${source.language ? source.language + ' · ' : ''}${source.endpoint}`))
+                    : (source.kind === 'jm' ? '内置图源 · 精选 / 分类 / 镜像测速'
+                      : (source.kind === 'eh' ? '内置图源 · 画廊广场 / 排行 / 收藏 / 标签汉化'
+                        : `${source.language ? source.language + ' · ' : ''}${source.endpoint}`)))
                     .fontColor(TEXT_SUB)
                     .fontSize(12)
                     .maxLines(1)
@@ -319,9 +339,45 @@ export struct SourcesPage {
                 .width('100%')
               }
 
+              if (source.kind === 'eh') {
+                Row({ space: 8 }) {
+                  TextInput({ text: this.ehDirect, placeholder: '粘贴画廊链接或 GID/Token（如 123456/abcdef1234）…' })
+                    .layoutWeight(1)
+                    .height(38)
+                    .borderRadius(14)
+                    .backgroundColor(SUB_CARD)
+                    .fontColor(TEXT_MAIN)
+                    .placeholderColor(TEXT_SUB)
+                    .onChange((s: string) => {
+                      this.ehDirect = s;
+                    })
+                  Text('画廊直达')
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Bold)
+                    .fontColor(source.enabled ? PRIMARY : TEXT_SUB)
+                    .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+                    .borderRadius(14)
+                    .backgroundColor(PRIMARY_SOFT)
+                    .onClick(() => {
+                      if (!source.enabled) {
+                        return;
+                      }
+                      try {
+                        const aid: string = ehSource.keyFromInput(this.ehDirect);
+                        this.stack.pushPathByName(ROUTE_ALBUM, { aid: aid } as MangaRouteParams);
+                      } catch (e) {
+                        this.error = e instanceof Error ? e.message : '无效的画廊标识';
+                      }
+                    })
+                }
+                .width('100%')
+              }
+
               Row({ space: 10 }) {
                 this.SourceActionPill(
-                  source.kind === 'local' ? '导入漫画包' : (source.kind === 'jm' ? '进入发现' : '检索此源'),
+                  source.kind === 'local' ? '导入漫画包'
+                    : (source.kind === 'jm' ? '进入发现'
+                      : (source.kind === 'eh' ? '进入画廊广场' : '检索此源')),
                   true,
                   false,
                   source.enabled && !this.busy,
@@ -330,13 +386,17 @@ export struct SourcesPage {
                       this.importLocal();
                     } else if (source.kind === 'jm') {
                       this.stack.pushPathByName('jmBrowse', {} as MangaRouteParams);
+                    } else if (source.kind === 'eh') {
+                      this.stack.pushPathByName(ROUTE_EH_BROWSE, {} as MangaRouteParams);
                     } else {
                       this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: source.id } as MangaRouteParams);
                     }
                   }
                 )
                 this.SourceActionPill(
-                  source.kind === 'local' ? '已导入列表' : (source.kind === 'jm' ? '节点设置' : '连接配置'),
+                  source.kind === 'local' ? '已导入列表'
+                    : (source.kind === 'jm' ? '节点设置'
+                      : (source.kind === 'eh' ? '站点与账号' : '连接配置')),
                   false,
                   false,
                   true,
@@ -397,6 +457,12 @@ export struct SourcesPage {
     .height('100%')
     .backgroundColor(BG)
     .bindSheet($$this.form, this.ConnectionSheet(), {
+      height: SheetSize.FIT_CONTENT,
+      dragBar: true,
+      backgroundColor: CARD,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
+    })
+    .bindSheet($$this.ehForm, this.EhSettingsSheet(), {
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
       backgroundColor: CARD,

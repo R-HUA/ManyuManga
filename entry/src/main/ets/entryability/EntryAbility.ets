@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import fs from '@ohos.file.fs';
 import { jmApi } from '../data/JmApi';
+import { EhSettings } from '../data/eh/EhSettings';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
@@ -58,8 +59,8 @@ export default class EntryAbility extends UIAbility {
     // 并后台刷新域名池——jmApi.init(context) 内部调用 setAppContext(context)
     AppStorage.setOrCreate(IS_DARK_MODE_KEY,
       this.context.config?.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
-    jmApi.init(this.context).catch((e: Error) => {
-      hilog.error(DOMAIN, TAG, 'jmApi init: %{public}s', errorMessageText(e));
+    jmApi.init(this.context).then((): Promise<void> => EhSettings.init(this.context)).catch((e: Error) => {
+      hilog.error(DOMAIN, TAG, 'source init: %{public}s', errorMessageText(e));
     });
   }
 

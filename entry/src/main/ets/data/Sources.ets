@@ -2,7 +2,7 @@ import asset from '@ohos.security.asset';
 import { Prefs } from '../util/Prefs';
 import { utf8Encode, utf8Decode } from './JmApi';
 
-export type SourceKind = 'jm' | 'suwayomi' | 'local';
+export type SourceKind = 'jm' | 'suwayomi' | 'local' | 'eh';
 export type SourceAuth = 'none' | 'basic' | 'login';
 
 /** 每个服务端子书源独立参与检索，凭据由同一服务实例共享。 */
@@ -48,8 +48,21 @@ class SourceStore {
   private async load(): Promise<void> {
     const p: Prefs = await Prefs.getInstance();
     const saved: string = await p.getString('sources_v1', '');
-    this.entries = saved === '' ? [new SourceEntry('jm', '禁漫', 'jm'),
-      new SourceEntry('local', '本地漫画', 'local')] : JSON.parse(saved) as Array<SourceEntry>;
+    if (saved === '') {
+      this.entries = [new SourceEntry('jm', '禁漫', 'jm'),
+        new SourceEntry('eh', 'E-Hentai / ExHentai', 'eh'),
+        new SourceEntry('local', '本地漫画', 'local')];
+      await p.putBool('eh_seeded_v1', true);
+      return;
+    }
+    this.entries = JSON.parse(saved) as Array<SourceEntry>;
+    // 旧版本升级补种内置 EH 图源；用户删除后（eh_seeded_v1 已置位）不再复活
+    if (!this.entries.some((s: SourceEntry): boolean => s.id === 'eh') &&
+      await p.getBool('eh_seeded_v1', false) === false) {
+      this.entries.push(new SourceEntry('eh', 'E-Hentai / ExHentai', 'eh'));
+      await p.putBool('eh_seeded_v1', true);
+      await this.persist(this.entries);
+    }
   }
   async list(): Promise<Array<SourceEntry>> {
     if (this.loading === null) {
@@ -105,5 +118,16 @@ export async function readSourceSecret(instance: string): Promise<string> {
     throw new Error('书源需要重新登录');
   }
   return utf8Decode(result[0].get(asset.Tag.SECRET) as Uint8Array);
+}
+
+/** 清除系统资产服务中的书源凭据；本就未存过时静默成功。 */
+export async function clearSourceSecret(instance: string): Promise<void> {
+  const query: asset.AssetMap = new Map();
+  query.set(asset.Tag.ALIAS, utf8Encode(`manyu.source.${instance}`));
+  try {
+    await asset.remove(query);
+  } catch (e) {
+    // 不存在即视为已清除
+  }
 }
 export const sourceStore: SourceStore = new SourceStore();
