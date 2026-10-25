@@ -1,34 +1,67 @@
 /**
- * common/Components.ets —— 全局复用组件（工程架构师维护）。
- *
- * 用法示例（页面内）：
- *   import { ComicCard, SectionTitle, EmptyView, TagChip, SkeletonGrid } from '../common/Components';
- *   ComicCard({ coverUrl: a.cover, title: a.title, author: a.author, badge: '中字',
- *               loading: false, onCardClick: (): void => { this.openAlbum(a.aid) } })
+ * 全局复用组件
+ * 
  */
-import { PRIMARY, TEXT_MAIN, TEXT_SUB, CHIP_BG, DIVIDER, COVER_R, CHIP_R, COVER_ASPECT_RATIO } from './Theme';
+import {
+  PRIMARY,
+  PRIMARY_SOFT,
+  TEXT_MAIN,
+  TEXT_SUB,
+  CHIP_BG,
+  SUB_CARD,
+  DIVIDER,
+  COVER_R,
+  CHIP_R,
+  COVER_ASPECT_RATIO
+} from './Theme';
 import { sourceApi as jmApi } from '../data/SourceApi';
 
 /**
- * 漫画卡片：3:4 圆角封面 + 右上角毛玻璃胶囊角标 + 两行标题 + 作者副题 + 骨架占位。
- * 宽度由父容器网格决定（本组件 width('100%')），封面按 3:4 比例自动撑高。
- * 封面容错（评审 Step3）：加载失败时按 aid 轮换备用图床（最多 3 次），避免灰块死角。
+ * 圆形纯图标按钮（严禁 Emoji）
+ */
+@Component
+export struct IconCircleButton {
+  @Prop symbol?: Resource = undefined;
+  @Prop glyph: Resource = $r('sys.symbol.ellipsis_circle');
+  @Prop active: boolean = false;
+  @Prop btnSize: number = 38;
+  @Prop iconSize: number = 18;
+  @Prop iconColor: ResourceColor = TEXT_MAIN;
+  @Prop bg: ResourceColor = SUB_CARD;
+  onTap: () => void = () => {};
+
+  build() {
+    Stack({ alignContent: Alignment.Center }) {
+      SymbolGlyph(this.symbol ?? this.glyph)
+        .fontSize(this.iconSize)
+        .fontColor([this.active ? PRIMARY : this.iconColor])
+    }
+    .width(this.btnSize)
+    .height(this.btnSize)
+    .borderRadius(this.btnSize / 2)
+    .backgroundColor(this.active ? PRIMARY_SOFT : this.bg)
+    .border({ width: 0.5, color: this.active ? PRIMARY : DIVIDER })
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
+    .onClick(() => {
+      this.onTap();
+    })
+  }
+}
+
+/**
+ * 漫画卡片
  */
 @Component
 export struct ComicCard {
   @Prop coverUrl: string = '';
-  /** 本子 id（封面失败换备用图床用）；空串则不轮换 */
   @Prop aid: string = '';
   @Prop title: string = '';
   @Prop author: string = '';
-  /** 右上角胶囊角标文案，如 中字/日漫/韩漫/全彩；空串不显示 */
   @Prop badge: string = '';
-  /** true 时整体显示骨架占位 */
   @Prop loading: boolean = false;
   onCardClick: () => void = () => {};
 
   @State skelAlpha: number = 1.0;
-  /** 封面图床轮换序号：0 用传入 coverUrl，1~3 走 jmApi.albumThumbUrl(aid, retry) */
   @State coverRetry: number = 0;
 
   private coverSrc(): string {
@@ -39,9 +72,12 @@ export struct ComicCard {
   }
 
   private startSkeletonPulse(): void {
-    this.getUIContext().animateTo({ duration: 800, curve: Curve.EaseInOut, iterations: -1, playMode: PlayMode.Alternate }, () => {
-      this.skelAlpha = 0.35;
-    });
+    this.getUIContext().animateTo(
+      { duration: 800, curve: Curve.EaseInOut, iterations: -1, playMode: PlayMode.Alternate },
+      () => {
+        this.skelAlpha = 0.35;
+      }
+    );
   }
 
   @Builder
@@ -61,13 +97,13 @@ export struct ComicCard {
   private Badge() {
     Text(this.badge)
       .fontSize(10)
+      .fontWeight(FontWeight.Medium)
       .fontColor(Color.White)
       .maxLines(1)
       .constraintSize({ maxWidth: '80%' })
-      .padding({ left: 6, right: 6, top: 3, bottom: 3 })
-      .backgroundColor('rgba(20,20,20,0.35)')
-      .backgroundBlurStyle(BlurStyle.Thin)
-      .borderRadius(9)
+      .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+      .backgroundColor('rgba(14,17,26,0.78)')
+      .borderRadius(8)
       .margin(6)
   }
 
@@ -96,7 +132,7 @@ export struct ComicCard {
       .width('100%')
       .borderRadius(COVER_R)
       .clip(true)
-      .border({ width: 0.5, color: 'rgba(255,255,255,0.15)' })
+      .border({ width: 0.5, color: DIVIDER })
 
       if (this.loading) {
         Column()
@@ -134,6 +170,7 @@ export struct ComicCard {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
     .onClick(() => {
       this.onCardClick();
     })
@@ -141,7 +178,7 @@ export struct ComicCard {
 }
 
 /**
- * 区块标题：左侧粗标题 + 右侧可选操作文案（如「换一批」「查看全部 >」）。
+ * 区块标题：左侧强调竖条 + 标题 + 右侧纯文本胶囊操作
  */
 @Component
 export struct SectionTitle {
@@ -150,7 +187,12 @@ export struct SectionTitle {
   onAction: () => void = () => {};
 
   build() {
-    Row() {
+    Row({ space: 8 }) {
+      Row()
+        .width(4)
+        .height(16)
+        .borderRadius(2)
+        .backgroundColor(PRIMARY)
       Text(this.title)
         .fontSize(17)
         .fontWeight(FontWeight.Bold)
@@ -160,21 +202,25 @@ export struct SectionTitle {
         .layoutWeight(1)
       if (this.actionText !== '') {
         Text(this.actionText)
-          .fontSize(13)
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
           .fontColor(PRIMARY)
           .maxLines(1)
-          .padding({ left: 8, top: 4, bottom: 4 })
+          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+          .backgroundColor(PRIMARY_SOFT)
+          .borderRadius(12)
           .onClick(() => {
             this.onAction();
           })
       }
     }
     .width('100%')
+    .alignItems(VerticalAlign.Center)
   }
 }
 
 /**
- * 空态/错误态视图：图标 + 文案 + 重试按钮（错误态复用时改 message 即可）。
+ * 空态/错误态视图：使用系统 SymbolGlyph 替代 Emoji
  */
 @Component
 export struct EmptyView {
@@ -184,23 +230,34 @@ export struct EmptyView {
   onRetry: () => void = () => {};
 
   build() {
-    Column({ space: 12 }) {
-      Text('🗂')
-        .fontSize(44)
-        .opacity(0.6)
+    Column({ space: 14 }) {
+      Stack({ alignContent: Alignment.Center }) {
+        SymbolGlyph($r('sys.symbol.folder'))
+          .fontSize(32)
+          .fontColor([TEXT_SUB])
+      }
+      .width(68)
+      .height(68)
+      .borderRadius(34)
+      .backgroundColor(SUB_CARD)
+      .border({ width: 0.5, color: DIVIDER })
+
       Text(this.message)
         .fontSize(14)
         .fontColor(TEXT_SUB)
         .textAlign(TextAlign.Center)
         .maxLines(3)
+        .lineHeight(20)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       if (this.showRetry) {
         Button(this.retryText)
-          .fontSize(14)
+          .height(38)
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
           .fontColor(Color.White)
           .backgroundColor(PRIMARY)
-          .borderRadius(CHIP_R)
-          .padding({ left: 26, right: 26, top: 8, bottom: 8 })
+          .borderRadius(19)
+          .padding({ left: 24, right: 24 })
           .onClick(() => {
             this.onRetry();
           })
@@ -214,7 +271,7 @@ export struct EmptyView {
 }
 
 /**
- * 标签胶囊：分类/筛选场景通用；selected 态品牌粉反白。
+ * 标签胶囊
  */
 @Component
 export struct TagChip {
@@ -225,11 +282,13 @@ export struct TagChip {
   build() {
     Text(this.label)
       .fontSize(12)
+      .fontWeight(this.selected ? FontWeight.Bold : FontWeight.Medium)
       .fontColor(this.selected ? Color.White : TEXT_SUB)
       .maxLines(1)
-      .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-      .backgroundColor(this.selected ? PRIMARY : CHIP_BG)
+      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+      .backgroundColor(this.selected ? PRIMARY : SUB_CARD)
       .borderRadius(CHIP_R)
+      .border({ width: 0.5, color: this.selected ? PRIMARY : DIVIDER })
       .onClick(() => {
         this.onChipClick();
       })
@@ -237,8 +296,7 @@ export struct TagChip {
 }
 
 /**
- * 卡片网格骨架：rows × columns 的 3:4 封面块 + 两行文字占位，带脉冲呼吸动画。
- * 直接放进 Scroll/Column 使用，无需额外高度。
+ * 卡片网格骨架
  */
 @Component
 export struct SkeletonGrid {
@@ -296,9 +354,12 @@ export struct SkeletonGrid {
     }
     .width('100%')
     .onAppear(() => {
-      this.getUIContext().animateTo({ duration: 800, curve: Curve.EaseInOut, iterations: -1, playMode: PlayMode.Alternate }, () => {
-        this.skelAlpha = 0.35;
-      })
+      this.getUIContext().animateTo(
+        { duration: 800, curve: Curve.EaseInOut, iterations: -1, playMode: PlayMode.Alternate },
+        () => {
+          this.skelAlpha = 0.35;
+        }
+      );
     })
   }
 }

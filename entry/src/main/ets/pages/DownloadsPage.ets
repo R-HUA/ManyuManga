@@ -8,9 +8,14 @@ import fs from '@ohos.file.fs';
 import filePicker from '@ohos.file.picker';
 import {
   PRIMARY,
+  PRIMARY_SOFT,
   ACCENT,
   BG,
   CARD,
+  SUB_CARD,
+  DANGER,
+  DANGER_SOFT,
+  STATUS_OK,
   CARD_R,
   COVER_R,
   CHIP_R,
@@ -21,13 +26,14 @@ import {
   MASK_DARK,
   TAB_INACTIVE
 } from '../common/Theme';
-import { EmptyView } from '../common/Components';
+import { EmptyView, IconCircleButton } from '../common/Components';
+import { SourceCover } from '../common/SourceCover';
 import { Album, errorMessage } from '../models/Models';
 import { downloadManager, DownloadTask, DownloadState } from '../data/DownloadManager';
 import { albumCacheStore } from '../data/Stores';
 import { sourceApi as jmApi } from '../data/SourceApi';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
-import { TOP_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
+import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 /** 页下载并发展示值 */
 const DL_PAGE_CONCURRENCY: number = 3;
@@ -77,8 +83,8 @@ function formatDateTime(ms: number): string {
 export struct DownloadsPage {
   @Consume('navPathStack') navPathStack: NavPathStack;
 
-  // 评审 Step2：顶部状态栏避让高度（EntryAbility 全屏布局写入 AppStorage，自绘顶栏 padding 引用）
   @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
+  @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 16;
 
   /* ===== 页面状态（四态：骨架/空/错误重试；任务列表实时刷新无分页） ===== */
   @State loading: boolean = true;
@@ -441,22 +447,38 @@ export struct DownloadsPage {
   /** 评审 Step2：自绘顶栏（返回 + 标题），替代系统 .title()——全屏布局下需自行避让状态栏 */
   @Builder
   private TopBar() {
-    Row({ space: 8 }) {
-      SymbolGlyph($r('sys.symbol.chevron_left'))
-        .fontSize(26)
-        .fontColor([TEXT_MAIN])
-        .onClick(() => {
+    Row({ space: 10 }) {
+      IconCircleButton({
+        glyph: $r('sys.symbol.chevron_left'),
+        onTap: (): void => {
           this.navPathStack.pop();
-        })
-      Text('下载管理')
+        }
+      })
+      Text('离线下载与 CBZ 导出')
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
+      if (this.tasks.length > 0) {
+        Text(this.selectMode ? '完成' : '批量管理')
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.selectMode ? Color.White : PRIMARY)
+          .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+          .borderRadius(16)
+          .backgroundColor(this.selectMode ? PRIMARY : PRIMARY_SOFT)
+          .onClick(() => {
+            if (this.selectMode) {
+              this.exitSelect();
+            } else {
+              this.selectMode = true;
+              this.selectedIds = [];
+            }
+          })
+      }
     }
     .width('100%')
-    // 评审 Step2：padding 顶部叠加状态栏避让高度（与 SearchPage 顶栏一致口径）
-    .padding({ left: 12, right: 16, top: this.topInset + 8, bottom: 8 })
+    .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 8 })
     .alignItems(VerticalAlign.Center)
   }
 
@@ -483,7 +505,7 @@ export struct DownloadsPage {
             .justifyContent(FlexAlign.Center)
           } else if (this.tasks.length === 0) {
             Column() {
-              EmptyView({ message: '还没有下载任务～ 去详情页点「下载」生成 CBZ 吧', showRetry: false })
+              EmptyView({ message: '还没有离线下载任务，在漫画详情页点击「全本离线缓存」即可生成标准 CBZ 归档', showRetry: false })
             }
             .width('100%')
             .layoutWeight(1)
@@ -495,16 +517,18 @@ export struct DownloadsPage {
               this.SummaryHeader()
             }
 
-            List({ space: 0 }) {
+            List({ space: 10 }) {
               LazyForEach(this.taskDS, (item: DownloadTask) => {
                 ListItem() {
                   this.TaskRow(item)
                 }
-              }, (item: DownloadTask) => `task_${item.id}`)
+              }, (item: DownloadTask) => `task_${item.id}_${item.state}_${item.done}_${this.isSelected(item.id)}`)
             }
             .width('100%')
             .layoutWeight(1)
             .cachedCount(4)
+            .scrollBar(BarState.Off)
+            .padding({ left: 16, right: 16, top: 8, bottom: (this.selectMode ? 12 : 28 + this.bottomInset) })
 
             if (this.selectMode) {
               this.SelectBottomBar()
@@ -522,7 +546,7 @@ export struct DownloadsPage {
       .width('100%')
       .height('100%')
     }
-    .hideTitleBar(true) // 评审 Step2：改用自绘 TopBar（返回 + 标题 + 状态栏避让）
+    .hideTitleBar(true)
     .backgroundColor(BG)
   }
 
@@ -533,8 +557,8 @@ export struct DownloadsPage {
       ForEach([0, 1, 2, 3], (i: number) => {
         Row({ space: 12 }) {
           Column()
-            .width(44)
-            .height(58)
+            .width(52)
+            .height(68)
             .borderRadius(COVER_R)
             .backgroundColor(DIVIDER)
             .opacity(this.skelAlpha)
@@ -578,24 +602,25 @@ export struct DownloadsPage {
   /** 总进度头部（总进度条 + 任务计数 + 合计页数 + 并发数展示） */
   @Builder
   private SummaryHeader() {
-    Column({ space: 8 }) {
+    Column({ space: 10 }) {
       Row() {
-        Text('总进度')
+        Text('队列总进度')
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
           .fontColor(TEXT_MAIN)
           .layoutWeight(1)
-        Text(`已完成 ${this.countByState('done')} / ${this.tasks.length} 个任务`)
-          .fontSize(11)
-          .fontColor(TEXT_SUB)
+        Text(`已完成 ${this.countByState('done')} / ${this.tasks.length} 部`)
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(PRIMARY)
       }
       .width('100%')
 
       Progress({ value: this.overallProgress(), total: 100, type: ProgressType.Linear })
         .width('100%')
         .height(6)
-        .color(ACCENT)
-        .backgroundColor(DIVIDER)
+        .color(PRIMARY)
+        .backgroundColor(SUB_CARD)
 
       Row({ space: 8 }) {
         this.CountChip(`下载中 ${this.countByState('running')}`)
@@ -606,11 +631,11 @@ export struct DownloadsPage {
       .width('100%')
 
       Row() {
-        Text(`合计 ${this.totalDonePages()} / ${this.totalPagesCount()} 页`)
-          .fontSize(10)
+        Text(`累计进度 ${this.totalDonePages()} / ${this.totalPagesCount()} 页`)
+          .fontSize(11)
           .fontColor(TEXT_SUB)
-        Text(`页下载并发 ${DL_PAGE_CONCURRENCY}（固定）`)
-          .fontSize(10)
+        Text(`${DL_PAGE_CONCURRENCY} 线程并发下载`)
+          .fontSize(11)
           .fontColor(TEXT_SUB)
           .layoutWeight(1)
           .textAlign(TextAlign.End)
@@ -618,86 +643,105 @@ export struct DownloadsPage {
       .width('100%')
     }
     .width('100%')
-    .padding(12)
+    .padding(16)
     .backgroundColor(CARD)
-    .borderRadius(CARD_R)
-    .margin({ left: 12, right: 12, top: 8 })
+    .borderRadius(18)
+    .border({ width: 0.5, color: DIVIDER })
+    .margin({ left: 16, right: 16, top: 4, bottom: 4 })
   }
 
   @Builder
   private CountChip(label: string) {
     Text(label)
-      .fontSize(10)
+      .fontSize(11)
       .fontColor(TEXT_SUB)
-      .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-      .backgroundColor(CHIP_BG)
-      .borderRadius(CHIP_R)
+      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+      .backgroundColor(SUB_CARD)
+      .borderRadius(12)
   }
 
   /** 多选态顶栏（DL-08：已选 N 项 + 全选/取消全选 + 退出） */
   @Builder
   private SelectBar() {
-    Row() {
-      Text(`已选 ${this.selectedIds.length} 项`)
+    Row({ space: 10 }) {
+      Text(`已选 ${this.selectedIds.length} 个任务`)
         .fontSize(15)
         .fontWeight(FontWeight.Bold)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
       Text(this.allSelected() ? '取消全选' : '全选')
-        .fontSize(13)
+        .fontSize(12)
+        .fontWeight(FontWeight.Bold)
         .fontColor(PRIMARY)
-        .padding({ left: 8, right: 8 })
+        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+        .borderRadius(14)
+        .backgroundColor(PRIMARY_SOFT)
         .onClick(() => {
           this.toggleSelectAll();
         })
-      Text('退出')
-        .fontSize(13)
-        .fontColor(TEXT_SUB)
-        .padding({ left: 8, right: 8 })
-        .onClick(() => {
-          this.exitSelect();
-        })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .padding({ left: 16, right: 16, top: 6, bottom: 6 })
   }
 
   /** 多选态底栏（删除所选 / 完成） */
   @Builder
   private SelectBottomBar() {
     Row({ space: 10 }) {
-      Text('删除所选')
+      Text('删除所选任务')
         .fontSize(14)
-        .fontColor(Color.White)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(DANGER)
         .textAlign(TextAlign.Center)
         .layoutWeight(1)
-        .padding({ top: 10, bottom: 10 })
-        .backgroundColor(PRIMARY)
-        .borderRadius(CHIP_R)
+        .padding({ top: 11, bottom: 11 })
+        .backgroundColor(DANGER_SOFT)
+        .borderRadius(20)
+        .opacity(this.selectedIds.length > 0 ? 1.0 : 0.45)
         .onClick(() => {
-          this.onDeleteSelected();
+          if (this.selectedIds.length > 0) {
+            this.onDeleteSelected();
+          }
         })
-      Text('完成')
+      Text('退出管理')
         .fontSize(14)
+        .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .textAlign(TextAlign.Center)
         .layoutWeight(1)
-        .padding({ top: 10, bottom: 10 })
-        .backgroundColor(CHIP_BG)
-        .borderRadius(CHIP_R)
+        .padding({ top: 11, bottom: 11 })
+        .backgroundColor(SUB_CARD)
+        .borderRadius(20)
         .onClick(() => {
           this.exitSelect();
         })
     }
     .width('100%')
-    .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 + this.bottomInset })
+    .backgroundColor(CARD)
+    .border({ width: { top: 0.5 }, color: DIVIDER })
+  }
+
+  @Builder
+  private TaskActionPill(label: string, primary: boolean, danger: boolean, onTap: () => void) {
+    Text(label)
+      .fontSize(12)
+      .fontWeight(primary ? FontWeight.Bold : FontWeight.Medium)
+      .fontColor(primary ? Color.White : (danger ? DANGER : TEXT_MAIN))
+      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+      .borderRadius(14)
+      .backgroundColor(primary ? PRIMARY : (danger ? DANGER_SOFT : SUB_CARD))
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+      .onClick(() => {
+        onTap();
+      })
   }
 
   /** 任务列表项（DL-01） */
   @Builder
   private TaskRow(item: DownloadTask) {
-    Column({ space: 8 }) {
-      Row({ space: 10 }) {
+    Column({ space: 10 }) {
+      Row({ space: 12 }) {
         if (this.selectMode) {
           Checkbox()
             .select(this.isSelected(item.id))
@@ -706,110 +750,93 @@ export struct DownloadsPage {
               this.toggleSelect(item.id);
             })
         }
-        if (item.cover !== '') {
-          Image(item.cover)
-            .width(44)
-            .height(58)
-            .borderRadius(COVER_R)
-            .objectFit(ImageFit.Cover)
-            .backgroundColor(CHIP_BG)
+        Column() {
+          SourceCover({ url: item.cover, radius: 8 })
         }
-        Column({ space: 3 }) {
-          Text(item.title)
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(TEXT_MAIN)
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width(50)
+        .height(66)
+
+        Column({ space: 4 }) {
+          Row({ space: 8 }) {
+            Text(item.title)
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(TEXT_MAIN)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+            Text(this.stateLabel(item.state))
+              .fontSize(10)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.badgeTextColor(item.state))
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .backgroundColor(this.badgeBgColor(item.state))
+              .borderRadius(8)
+          }
+          .width('100%')
+
           Text(this.statusText(item))
             .fontSize(11)
             .fontColor(TEXT_SUB)
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           if (item.createdAt > 0) {
-            Text(`下载于 ${formatDateTime(item.createdAt)}`)
+            Text(`创建于 ${formatDateTime(item.createdAt)}`)
               .fontSize(10)
               .fontColor(TAB_INACTIVE)
           }
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
-        Text(this.stateLabel(item.state))
-          .fontSize(10)
-          .fontColor(this.badgeTextColor(item.state))
-          .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-          .backgroundColor(this.badgeBgColor(item.state))
-          .borderRadius(CHIP_R)
       }
       .width('100%')
 
       if (item.state === 'running' || item.state === 'queued' || item.state === 'paused') {
         Progress({ value: this.progressValue(item), total: 100, type: ProgressType.Linear })
           .width('100%')
-          .height(4)
+          .height(5)
           .color(this.progressBarColor(item.state))
-          .backgroundColor(DIVIDER)
+          .backgroundColor(SUB_CARD)
       }
 
       if (!this.selectMode) {
-        Row({ space: 4 }) {
+        Row({ space: 8 }) {
           if (item.state === 'queued' || item.state === 'running') {
-            Text('暂停')
-              .fontSize(13)
-              .fontColor(TEXT_SUB)
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .onClick(() => {
-                this.onPause(item.id);
-              })
+            this.TaskActionPill('暂停', false, false, () => {
+              this.onPause(item.id);
+            })
           }
           if (item.state === 'paused') {
-            Text('重新下载')
-              .fontSize(13)
-              .fontColor(ACCENT)
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .onClick(() => {
-                this.onResume(item.id);
-              })
+            this.TaskActionPill('继续下载', true, false, () => {
+              this.onResume(item.id);
+            })
           }
           if (item.state === 'failed') {
-            Text('重试')
-              .fontSize(13)
-              .fontColor(ACCENT)
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .onClick(() => {
-                this.onRetry(item);
-              })
-          }
-          // DL-10：已完成任务提供「打开」（系统打开方式）；DL-07：「保存到…」（系统保存选择器）
-          if (item.state === 'done') {
-            Text('打开')
-              .fontSize(13)
-              .fontColor(ACCENT)
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .onClick(() => {
-                this.onOpenFile(item);
-              })
-            Text('保存到…')
-              .fontSize(13)
-              .fontColor(ACCENT)
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .onClick(() => {
-                this.onSaveTo(item);
-              })
-          }
-          Text('删除')
-            .fontSize(13)
-            .fontColor(PRIMARY)
-            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-            .onClick(() => {
-              this.onDelete(item);
+            this.TaskActionPill('重试任务', true, false, () => {
+              this.onRetry(item);
             })
+          }
+          if (item.state === 'done') {
+            this.TaskActionPill('立即阅读', true, false, () => {
+              this.onOpenFile(item);
+            })
+            this.TaskActionPill('导出 CBZ…', false, false, () => {
+              this.onSaveTo(item);
+            })
+          }
+          Blank()
+          this.TaskActionPill('删除', false, true, () => {
+            this.onDelete(item);
+          })
         }
         .width('100%')
       }
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .padding(14)
+    .backgroundColor(CARD)
+    .borderRadius(18)
+    .border({ width: 0.5, color: DIVIDER })
     .onClick(() => {
       if (this.selectMode) {
         this.toggleSelect(item.id);
@@ -826,15 +853,16 @@ export struct DownloadsPage {
   @Builder
   private DeleteOverlay() {
     Column() {
-      Column({ space: 14 }) {
+      Column({ space: 16 }) {
         Text('删除下载任务')
-          .fontSize(16)
+          .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor(TEXT_MAIN)
         Column({ space: 10 }) {
-          Text(`将删除 ${this.pendingDeleteIds.length} 个任务记录${this.pendingHasActive() ? '（进行中的任务会被强制终止，其已下载的临时文件将一并删除）' : '。'}`)
+          Text(`将删除 ${this.pendingDeleteIds.length} 个任务记录${this.pendingHasActive() ? '（进行中的任务会被终止，临时文件将一并清理）' : '。'}`)
             .fontSize(13)
             .fontColor(TEXT_SUB)
+            .lineHeight(19)
           Row({ space: 8 }) {
             Checkbox()
               .select(this.deleteFileToo)
@@ -842,35 +870,41 @@ export struct DownloadsPage {
               .onChange((value: boolean) => {
                 this.deleteFileToo = value;
               })
-            Text('同时删除原始文件（不可恢复）')
+            Text('同时删除已导出的离线漫画包（不可恢复）')
               .fontSize(12)
-              .fontColor(TEXT_SUB)
+              .fontColor(TEXT_MAIN)
               .layoutWeight(1)
           }
           .width('100%')
+          .onClick(() => {
+            this.deleteFileToo = !this.deleteFileToo;
+          })
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
 
-        Divider()
-          .color(DIVIDER)
-        Row() {
+        Row({ space: 10 }) {
           Text('取消')
-            .fontSize(15)
-            .fontColor(TEXT_SUB)
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(TEXT_MAIN)
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
-            .padding({ top: 10, bottom: 10 })
+            .padding({ top: 11, bottom: 11 })
+            .borderRadius(20)
+            .backgroundColor(SUB_CARD)
             .onClick(() => {
               this.pendingDeleteIds = [];
             })
-          Text('删除')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(PRIMARY)
+          Text('确认删除')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
-            .padding({ top: 10, bottom: 10 })
+            .padding({ top: 11, bottom: 11 })
+            .borderRadius(20)
+            .backgroundColor(DANGER)
             .onClick(() => {
               this.doDelete();
             })
@@ -878,9 +912,10 @@ export struct DownloadsPage {
         .width('100%')
       }
       .width('86%')
-      .padding({ left: 20, right: 20, top: 20, bottom: 8 })
-      .borderRadius(CARD_R)
+      .padding(22)
+      .borderRadius(22)
       .backgroundColor(CARD)
+      .border({ width: 0.5, color: DIVIDER })
     }
     .width('100%')
     .height('100%')

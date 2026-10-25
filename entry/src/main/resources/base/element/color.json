@@ -1,68 +1,26 @@
 {
   "color": [
-    {
-      "name": "start_window_background",
-      "value": "#F7F8FA"
-    },
-    {
-      "name": "primary",
-      "value": "#0A72F5"
-    },
-    {
-      "name": "accent",
-      "value": "#3B5BDB"
-    },
-    {
-      "name": "bg",
-      "value": "#F7F8FA"
-    },
-    {
-      "name": "card",
-      "value": "#FFFFFF"
-    },
-    {
-      "name": "text_main",
-      "value": "#1E293B"
-    },
-    {
-      "name": "text_sub",
-      "value": "#64748B"
-    },
-    {
-      "name": "chip_bg",
-      "value": "#A6E2E8F0"
-    },
-    {
-      "name": "divider",
-      "value": "#E2E8F0"
-    },
-    {
-      "name": "bar_surface",
-      "value": "#C8FFFFFF"
-    },
-    {
-      "name": "tab_inactive",
-      "value": "#8E8E93"
-    },
-    {
-      "name": "status_ok",
-      "value": "#34C759"
-    },
-    {
-      "name": "status_warn",
-      "value": "#FF9500"
-    },
-    {
-      "name": "medal_gold",
-      "value": "#F5B93C"
-    },
-    {
-      "name": "medal_silver",
-      "value": "#AFBAC7"
-    },
-    {
-      "name": "medal_bronze",
-      "value": "#C98A5B"
-    }
+    { "name": "start_window_background", "value": "#F4F6FB" },
+    { "name": "primary", "value": "#3A7AFE" },
+    { "name": "primary_soft", "value": "#1F3A7AFE" },
+    { "name": "accent", "value": "#6D28D9" },
+    { "name": "accent_soft", "value": "#1A6D28D9" },
+    { "name": "bg", "value": "#F4F6FB" },
+    { "name": "card", "value": "#FFFFFF" },
+    { "name": "sub_card", "value": "#EEF1F8" },
+    { "name": "text_main", "value": "#0F172A" },
+    { "name": "text_sub", "value": "#475569" },
+    { "name": "chip_bg", "value": "#E8EDF6" },
+    { "name": "divider", "value": "#140F172A" },
+    { "name": "bar_surface", "value": "#D9F4F6FB" },
+    { "name": "bar_tint", "value": "#38F4F6FB" },
+    { "name": "tab_inactive", "value": "#64748B" },
+    { "name": "status_ok", "value": "#059669" },
+    { "name": "status_warn", "value": "#D97706" },
+    { "name": "danger", "value": "#E11D48" },
+    { "name": "danger_soft", "value": "#1AE11D48" },
+    { "name": "medal_gold", "value": "#F5B93C" },
+    { "name": "medal_silver", "value": "#AFBAC7" },
+    { "name": "medal_bronze", "value": "#C98A5B" }
   ]
 }

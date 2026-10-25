@@ -4,11 +4,12 @@
  */
 import display from '@ohos.display';
 import image from '@ohos.multimedia.image';
+import uiMaterial from '@ohos.arkui.uiMaterial';
 
 import { window } from '@kit.ArkUI';
 import { EmptyView } from '../common/Components';
 import {
-  READER_BG, MASK_DARK, PRIMARY, ACCENT, CHIP_R, CARD_R
+  READER_BG, MASK_DARK, PRIMARY, PRIMARY_SOFT, ACCENT, ACCENT_SOFT, CHIP_R, CARD_R
 } from '../common/Theme';
 import {
   Album,
@@ -45,7 +46,7 @@ const FAILED_BG: string = '#201619';
 const PANEL_BG: string = 'rgba(28,28,32,0.82)';
 /** 进度节流间隔 ms */
 const SAVE_THROTTLE_MS: number = 2000;
-/** R-26 缩放范围 */
+/** 缩放范围 */
 const ZOOM_MIN: number = 1;
 const ZOOM_MAX: number = 5;
 
@@ -390,28 +391,26 @@ struct ReaderImageItem {
   }
 }
 
-/** HUD 四大金刚按钮（目录/模式/画面/设置） */
+/** HUD 四大金刚纯图标按钮（目录/模式/画面/设置，严禁图标文字混排与字符 Emoji） */
 @Component
 struct HudButton {
-  @Prop label: string = '';
-  @Prop glyph: string = '';
+  @Prop symbol: Resource = $r('sys.symbol.list_bullet');
   @Prop active: boolean = false;
   onTap: () => void = (): void => {
   };
 
   build() {
-    Column({ space: 4 }) {
-      Text(this.glyph)
-        .fontSize(19)
-        .fontColor(this.active ? PRIMARY : '#F2F2F5')
-      Text(this.label)
-        .fontSize(10)
-        .fontColor(this.active ? PRIMARY : 'rgba(255,255,255,0.78)')
+    Stack({ alignContent: Alignment.Center }) {
+      SymbolGlyph(this.symbol)
+        .fontSize(20)
+        .fontColor([this.active ? Color.White : 'rgba(255,255,255,0.88)'])
     }
     .layoutWeight(1)
-    .padding({ top: 9, bottom: 9 })
-    .borderRadius(CHIP_R)
-    .backgroundColor(this.active ? 'rgba(255,77,109,0.16)' : 'rgba(255,255,255,0.08)')
+    .height(42)
+    .borderRadius(21)
+    .backgroundColor(this.active ? PRIMARY : 'rgba(255,255,255,0.08)')
+    .border({ width: 0.5, color: this.active ? PRIMARY : 'rgba(255,255,255,0.12)' })
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
     .onClick(() => {
       this.onTap();
     })
@@ -429,10 +428,12 @@ struct ChipOption {
   build() {
     Text(this.label)
       .fontSize(12)
-      .fontColor(this.selected ? Color.White : 'rgba(255,255,255,0.75)')
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .borderRadius(CHIP_R)
-      .backgroundColor(this.selected ? PRIMARY : 'rgba(255,255,255,0.12)')
+      .fontWeight(this.selected ? FontWeight.Bold : FontWeight.Medium)
+      .fontColor(this.selected ? Color.White : 'rgba(255,255,255,0.78)')
+      .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+      .borderRadius(16)
+      .backgroundColor(this.selected ? PRIMARY : 'rgba(255,255,255,0.10)')
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
       .onClick(() => {
         this.onTap();
       })
@@ -453,23 +454,25 @@ struct ModeOptionRow {
       Column({ space: 2 }) {
         Text(this.label)
           .fontSize(14)
-          .fontColor(this.selected ? PRIMARY : 'rgba(255,255,255,0.88)')
+          .fontWeight(this.selected ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.selected ? PRIMARY : 'rgba(255,255,255,0.92)')
         Text(this.sub)
-          .fontSize(10)
-          .fontColor('rgba(255,255,255,0.45)')
+          .fontSize(11)
+          .fontColor('rgba(255,255,255,0.52)')
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
       if (this.selected) {
-        Text('✓')
-          .fontSize(15)
-          .fontColor(PRIMARY)
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(16)
+          .fontColor([PRIMARY])
       }
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-    .borderRadius(CARD_R)
-    .backgroundColor(this.selected ? 'rgba(255,77,109,0.12)' : 'rgba(255,255,255,0.06)')
+    .borderRadius(14)
+    .backgroundColor(this.selected ? 'rgba(58,122,254,0.18)' : 'rgba(255,255,255,0.06)')
+    .border({ width: 0.5, color: this.selected ? PRIMARY : 'rgba(255,255,255,0.08)' })
     .onClick(() => {
       this.onPick();
     })
@@ -1560,20 +1563,48 @@ export struct ReaderPage {
     .justifyContent(FlexAlign.Center)
   }
 
+  private isCurrentPageBookmarked(): boolean {
+    const chId: string = this.currentChapterId();
+    return this.bookmarks.some((b: ReadingProgress) => b.chapterId === chId && b.page === this.currentPage);
+  }
+
+  private tapActionLabel(action: number): string {
+    const labels: Array<string> = ['呼出菜单', '上一页', '下一页', '上一话', '下一话'];
+    return labels[action] ?? '呼出菜单';
+  }
+
+  private tapActionColor(action: number): ResourceColor {
+    if (action === 0) {
+      return PRIMARY;
+    }
+    if (action === 2 || action === 4) {
+      return ACCENT;
+    }
+    return 'rgba(255,255,255,0.22)';
+  }
+
   @Builder
   private ErrorView() {
-    Column() {
+    Column({ space: 14 }) {
       EmptyView({
         message: this.errorMsg !== '' ? this.errorMsg : '加载失败，请检查网络后重试',
-        retryText: '重试',
+        retryText: '重试当前章节',
         showRetry: true,
         onRetry: (): void => {
           this.retryLoad();
         }
       })
-      Button('选择其他书源').onClick(() => {
-        this.pageStack.pushPathByName(ROUTE_SEARCH, { matchAid: this.aid } as MangaRouteParams);
-      })
+      Text('跨源匹配其他可用书源')
+        .fontSize(13)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .padding({ left: 20, right: 20, top: 10, bottom: 10 })
+        .borderRadius(20)
+        .backgroundColor('rgba(255,255,255,0.14)')
+        .border({ width: 0.5, color: 'rgba(255,255,255,0.22)' })
+        .onClick(() => {
+          this.pageStack.pushPathByName(ROUTE_SEARCH, { matchAid: this.aid } as MangaRouteParams);
+        })
     }
     .width('100%')
     .height('100%')
@@ -1597,97 +1628,125 @@ export struct ReaderPage {
   @Builder
   private TopHud() {
     Row({ space: 10 }) {
-      Text('←')
-        .fontSize(20)
-        .fontColor(Color.White)
-        .width(36)
-        .height(36)
-        .textAlign(TextAlign.Center)
-        .borderRadius(18)
-        .backgroundColor('rgba(255,255,255,0.14)')
-        .onClick(() => {
-          this.goBack();
-        })
-      Text(this.chapterTitle())
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-      Button('书签').fontSize(12).onClick(() => { this.toggleBookmark(); })
-      if (this.pages.length > 0) {
-        Text(`${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
-          .fontSize(12)
-          .fontColor('rgba(255,255,255,0.7)')
+      Stack({ alignContent: Alignment.Center }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(18)
+          .fontColor([Color.White])
       }
-      // R-26 缩放重置入口（ReaderScreen.kt:246-259 顶栏「1.6x · 重置」）
-      if (this.pages.length > 0) {
-        Text(`${this.zoomScale.toFixed(1)}x · 重置`)
-          .fontSize(12)
-          .fontColor(this.zoomScale > ZOOM_MIN ? PRIMARY : 'rgba(255,255,255,0.7)')
-          .padding({ left: 8, right: 8, top: 5, bottom: 5 })
-          .borderRadius(CHIP_R)
-          .backgroundColor('rgba(255,255,255,0.14)')
+      .width(36)
+      .height(36)
+      .borderRadius(18)
+      .backgroundColor('rgba(255,255,255,0.12)')
+      .border({ width: 0.5, color: 'rgba(255,255,255,0.18)' })
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
+      .onClick(() => {
+        this.goBack();
+      })
+
+      Column({ space: 2 }) {
+        Text(this.chapterTitle())
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        if (this.pages.length > 0) {
+          Text(`${this.albumTitle ? this.albumTitle + ' · ' : ''}P.${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
+            .fontSize(11)
+            .fontColor('rgba(255,255,255,0.68)')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      // 缩放重置入口
+      if (this.pages.length > 0 && this.zoomScale > ZOOM_MIN) {
+        Text(`${this.zoomScale.toFixed(1)}x 复位`)
+          .fontSize(11)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+          .borderRadius(14)
+          .backgroundColor(PRIMARY)
           .onClick(() => {
             this.resetZoom(true);
           })
       }
-      // pages 为空（加载中/出错）时 BottomHud 不渲染，面板无处显示 → 一并隐藏该胶囊
+
+      // 书签纯图标按钮
+      Stack({ alignContent: Alignment.Center }) {
+        SymbolGlyph(this.isCurrentPageBookmarked() ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
+          .fontSize(17)
+          .fontColor([this.isCurrentPageBookmarked() ? PRIMARY : Color.White])
+      }
+      .width(36)
+      .height(36)
+      .borderRadius(18)
+      .backgroundColor(this.isCurrentPageBookmarked() ? 'rgba(58,122,254,0.22)' : 'rgba(255,255,255,0.12)')
+      .border({ width: 0.5, color: this.isCurrentPageBookmarked() ? PRIMARY : 'rgba(255,255,255,0.18)' })
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
+      .onClick(() => {
+        this.toggleBookmark();
+      })
+
       if (this.pages.length > 0) {
         Text(this.modeShortLabel())
           .fontSize(12)
-          .fontColor(PRIMARY)
-          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-          .borderRadius(CHIP_R)
-          .backgroundColor('rgba(255,77,109,0.18)')
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+          .borderRadius(16)
+          .backgroundColor(PRIMARY)
           .onClick(() => {
             this.panel = this.panel === 'mode' ? 'none' : 'mode';
           })
       }
     }
     .width('100%')
-    .padding({ left: 12, right: 12, top: this.topSafeVp + 6, bottom: 8 })
+    .padding({ left: 14, right: 14, top: this.topSafeVp + 8, bottom: 10 })
     .backgroundColor(MASK_DARK)
-    .backgroundBlurStyle(BlurStyle.Thin)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK }))
   }
 
   @Builder
   private ModePanel() {
     Column({ space: 6 }) {
       ModeOptionRow({
-        label: '纵向条漫', sub: '上下连续滚动', selected: this.mode === 'vertical',
+        label: '纵向条漫', sub: '上下连续瀑布流滚动', selected: this.mode === 'vertical',
         onPick: (): void => {
           this.switchMode('vertical');
         }
       })
       ModeOptionRow({
-        label: '纵向翻页', sub: '上下滑动逐页阅读', selected: this.mode === 'pagedVertical',
+        label: '纵向翻页', sub: '上下整屏滑动逐页阅读', selected: this.mode === 'pagedVertical',
         onPick: (): void => { this.switchMode('pagedVertical'); }
       })
       ModeOptionRow({
-        label: '左右翻页', sub: '从左向右单页适配', selected: this.mode === 'horizontal',
+        label: '左右翻页', sub: '从左向右单页整屏适配', selected: this.mode === 'horizontal',
         onPick: (): void => {
           this.switchMode('horizontal');
         }
       })
       ModeOptionRow({
-        label: '日漫右翻', sub: '从右向左的自然手势翻页', selected: this.mode === 'rtl',
+        label: '日漫右翻', sub: '从右向左的自然手势翻页（进度条自动镜像）', selected: this.mode === 'rtl',
         onPick: (): void => {
           this.switchMode('rtl');
         }
       })
       ModeOptionRow({
-        label: '双页拼合', sub: '封面单页 + 左右双页并排', selected: this.mode === 'double',
+        label: '双页拼合', sub: '封面单页 + 跨页自动识别并排', selected: this.mode === 'double',
         onPick: (): void => {
           this.switchMode('double');
         }
       })
     }
     .width('100%')
-    .padding(10)
-    .borderRadius(CARD_R)
+    .padding(12)
+    .borderRadius(18)
     .backgroundColor(PANEL_BG)
+    .border({ width: 0.5, color: 'rgba(255,255,255,0.12)' })
   }
 
   @Builder
@@ -1696,12 +1755,14 @@ export struct ReaderPage {
       Row({ space: 10 }) {
         Text('亮度')
           .fontSize(13)
+          .fontWeight(FontWeight.Medium)
           .fontColor('#F2F2F4')
           .width(38)
         Slider({ value: this.brightnessValue, min: 10, max: 100, step: 1, style: SliderStyle.OutSet })
           .selectedColor(PRIMARY)
           .trackColor('rgba(255,255,255,0.25)')
           .blockColor(Color.White)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
           .layoutWeight(1)
           .onChange((value: number, mode: SliderChangeMode) => {
             this.brightnessValue = value;
@@ -1712,25 +1773,28 @@ export struct ReaderPage {
                 });
             }
           })
+        Text(`${Math.round(this.brightnessValue)}%`)
+          .fontSize(12)
+          .fontColor('rgba(255,255,255,0.75)')
+          .width(36)
+          .textAlign(TextAlign.End)
       }
       .width('100%')
-      Text('亮度为应用内遮罩调光（S 级），退出阅读器后恢复系统亮度')
-        .fontSize(10)
-        .fontColor('rgba(255,255,255,0.45)')
-        .width('100%')
+
       Row({ space: 10 }) {
-        Text('背景')
+        Text('画布')
           .fontSize(13)
+          .fontWeight(FontWeight.Medium)
           .fontColor('#F2F2F4')
           .width(38)
         ChipOption({
-          label: '深邃黑', selected: !this.bgPaper,
+          label: '曜石黑底', selected: !this.bgPaper,
           onTap: (): void => {
             this.toggleBackground(false);
           }
         })
         ChipOption({
-          label: '米黄纸', selected: this.bgPaper,
+          label: '暖光纸感', selected: this.bgPaper,
           onTap: (): void => {
             this.toggleBackground(true);
           }
@@ -1739,75 +1803,152 @@ export struct ReaderPage {
       .width('100%')
     }
     .width('100%')
-    .padding(12)
-    .borderRadius(CARD_R)
+    .padding(14)
+    .borderRadius(18)
     .backgroundColor(PANEL_BG)
+    .border({ width: 0.5, color: 'rgba(255,255,255,0.12)' })
   }
 
   @Builder
   private SettingsPanel() {
     Scroll() {
-    Column({ space: 12 }) {
-      Row() {
-        Text('封面独占一页').fontColor(Color.White).layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.options.coverOffset }).onChange((value: boolean) => {
-          this.options.coverOffset = value; this.buildSpreads(); this.scrollToPageDelayed(this.currentPage); this.persistOptions();
-        })
-      }.width('100%')
-      Row() {
-        Text('裁剪白边').fontColor(Color.White).layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.options.cropWhite }).onChange((value: boolean) => { this.options.cropWhite = value; this.persistOptions(); })
-      }.width('100%')
-      Row() {
-        Text('护眼滤镜').fontColor(Color.White).layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.options.eyeComfort }).onChange((value: boolean) => { this.options.eyeComfort = value; this.persistOptions(); })
-      }.width('100%')
-      Text('九宫格点按').fontColor(Color.White).width('100%')
-      Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach([0, 1, 2, 3, 4, 5, 6, 7, 8], (index: number) => {
-          Select([{ value: '菜单' }, { value: '前页' }, { value: '后页' }, { value: '前章' }, { value: '后章' }])
-            .selected(this.options.taps[index]).width('32%').onSelect((value: number) => {
-              const taps: Array<number> = this.options.taps.slice(); taps[index] = value; this.options.taps = taps; this.persistOptions();
+      Column({ space: 14 }) {
+        Row() {
+          Text('双页模式封面独占首页')
+            .fontSize(13)
+            .fontColor(Color.White)
+            .layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.options.coverOffset })
+            .selectedColor(PRIMARY)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+            .onChange((value: boolean) => {
+              this.options.coverOffset = value;
+              this.buildSpreads();
+              this.scrollToPageDelayed(this.currentPage);
+              this.persistOptions();
             })
-        })
-      }.width('100%')
-      Text('预加载档位')
-        .fontSize(13)
-        .fontColor('#F2F2F4')
+        }
         .width('100%')
-      Row({ space: 8 }) {
-        ChipOption({
-          label: '省流 1', selected: this.preloadCount === 1,
-          onTap: (): void => {
-            this.setPreload(1);
+
+        Row() {
+          Text('智能裁切页面四周白边')
+            .fontSize(13)
+            .fontColor(Color.White)
+            .layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.options.cropWhite })
+            .selectedColor(PRIMARY)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+            .onChange((value: boolean) => {
+              this.options.cropWhite = value;
+              this.persistOptions();
+            })
+        }
+        .width('100%')
+
+        Row() {
+          Text('夜间暖色温护眼滤镜')
+            .fontSize(13)
+            .fontColor(Color.White)
+            .layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.options.eyeComfort })
+            .selectedColor(PRIMARY)
+            .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+            .onChange((value: boolean) => {
+              this.options.eyeComfort = value;
+              this.persistOptions();
+            })
+        }
+        .width('100%')
+
+        Column({ space: 8 }) {
+          Row() {
+            Text('九宫格触控热区（点按格子切换动作）')
+              .fontSize(12)
+              .fontColor('rgba(255,255,255,0.78)')
+              .layoutWeight(1)
+            Text('恢复默认')
+              .fontSize(11)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(PRIMARY)
+              .onClick(() => {
+                this.options.taps = [1, 0, 2, 1, 0, 2, 1, 0, 2];
+                this.persistOptions();
+              })
           }
-        })
-        ChipOption({
-          label: '标准 3', selected: this.preloadCount === 3,
-          onTap: (): void => {
-            this.setPreload(3);
+          .width('100%')
+
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
+            ForEach([0, 1, 2, 3, 4, 5, 6, 7, 8], (index: number) => {
+              Column({ space: 2 }) {
+                Text(this.tapActionLabel(this.options.taps[index]))
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(Color.White)
+              }
+              .width('31.5%')
+              .height(38)
+              .margin({ bottom: 6 })
+              .justifyContent(FlexAlign.Center)
+              .borderRadius(10)
+              .backgroundColor(this.tapActionColor(this.options.taps[index]))
+              .border({ width: 0.5, color: 'rgba(255,255,255,0.16)' })
+              .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
+              .onClick(() => {
+                const taps: Array<number> = this.options.taps.slice();
+                taps[index] = (taps[index] + 1) % 5;
+                this.options.taps = taps;
+                this.persistOptions();
+              })
+            }, (index: number) => `tap_${index}_${this.options.taps[index]}`)
           }
-        })
-        ChipOption({
-          label: '进取 5', selected: this.preloadCount === 5,
-          onTap: (): void => {
-            this.setPreload(5);
+          .width('100%')
+        }
+        .width('100%')
+
+        Column({ space: 8 }) {
+          Text('后台预加载页数档位')
+            .fontSize(12)
+            .fontColor('rgba(255,255,255,0.78)')
+            .width('100%')
+          Row({ space: 8 }) {
+            ChipOption({
+              label: '省流 1页', selected: this.preloadCount === 1,
+              onTap: (): void => {
+                this.setPreload(1);
+              }
+            })
+            ChipOption({
+              label: '标准 3页', selected: this.preloadCount === 3,
+              onTap: (): void => {
+                this.setPreload(3);
+              }
+            })
+            ChipOption({
+              label: '进取 5页', selected: this.preloadCount === 5,
+              onTap: (): void => {
+                this.setPreload(5);
+              }
+            })
+            ChipOption({
+              label: '极速 8页', selected: this.preloadCount === 8,
+              onTap: (): void => {
+                this.setPreload(8);
+              }
+            })
           }
-        })
-        ChipOption({
-          label: '极速 8', selected: this.preloadCount === 8,
-          onTap: (): void => {
-            this.setPreload(8);
-          }
-        })
+          .width('100%')
+        }
+        .width('100%')
       }
       .width('100%')
+      .padding(14)
+      .borderRadius(18)
+      .backgroundColor(PANEL_BG)
+      .border({ width: 0.5, color: 'rgba(255,255,255,0.12)' })
     }
+    .constraintSize({ maxHeight: 390 })
+    .scrollBar(BarState.Off)
     .width('100%')
-    .padding(12)
-    .borderRadius(CARD_R)
-    .backgroundColor(PANEL_BG)
-    }.constraintSize({ maxHeight: 380 }).width('100%')
   }
 
   @Builder
@@ -1820,7 +1961,7 @@ export struct ReaderPage {
       } else if (this.panel === 'settings') {
         this.SettingsPanel()
       }
-      // 评审 Step4：拖动进度条时显示目标页缩略图预览小窗（240px 档，零拷贝缓存直读）
+      // 拖动进度条时显示目标页缩略图预览小窗（240px 档，零拷贝缓存直读）
       if (this.sliderDragging && this.pages.length > 0) {
         Column({ space: 4 }) {
           PageThumbItem({
@@ -1828,22 +1969,28 @@ export struct ReaderPage {
             filename: this.pages[this.clampPage(Math.round(this.sliderValue) - 1, this.pages.length)],
             scrambleId: this.scrambleId
           })
-            .width(88)
-            .height(124)
+            .width(92)
+            .height(128)
           Text(`P.${this.clampPage(Math.round(this.sliderValue) - 1, this.pages.length) + 1}`)
             .fontSize(11)
-            .fontColor('rgba(255,255,255,0.7)')
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
         }
+        .padding(6)
+        .borderRadius(12)
+        .backgroundColor(PANEL_BG)
+        .border({ width: 0.5, color: 'rgba(255,255,255,0.16)' })
         .alignItems(HorizontalAlign.Center)
       }
-      // R-08/R-19：进度滑动条 + 上一话/下一话（拖动实时页码、松手跳转）
+      // 进度滑动条 + 上一话/下一话（拖动实时页码、松手跳转；日漫右翻模式自动镜像进度条）
       Row({ space: 10 }) {
         Text('上一话')
-          .fontSize(13)
-          .fontColor(this.chapterIndex > 0 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)')
-          .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-          .borderRadius(CHIP_R)
-          .backgroundColor('rgba(255,255,255,0.1)')
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.chapterIndex > 0 ? Color.White : 'rgba(255,255,255,0.35)')
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+          .borderRadius(16)
+          .backgroundColor('rgba(255,255,255,0.10)')
           .onClick(() => {
             this.goChapter(-1);
           })
@@ -1854,11 +2001,13 @@ export struct ReaderPage {
             min: 1,
             max: Math.max(this.pages.length, 1),
             step: 1,
-            style: SliderStyle.OutSet
+            style: SliderStyle.OutSet,
+            reverse: this.mode === 'rtl'
           })
           .selectedColor(PRIMARY)
-          .trackColor('rgba(255,255,255,0.25)')
+          .trackColor('rgba(255,255,255,0.22)')
           .blockColor(Color.White)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
           .layoutWeight(1)
           .onChange((value: number, mode: SliderChangeMode) => {
             if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
@@ -1871,46 +2020,50 @@ export struct ReaderPage {
               }
             }
           })
-          Text(`${this.sliderDragging ? this.sliderValue : Math.min(this.currentPage + 1, this.pages.length)} / ${this.pages.length}`)
+          Text(`${this.sliderDragging ? Math.round(this.sliderValue) : Math.min(this.currentPage + 1, this.pages.length)} / ${this.pages.length}${this.mode === 'rtl' ? ' · 右翻' : ''}`)
             .fontSize(11)
-            .fontColor('rgba(255,255,255,0.7)')
+            .fontColor('rgba(255,255,255,0.72)')
             .textAlign(TextAlign.Center)
         }
         .layoutWeight(1)
         Text('下一话')
-          .fontSize(13)
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
           .fontColor(this.chapterIndex < this.chapters.length - 1
-            ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)')
-          .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-          .borderRadius(CHIP_R)
-          .backgroundColor('rgba(255,255,255,0.1)')
+            ? Color.White : 'rgba(255,255,255,0.35)')
+          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+          .borderRadius(16)
+          .backgroundColor('rgba(255,255,255,0.10)')
           .onClick(() => {
             this.goChapter(1);
           })
       }
       .width('100%')
-      // R-10 四大金刚：目录 / 阅读模式 / 画面调节 / 设置
-      Row({ space: 6 }) {
+      // 目录 / 阅读模式 / 画面调节 / 设置（纯 SymbolGlyph 图标坞）
+      Row({ space: 8 }) {
         HudButton({
-          label: '目录', glyph: '☰',
+          symbol: $r('sys.symbol.list_bullet'),
           onTap: (): void => {
             this.sheetVisible = true;
           }
         })
         HudButton({
-          label: '模式', glyph: '⇄', active: this.panel === 'mode',
+          symbol: $r('sys.symbol.rectangle_on_rectangle'),
+          active: this.panel === 'mode',
           onTap: (): void => {
             this.panel = this.panel === 'mode' ? 'none' : 'mode';
           }
         })
         HudButton({
-          label: '画面', glyph: '◐', active: this.panel === 'display',
+          symbol: $r('sys.symbol.sun_max'),
+          active: this.panel === 'display',
           onTap: (): void => {
             this.panel = this.panel === 'display' ? 'none' : 'display';
           }
         })
         HudButton({
-          label: '设置', glyph: '⚙', active: this.panel === 'settings',
+          symbol: $r('sys.symbol.gearshape'),
+          active: this.panel === 'settings',
           onTap: (): void => {
             this.panel = this.panel === 'settings' ? 'none' : 'settings';
           }
@@ -1919,9 +2072,9 @@ export struct ReaderPage {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 12, right: 12, top: 10, bottom: this.bottomSafeVp + 10 })
+    .padding({ left: 14, right: 14, top: 12, bottom: this.bottomSafeVp + 12 })
     .backgroundColor(MASK_DARK)
-    .backgroundBlurStyle(BlurStyle.Thin)
+    .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK }))
   }
 
   @Builder
@@ -1939,54 +2092,79 @@ export struct ReaderPage {
     .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
   }
 
-  /** R-17 HUD 隐藏时的微型常驻页码胶囊（右下角，不拦截触摸） */
+  /** HUD 隐藏时的微型常驻页码胶囊 */
   @Builder
   private PagePill() {
     Column() {
-      Text(`${this.chapterTitle()} ${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
+      Text(`${this.chapterTitle()} · ${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
         .fontSize(10)
-        .fontColor('rgba(255,255,255,0.82)')
+        .fontWeight(FontWeight.Medium)
+        .fontColor('rgba(255,255,255,0.86)')
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .constraintSize({ maxWidth: '72%' })
         .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-        .borderRadius(CHIP_R)
-        .backgroundColor(MASK_DARK)
+        .borderRadius(12)
+        .backgroundColor('rgba(14, 17, 26, 0.72)')
+        .border({ width: 0.5, color: 'rgba(255,255,255,0.14)' })
     }
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.End)
     .alignItems(HorizontalAlign.End)
-    .padding({ right: 12, bottom: this.bottomSafeVp + 14 })
+    .padding({ right: 12, bottom: this.bottomSafeVp + 10 })
     .hitTestBehavior(HitTestMode.None)
   }
 
-  /** R-11 章节目录半模态：点击直达对应话 */
+  /** 章节目录半模态：点击直达对应话 */
   @Builder
   private ChapterSheet() {
     Column() {
       if (this.bookmarks.length > 0) {
-        Scroll() {
-          Row({ space: 8 }) {
-            ForEach(this.bookmarks, (bookmark: ReadingProgress) => {
-              Button(`第 ${bookmark.chapterIndex + 1} 章 · ${bookmark.page + 1} 页`).onClick(() => {
-                this.sheetVisible = false;
-                const index: number = this.chapters.findIndex((c: Chapter) => c.id === bookmark.chapterId);
-                if (index >= 0) { this.loadChapter(index, bookmark.page); }
-              })
-            })
-          }.padding(12)
-        }.scrollable(ScrollDirection.Horizontal).width('100%')
+        Column({ space: 6 }) {
+          Text('已存书签')
+            .fontSize(12)
+            .fontColor('rgba(255,255,255,0.55)')
+            .padding({ left: 18 })
+          Scroll() {
+            Row({ space: 8 }) {
+              ForEach(this.bookmarks, (bookmark: ReadingProgress) => {
+                Text(`第 ${bookmark.chapterIndex + 1} 话 · P.${bookmark.page + 1}`)
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(Color.White)
+                  .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                  .borderRadius(14)
+                  .backgroundColor('rgba(58,122,254,0.24)')
+                  .border({ width: 0.5, color: PRIMARY })
+                  .onClick(() => {
+                    this.sheetVisible = false;
+                    const index: number = this.chapters.findIndex((c: Chapter) => c.id === bookmark.chapterId);
+                    if (index >= 0) {
+                      this.loadChapter(index, bookmark.page);
+                    }
+                  })
+              }, (bookmark: ReadingProgress) => `${bookmark.chapterId}_${bookmark.page}`)
+            }
+            .padding({ left: 18, right: 18 })
+          }
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          .width('100%')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .padding({ top: 10 })
+        .width('100%')
       }
       Row({ space: 8 }) {
         Text('章节目录')
-          .fontSize(17)
+          .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor('#F2F2F4')
           .layoutWeight(1)
         Text(`共 ${this.chapters.length} 话`)
           .fontSize(12)
-          .fontColor('rgba(255,255,255,0.5)')
+          .fontColor('rgba(255,255,255,0.55)')
       }
       .width('100%')
       .padding({ left: 18, right: 18, top: 14, bottom: 10 })
@@ -2000,6 +2178,7 @@ export struct ReaderPage {
                 .width(34)
               Text(ch.title !== '' ? ch.title : `第 ${(index === undefined ? 0 : index) + 1} 話`)
                 .fontSize(14)
+                .fontWeight(index === this.chapterIndex ? FontWeight.Bold : FontWeight.Regular)
                 .fontColor(index === this.chapterIndex ? '#FFFFFF' : 'rgba(255,255,255,0.75)')
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -2007,10 +2186,11 @@ export struct ReaderPage {
               if (index === this.chapterIndex) {
                 Text('阅读中')
                   .fontSize(10)
-                  .fontColor(PRIMARY)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(Color.White)
                   .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-                  .borderRadius(CHIP_R)
-                  .backgroundColor('rgba(255,77,109,0.16)')
+                  .borderRadius(8)
+                  .backgroundColor(PRIMARY)
               }
             }
             .width('100%')
@@ -2041,7 +2221,7 @@ export struct ReaderPage {
   build() {
     NavDestination() {
       Stack() {
-        // R-26 缩放画布：外层平移（父坐标系）+ 内层缩放 + 双指手势（不拦截单指滚动/翻页）
+        // 缩放画布：外层平移（父坐标系）+ 内层缩放 + 双指手势（不拦截单指滚动/翻页）
         Column() {
           Stack() {
             if (this.loadState === 'loading') {
@@ -2090,7 +2270,7 @@ export struct ReaderPage {
         if (this.options.eyeComfort) {
           Column().width('100%').height('100%').backgroundColor('rgba(255,185,85,0.16)').hitTestBehavior(HitTestMode.None)
         }
-        // 亮度遮罩（S 级：应用内调光，不拦截触摸）
+        // 亮度遮罩
         if (this.brightnessValue < 100) {
           Column()
             .width('100%')
@@ -2099,6 +2279,9 @@ export struct ReaderPage {
             .hitTestBehavior(HitTestMode.None)
         }
         // 微型页码胶囊（HUD 隐藏时常驻）
+        if (!this.hudVisible && this.loadState === 'ready' && this.pages.length > 0) {
+          this.PagePill()
+        }
         // 上下双层 HUD
         if (this.hudVisible) {
           this.HudLayer()
@@ -2121,7 +2304,8 @@ export struct ReaderPage {
       .bindSheet($$this.sheetVisible, this.ChapterSheet(), {
         height: '62%',
         dragBar: true,
-        backgroundColor: '#17171B',
+        backgroundColor: '#141722',
+        systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK }),
         onDisappear: (): void => {
           this.sheetVisible = false;
         }

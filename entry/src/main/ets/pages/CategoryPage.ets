@@ -253,8 +253,7 @@ export struct AlbumCard {
             .fontColor(Color.White)
             .maxLines(1)
             .padding({ left: 6, right: 6, top: 3, bottom: 3 })
-            .backgroundColor('rgba(20,20,20,0.35)')
-            .backgroundBlurStyle(BlurStyle.Thin)
+            .backgroundColor('rgba(14,17,26,0.78)')
             .borderRadius(9)
             .margin(6)
         }
@@ -389,6 +388,7 @@ let cachedCategories: Array<CategoryItem> | null = null;
 @Component
 export struct CategoryPage {
   @Consume('navPathStack') navPathStack: NavPathStack;
+  @Prop embeddedInShell: boolean = false;
 
   /* ── 安全区/断点契约（评审 Step2/Step4：EntryAbility 写入 AppStorage，页面 @StorageProp 消费）── */
   @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
@@ -443,7 +443,7 @@ export struct CategoryPage {
 
   aboutToAppear(): void {
     // 评审 Step2：首帧头部高度估算补上状态栏避让（onAreaChange 随后校准为实际值，缓解首帧重叠）
-    this.headerHeight = this.topInset + 150;
+    this.headerHeight = (this.embeddedInShell ? 0 : this.topInset) + 150;
     jmApi.init().catch((e: Error) => {
       console.info(`[CategoryPage] jmApi.init: ${errorMessage(e)}`);
     });
@@ -739,7 +739,7 @@ export struct CategoryPage {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .constraintSize({ maxWidth: '45%' })
         Blank()
-        Text(this.expanded ? '收起 ▴' : '筛选 ▾')
+        Text(this.expanded ? '收起筛选' : '展开筛选')
           .fontSize(FONT_CAPTION)
           .fontColor(TEXT_SUB)
           .padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -796,9 +796,9 @@ export struct CategoryPage {
                   .fontSize(FONT_CAPTION)
                   .fontColor(TEXT_SUB)
                   .maxLines(1)
-                Text('✕')
-                  .fontSize(FONT_CAPTION)
-                  .fontColor(TEXT_SUB)
+                SymbolGlyph($r('sys.symbol.xmark'))
+                  .fontSize(11)
+                  .fontColor([TEXT_SUB])
                   .onClick(() => {
                     this.confirmDeleteCustom(term);
                   })
@@ -814,7 +814,7 @@ export struct CategoryPage {
                 this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
               })
             }, (term: string) => 'ccat_' + term)
-            Text('＋ 自定义')
+            Text('添加自定义')
               .fontSize(FONT_CAPTION)
               .fontColor(PRIMARY)
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -861,8 +861,7 @@ export struct CategoryPage {
       .width('100%')
     }
     .width('100%')
-    // 评审 Step2：顶栏 padding 顶部叠加状态栏避让高度
-    .padding({ left: SPACE_L, right: SPACE_L, top: this.topInset + SPACE_M, bottom: SPACE_M })
+    .padding({ left: SPACE_L, right: SPACE_L, top: (this.embeddedInShell ? 0 : this.topInset) + SPACE_M, bottom: SPACE_M })
     .backgroundColor(BAR_LIGHT)
     .backgroundBlurStyle(BlurStyle.Regular)
     .onAreaChange((_oldArea: Area, newArea: Area) => {
@@ -980,7 +979,6 @@ export struct CategoryPage {
     }
     .width('100%')
     .height('100%')
-    // 评审 Step2/Step4：sm 避开 MainShell 自绘底栏+导航条；md/lg 无底栏仅避导航条
-    .padding({ bottom: this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset + SPACE_S : this.bottomInset + SPACE_S })
+    .padding({ bottom: !this.embeddedInShell && this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset + SPACE_S : this.bottomInset + SPACE_S })
   }
 }
