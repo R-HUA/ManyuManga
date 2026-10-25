@@ -1,0 +1,56 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\huaru\\.ohos\\config\\default_manga-reader_u8oDA_Ktn76awq1AwE5H-m6fLNsq_lslLbFFZ10wBqg=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B6A50AE3532ADDA5EC6A2615C1914C0C193273BE524A7FCE5AB15B5E75CD6637EB2F32C63383202",
+          "profile": "C:\\Users\\huaru\\.ohos\\config\\default_manga-reader_u8oDA_Ktn76awq1AwE5H-m6fLNsq_lslLbFFZ10wBqg=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\huaru\\.ohos\\config\\default_manga-reader_u8oDA_Ktn76awq1AwE5H-m6fLNsq_lslLbFFZ10wBqg=.p12",
+          "storePassword": "0000001B1B574223DAEE03748385B26A7FBB72319BF200A4A7950FBACE43FE365CF8F499537CBA1925ABC6"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "compatibleSdkVersion": "26.0.0",
+        "targetSdkVersion": "26.0.0",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}
