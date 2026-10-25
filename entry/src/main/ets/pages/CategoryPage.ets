@@ -1,20 +1,7 @@
 /**
- * pages/CategoryPage.ets —— Tab2 分类（分类与搜索工程师维护）
- *
- * 依据：
- *  - docs/feature-spec.md §2.2 C-01~C-08：C-01 分类频道（chips 化 + 作品数）、C-02 排序 chips +
- *    网格分页（ranking(slug, order, page)）、C-03 四态、C-04 自定义分类、C-05 选中保留、
- *    C-06 吸顶筛选（按简化口径：API 仅 c/o/page，不虚构地区/读者群体假维度）、
- *    C-07 瀑布流 WaterFlow（胶囊用真实 category/categorySub 数据）、C-08 屏蔽词过滤。
- *  - docs/uiux-design.md §四.(2)：吸顶筛选器 + 瀑布流封面流构想（稳定 API 等价实现）。
- *  - Android 原实现 ui/category/CategoryScreen.kt（无 slug 分类默认 mr、其余默认 mv 的联动规则见 :240-242；
- *    翻页空结果提示见 :276-278）。
- *
- * 四态：骨架（SkeletonGrid）/ 空态 / 错误重试（首屏 EmptyView + 翻页底部重试行）/ 加载更多（上拉 + 底部状态行）。
- *
- * 评审 Step2/3/4 增量：状态栏/底部安全区避让（EntryAbility 契约 key）、断点响应式列数（sm 3 / md 4 / lg 5）、
- * 屏蔽词变更实时重过滤、封面失败按 id 轮换备用图床、收起筛选时的「分类 · 排序」摘要胶囊。
+ * 分类页面
  */
+import { uiMaterial } from '@kit.ArkUI';
 import { BAR_LIGHT, CARD, CHIP_BG, CHIP_R, COVER_ASPECT_RATIO, COVER_R, FONT_BADGE, FONT_BODY,
   FONT_CAPTION, FONT_TITLE, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TAB_BAR_HEIGHT, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
 import { EmptyView, SkeletonGrid, TagChip } from '../common/Components';
@@ -24,7 +11,7 @@ import { sourceApi as jmApi } from '../data/SourceApi';
 import { blockTagsStore, customCatStore } from '../data/Stores';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } from '../entryability/EntryAbility';
 
-/* ===== 路由参数（conventions §3 契约表；ArkTS 严格模式禁对象字面量传参，用具名 class） ===== */
+/* ===== 路由参数（ 契约表；ArkTS 严格模式禁对象字面量传参，用具名 class） ===== */
 
 class AlbumRouteParam {
   aid: string = '';
@@ -56,7 +43,7 @@ const ORDER_OPTIONS: Array<ChipOption> = [
   new ChipOption('mr', '最新')
 ];
 
-/** 数字本地化：10591 → 1.1万（conventions §8；小于 1 万原样返回） */
+/** 数字本地化：10591 → 1.1万（；小于 1 万原样返回） */
 export function formatCount(raw: string): string {
   if (raw === '') {
     return raw;
@@ -146,7 +133,7 @@ function codePointCount(s: string): number {
 
 // ───────────────────────── WaterFlow 数据源（LazyForEach + IDataSource） ─────────────────────────
 
-/** 专辑列表数据源：供 WaterFlow LazyForEach 懒加载（conventions §5） */
+/** 专辑列表数据源：供 WaterFlow LazyForEach 懒加载（） */
 export class AlbumSource implements IDataSource {
   private items: Array<AlbumLite> = [];
   private listeners: Array<DataChangeListener> = [];
@@ -199,7 +186,7 @@ export class AlbumSource implements IDataSource {
 // ───────────────────────── 瀑布流封面卡（3:4 封面 + 徽章 + 2 个高频标签胶囊） ─────────────────────────
 
 /**
- * C-07：卡片底部 2 个标签胶囊取真实列表字段 category / category_sub（数据源 JmApi.parseComic，
+ * 卡片底部 2 个标签胶囊取真实列表字段 category / category_sub（数据源 JmApi.parseComic，
  * 不依赖已裁剪的标签级 enrich）；两者皆空时降级为作者行。
  */
 @Component
@@ -237,12 +224,10 @@ export struct AlbumCard {
       Stack({ alignContent: Alignment.TopEnd }) {
         Image(this.coverSrc())
           .width('100%')
-          .aspectRatio(COVER_ASPECT_RATIO)
+          .height('100%')
           .objectFit(ImageFit.Cover)
-          .borderRadius(COVER_R)
           .backgroundColor(CHIP_BG)
           .onError(() => {
-            // 评审 Step3：封面失败按 id 轮换备用图床（最多 3 次）
             if (this.coverRetry < 3 && this.item.id !== '') {
               this.coverRetry += 1;
             }
@@ -259,6 +244,7 @@ export struct AlbumCard {
         }
       }
       .width('100%')
+      .aspectRatio(COVER_ASPECT_RATIO)
       .borderRadius(COVER_R)
       .clip(true)
       .border({ width: 0.5, color: 'rgba(255,255,255,0.15)' })
@@ -298,7 +284,7 @@ export struct AlbumCard {
   }
 }
 
-// ───────────────────────── 自定义分类添加弹窗（C-04） ─────────────────────────
+// ───────────────────────── 自定义分类添加弹窗 ─────────────────────────
 
 @CustomDialog
 struct AddCatDialog {
@@ -382,7 +368,7 @@ struct AddCatDialog {
 
 // ───────────────────────── 分类页 ─────────────────────────
 
-/** C-05 分类列表进程内缓存（契约缺口：Stores.ets 无分类持久化缓存，切 Tab/返回仍保留选中与列表） */
+/** 分类列表进程内缓存（契约缺口：Stores.ets 无分类持久化缓存，切 Tab/返回仍保留选中与列表） */
 let cachedCategories: Array<CategoryItem> | null = null;
 
 @Component
@@ -397,12 +383,19 @@ export struct CategoryPage {
   /* ── 屏蔽词实时联动（评审 Step3）── */
   @StorageProp('blockTagsVersion') @Watch('onBlockTagsChanged') blockVer: number = 0;
 
-  // 筛选状态（选中分类以基元字段保存，切 Tab 不丢：Tabs 常驻本组件）
+  // 筛选状态
   @State selectedCatId: string = '';
   @State selectedCatName: string = '';
   @State selectedCatSlug: string = '';
   @State order: string = 'mr';
   @State expanded: boolean = true;
+  @State catDrawerVisible: boolean = false;
+
+  private orderIndex(): number {
+    const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
+    const idx: number = codes.indexOf(this.order);
+    return idx >= 0 ? idx : 0;
+  }
 
   // 分类列表
   @State categories: Array<CategoryItem> = [];
@@ -486,7 +479,7 @@ export struct CategoryPage {
     return this.selectedCatSlug === '' ? '0' : this.selectedCatSlug;
   }
 
-  /** C-08 屏蔽词过滤（字段匹配口径，E-06 简化） */
+  /** 屏蔽词过滤（字段匹配口径，简化） */
   private async filterBlocked(list: Array<AlbumLite>): Promise<Array<AlbumLite>> {
     const out: Array<AlbumLite> = [];
     for (const it of list) {
@@ -725,71 +718,54 @@ export struct CategoryPage {
   // ── UI ──
 
   @Builder
-  private FilterHeader() {
-    Column({ space: SPACE_M }) {
-      Row({ space: SPACE_S }) {
-        Text('分类')
-          .fontSize(FONT_TITLE)
+  private CategoryDrawer() {
+    Column({ space: 14 }) {
+      Row() {
+        Text('全部分类与题材')
+          .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .fontColor(TEXT_MAIN)
-        Text(this.selectedCatId === '' ? '全部' : this.selectedCatName)
-          .fontSize(FONT_BODY)
+          .layoutWeight(1)
+
+        Button('添加自定义', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
           .fontColor(PRIMARY)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .constraintSize({ maxWidth: '45%' })
-        Blank()
-        Text(this.expanded ? '收起筛选' : '展开筛选')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
-          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
           .backgroundColor(CHIP_BG)
-          .borderRadius(CHIP_R)
+          .height(30)
           .onClick(() => {
-            this.expanded = !this.expanded;
+            this.catDrawerVisible = false;
+            this.addDialogCtrl.open();
           })
       }
       .width('100%')
+      .padding({ left: 20, right: 20, top: 16 })
 
-      // 评审 Step2：收起筛选面板时在顶栏下展示「分类 · 排序」摘要胶囊（点按可重新展开）
-      if (!this.expanded) {
-        Text(`${this.selectedCatId === '' ? '全部' : this.selectedCatName} · ${this.orderLabel()}`)
-          .fontSize(FONT_CAPTION)
-          .fontColor(PRIMARY)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-          .backgroundColor(CHIP_BG)
-          .borderRadius(CHIP_R)
-          .onClick(() => {
-            this.expanded = true;
-          })
-      }
-
-      if (this.expanded) {
-        Column({ space: SPACE_S }) {
-          Text('题材')
-            .fontSize(FONT_CAPTION)
-            .fontColor(TEXT_SUB)
+      Scroll() {
+        Column({ space: 12 }) {
           Flex({ wrap: FlexWrap.Wrap }) {
             TagChip({
-              label: '全部',
+              label: '全部题材',
               selected: this.selectedCatId === '',
               onChipClick: (): void => {
+                this.catDrawerVisible = false;
                 this.selectAll();
               }
             })
               .margin({ right: SPACE_S, bottom: SPACE_S })
+
             ForEach(this.categories, (cat: CategoryItem) => {
               TagChip({
                 label: this.chipLabel(cat),
                 selected: this.selectedCatId === cat.id,
                 onChipClick: (): void => {
+                  this.catDrawerVisible = false;
                   this.selectCategory(cat);
                 }
               })
                 .margin({ right: SPACE_S, bottom: SPACE_S })
-            }, (cat: CategoryItem) => 'cat_' + cat.id)
+            }, (cat: CategoryItem) => 'drawer_cat_' + cat.id)
+
             ForEach(this.customCats, (term: string) => {
               Row({ space: 6 }) {
                 Text(term)
@@ -808,60 +784,122 @@ export struct CategoryPage {
               .borderRadius(CHIP_R)
               .margin({ right: SPACE_S, bottom: SPACE_S })
               .onClick(() => {
-                // 自定义分类点击 = 按关键词搜索（C-04）
+                this.catDrawerVisible = false;
                 const param: SearchRouteParam = new SearchRouteParam();
                 param.query = term;
                 this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
               })
-            }, (term: string) => 'ccat_' + term)
-            Text('添加自定义')
-              .fontSize(FONT_CAPTION)
-              .fontColor(PRIMARY)
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .backgroundColor(CHIP_BG)
-              .borderRadius(CHIP_R)
-              .margin({ right: SPACE_S, bottom: SPACE_S })
-              .onClick(() => {
-                this.addDialogCtrl.open();
-              })
+            }, (term: string) => 'drawer_ccat_' + term)
           }
           .width('100%')
-          if (this.catsLoading) {
-            Text('分类加载中…')
-              .fontSize(FONT_CAPTION)
-              .fontColor(TEXT_SUB)
-          } else if (this.catsError !== '') {
-            Text(`${this.catsError} · 点此重试`)
-              .fontSize(FONT_CAPTION)
-              .fontColor(PRIMARY)
-              .onClick(() => {
-                this.loadCategories();
-              })
-          }
         }
+        .padding({ left: 20, right: 20, bottom: 28 + this.bottomInset })
         .width('100%')
-        .alignItems(HorizontalAlign.Start)
       }
-
-      // 排序 chips（C-02 M：常驻可点）
-      Scroll() {
-        Row({ space: SPACE_S }) {
-          ForEach(ORDER_OPTIONS, (opt: ChipOption) => {
-            TagChip({
-              label: opt.label,
-              selected: this.order === opt.code,
-              onChipClick: (): void => {
-                this.selectOrder(opt.code);
-              }
-            })
-          }, (opt: ChipOption) => 'order_' + opt.code)
-        }
-      }
-      .scrollable(ScrollDirection.Horizontal)
+      .layoutWeight(1)
       .width('100%')
     }
     .width('100%')
-    .padding({ left: SPACE_L, right: SPACE_L, top: (this.embeddedInShell ? 0 : this.topInset) + SPACE_M, bottom: SPACE_M })
+    .height('100%')
+  }
+
+  @Builder
+  private FilterHeader() {
+    Column({ space: 8 }) {
+      // 第 1 行：单行横滑分类轨 + 右侧「全部分类」抽屉按钮
+      Row({ space: 8 }) {
+        Scroll() {
+          Row({ space: 8 }) {
+            TagChip({
+              label: '全部',
+              selected: this.selectedCatId === '',
+              onChipClick: (): void => {
+                this.selectAll();
+              }
+            })
+            ForEach(this.categories, (cat: CategoryItem) => {
+              TagChip({
+                label: cat.name,
+                selected: this.selectedCatId === cat.id,
+                onChipClick: (): void => {
+                  this.selectCategory(cat);
+                }
+              })
+            }, (cat: CategoryItem) => 'cat_' + cat.id)
+            ForEach(this.customCats, (term: string) => {
+              TagChip({
+                label: `#${term}`,
+                selected: false,
+                onChipClick: (): void => {
+                  const param: SearchRouteParam = new SearchRouteParam();
+                  param.query = term;
+                  this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
+                }
+              })
+            }, (term: string) => 'ccat_' + term)
+          }
+          .padding({ right: 4 })
+        }
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .layoutWeight(1)
+
+        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+            .fontSize(18)
+            .fontColor([TEXT_MAIN])
+        }
+        .width(34)
+        .height(34)
+        .backgroundColor(CHIP_BG)
+        .onClick(() => {
+          this.catDrawerVisible = true;
+        })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      // 第 2 行：左侧当前分类说明 + 右侧 Select 排序
+      Row() {
+        Text(`当前：${this.selectedCatId === '' ? '全部题材' : this.selectedCatName}`)
+          .fontSize(12)
+          .fontColor(TEXT_SUB)
+          .layoutWeight(1)
+
+        Select([
+          { value: '最新上架' },
+          { value: '日榜热门' },
+          { value: '周榜热门' },
+          { value: '月榜热门' },
+          { value: '总榜殿堂' }
+        ])
+          .selected(this.orderIndex())
+          .value(this.orderLabel())
+          .font({ size: 13, weight: FontWeight.Medium })
+          .fontColor(TEXT_MAIN)
+          .selectedOptionFont({ size: 14, weight: FontWeight.Bold })
+          .optionFont({ size: 14 })
+          .height(32)
+          .backgroundColor(CHIP_BG)
+          .borderRadius(16)
+          .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR
+          }))
+          .onSelect((index: number) => {
+            const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
+            this.selectOrder(codes[index] ?? 'mr');
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .padding({
+      left: SPACE_L,
+      right: SPACE_L,
+      top: (this.embeddedInShell ? 0 : this.topInset) + 8,
+      bottom: 8
+    })
     .backgroundColor(BAR_LIGHT)
     .backgroundBlurStyle(BlurStyle.Regular)
     .onAreaChange((_oldArea: Area, newArea: Area) => {
@@ -979,6 +1017,12 @@ export struct CategoryPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ bottom: !this.embeddedInShell && this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset + SPACE_S : this.bottomInset + SPACE_S })
+    .padding({ bottom: this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset + SPACE_S : this.bottomInset + SPACE_S })
+    .bindSheet($$this.catDrawerVisible, this.CategoryDrawer(), {
+      height: '70%',
+      dragBar: true,
+      backgroundColor: CARD,
+      systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
+    })
   }
 }

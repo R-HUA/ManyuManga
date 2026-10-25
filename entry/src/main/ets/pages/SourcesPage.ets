@@ -258,13 +258,14 @@ export struct SourcesPage {
   private SourceActionPill(label: string, primary: boolean, danger: boolean, enabled: boolean, onTap: () => void) {
     Text(label)
       .fontSize(13)
-      .fontWeight(primary ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(!enabled ? TEXT_SUB : (primary ? Color.White : (danger ? DANGER : TEXT_MAIN)))
+      .fontWeight(FontWeight.Bold)
+      .fontColor(!enabled ? TEXT_SUB : (primary ? PRIMARY : (danger ? DANGER : TEXT_MAIN)))
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 9, bottom: 9 })
       .borderRadius(16)
-      .backgroundColor(primary ? PRIMARY : (danger ? DANGER_SOFT : SUB_CARD))
+      .backgroundColor(primary ? PRIMARY_SOFT : (danger ? DANGER_SOFT : SUB_CARD))
+      .border({ width: 0.5, color: primary ? PRIMARY : DIVIDER })
       .opacity(enabled ? 1.0 : 0.45)
       .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
       .onClick(() => {
@@ -279,7 +280,7 @@ export struct SourcesPage {
       // Top Header
       Row({ space: 10 }) {
         Row({ space: 8 }) {
-          Text('图源中枢')
+          Text('图源')
             .fontSize(26)
             .fontWeight(FontWeight.Bold)
             .fontColor(TEXT_MAIN)
@@ -319,7 +320,7 @@ export struct SourcesPage {
 
       // Cross-source Search Bar
       Row({ space: 8 }) {
-        Search({ value: this.globalQuery, placeholder: '并发检索全部已启用图源…' })
+        Search({ value: this.globalQuery, placeholder: '搜索全部已启用图源…' })
           .layoutWeight(1)
           .height(40)
           .backgroundColor(CARD)
@@ -329,14 +330,14 @@ export struct SourcesPage {
           .onSubmit((val: string) => {
             this.stack.pushPathByName(ROUTE_SEARCH, { query: val.trim() } as MangaRouteParams);
           })
-        Text('搜全源')
+
+        Button('搜全源', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
           .fontSize(13)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-          .borderRadius(18)
-          .backgroundColor(PRIMARY)
-          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+          .fontColor(PRIMARY)
+          .backgroundColor(PRIMARY_SOFT)
+          .height(38)
+          .padding({ left: 16, right: 16 })
           .onClick(() => {
             this.stack.pushPathByName(ROUTE_SEARCH, { query: this.globalQuery.trim() } as MangaRouteParams);
           })
@@ -367,7 +368,7 @@ export struct SourcesPage {
               Row({ space: 12 }) {
                 Stack({ alignContent: Alignment.Center }) {
                   SymbolGlyph(source.kind === 'jm'
-                    ? $r('sys.symbol.compass')
+                    ? $r('sys.symbol.cloud')
                     : (source.kind === 'local' ? $r('sys.symbol.folder') : $r('sys.symbol.externaldrive')))
                     .fontSize(22)
                     .fontColor([source.kind === 'jm' ? ACCENT : PRIMARY])
@@ -390,7 +391,7 @@ export struct SourcesPage {
                   }
                   Text(source.kind === 'local'
                     ? '本地 CBZ / ZIP 归档与目录'
-                    : (source.kind === 'jm' ? '内置加密图源 · 精选广场 / 多维片库 / 镜像测速' : `${source.language ? source.language + ' · ' : ''}${source.endpoint}`))
+                    : (source.kind === 'jm' ? '内置图源 · 精选 / 分类 / 镜像测速' : `${source.language ? source.language + ' · ' : ''}${source.endpoint}`))
                     .fontColor(TEXT_SUB)
                     .fontSize(12)
                     .maxLines(1)
@@ -450,7 +451,7 @@ export struct SourcesPage {
 
               Row({ space: 10 }) {
                 this.SourceActionPill(
-                  source.kind === 'local' ? '导入漫画包' : (source.kind === 'jm' ? '进入发现广场' : '检索此源'),
+                  source.kind === 'local' ? '导入漫画包' : (source.kind === 'jm' ? '进入发现' : '检索此源'),
                   true,
                   false,
                   source.enabled && !this.busy,
@@ -465,7 +466,7 @@ export struct SourcesPage {
                   }
                 )
                 this.SourceActionPill(
-                  source.kind === 'local' ? '已导入列表' : (source.kind === 'jm' ? '节点与屏蔽词' : '连接配置'),
+                  source.kind === 'local' ? '已导入列表' : (source.kind === 'jm' ? '节点设置' : '连接配置'),
                   false,
                   false,
                   true,

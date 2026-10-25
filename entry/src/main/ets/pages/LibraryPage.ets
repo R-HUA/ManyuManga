@@ -504,7 +504,7 @@ export struct LibraryPage {
           })
       } else {
         Row({ space: 8 }) {
-          Text('漫匣书架')
+          Text('书架')
             .fontSize(26)
             .fontWeight(FontWeight.Bold)
             .fontColor(TEXT_MAIN)
@@ -530,7 +530,7 @@ export struct LibraryPage {
           }
         })
         IconCircleButton({
-          glyph: $r('sys.symbol.compass'),
+          glyph: $r('sys.symbol.square_grid_2x2'),
           onTap: (): void => {
             this.stack.pushPathByName(ROUTE_SEARCH, {} as MangaRouteParams);
           }

@@ -249,12 +249,12 @@ export struct UpdatesPage {
       // Top Header
       Row({ space: 10 }) {
         Column({ space: 2 }) {
-          Text('动态与足迹')
+          Text('动态')
             .fontSize(26)
             .fontWeight(FontWeight.Bold)
             .fontColor(TEXT_MAIN)
           if (this.busy) {
-            Text('正在并发巡检书架图源更新…')
+            Text('正在检查书架更新…')
               .fontSize(11)
               .fontColor(PRIMARY)
           }
@@ -267,8 +267,8 @@ export struct UpdatesPage {
             glyph: $r('sys.symbol.trash'),
             onTap: (): void => {
               this.getUIContext().showAlertDialog({
-                title: '清空浏览足迹',
-                message: '确定清空所有作品浏览历史记录吗？书架与阅读进度不受影响。',
+                title: '清空浏览历史',
+                message: '确定清空所有浏览历史记录吗？书架与阅读进度不受影响。',
                 primaryButton: { value: '取消', action: () => {} },
                 secondaryButton: {
                   value: '清空',
@@ -276,7 +276,7 @@ export struct UpdatesPage {
                   action: () => {
                     historyStore.clear().then(() => {
                       this.load();
-                      promptAction.showToast({ message: '已清空浏览足迹' });
+                      promptAction.showToast({ message: '已清空浏览历史' });
                     });
                   }
                 }
@@ -306,9 +306,9 @@ export struct UpdatesPage {
 
       // 3-Segment Switcher
       Row({ space: 4 }) {
-        this.SegmentPill('章节更新', this.updatedWorks().length, 0)
+        this.SegmentPill('更新', this.updatedWorks().length, 0)
         this.SegmentPill('最近阅读', this.recent.length, 1)
-        this.SegmentPill('浏览足迹', this.history.length, 2)
+        this.SegmentPill('浏览历史', this.history.length, 2)
       }
       .padding(4)
       .margin({ left: 16, right: 16 })
@@ -384,8 +384,8 @@ export struct UpdatesPage {
 
             if (this.history.length === 0) {
               this.EmptySection(
-                '暂无浏览足迹',
-                '查看过的作品详情会自动留存在这里，方便随时找回',
+                '暂无浏览历史',
+                '浏览过的作品会自动留存在这里，方便随时找回',
                 '',
                 () => {}
               )

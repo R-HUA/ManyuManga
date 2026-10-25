@@ -1,17 +1,5 @@
 /**
- * util/Http.ets — @ohos.net.http GET/HEAD 封装
- *
- * 移植依据：
- *  - jinmanji-app/app/src/main/java/com/mobai/jm/data/JmApi.kt:88-108（UA 常量、内存 CookieJar 按 host 整组覆盖）
- *  - jinmanji-app/app/src/main/java/com/mobai/jm/data/JmApi.kt:307-318,639-645（httpGet / httpGetBytes：
- *    非 200 抛 "HTTP {code}"，空响应抛错，统一带 UA）
- *  - docs/api-spec.md §1（超时：API 客户端 connect 5s / read 12s / call 15s；域名服务器专用 4/4/5s）
- *
- * 行为约定：
- *  - 默认超时 connect 5000ms / read 12000ms / 整体 15000ms，可按次覆盖（模拟 OkHttp callTimeout：
- *    超时触发 destroy 并 reject）。
- *  - 进程内 Cookie 存储：按 host 整组覆盖保存（/setting 响应种下的 cookie 后续请求自动携带）。
- *  - 所有失败归一化为带 message 的 Error（"HTTP 500" / "请求超时" / "空响应" / 底层错误信息）。
+ * 网络请求 HTTP GET/HEAD 封装
  */
 
 import http from '@ohos.net.http';

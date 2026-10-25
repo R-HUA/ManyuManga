@@ -319,7 +319,7 @@ export struct ExplorePage {
   @StorageProp('blockTagsVersion') @Watch('onBlockTagsChanged') blockVer: number = 0;
   @StorageProp('exploreRefreshTick') @Watch('onExploreRefreshTick') refreshTick: number = 0;
 
-  /* ── 榜单区（E-03/E-04）── */
+  /* ── 榜单区── */
   @State currentRank: RankingType = 'mv_t';
   @State rankItems: Array<AlbumLite> = [];
   @State rankLoading: boolean = false;
@@ -503,7 +503,7 @@ export struct ExplorePage {
       if (this.randomItems.length === 0) {
         this.randomError = msg;
       } else {
-        // E-05：失败 Toast 提示且保留旧内容
+        // 失败 Toast 提示且保留旧内容
         this.toast(manual ? `换一批失败，已保留旧内容：${msg}` : `随机推荐刷新失败，已保留旧内容：${msg}`);
       }
       return false;
@@ -634,7 +634,7 @@ export struct ExplorePage {
     this.randomItems = pool.slice(0, this.gridColumns() * 2);
   }
 
-  /** 节点测速（E-02：数据源 = jmApi.testDomains 镜像测速结果 SET-22/SET-28） */
+  /** 节点测速 */
   private async measureLatency(): Promise<void> {
     try {
       const list: Array<DomainSpeed> = await jmApi.testDomains();
@@ -784,7 +784,7 @@ export struct ExplorePage {
     if (this.randomLoading) {
       return;
     }
-    // 换一批：图标旋转动效 + 重新请求并洗牌（E-05）
+    // 换一批：图标旋转动效 + 重新请求并洗牌
     this.getUIContext().animateTo({ duration: 450, curve: Curve.EaseInOut }, () => {
       this.refreshAngle += 360;
     });
@@ -1313,14 +1313,13 @@ export struct ExplorePage {
     // 评审 Step2/Step4：sm 避开自绘底栏+导航条；md/lg 无底栏仅避导航条
     .padding({
       top: SPACE_S,
-      bottom: (!this.embeddedInShell && this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset : this.bottomInset) + SPACE_XL
+      bottom: (this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset : this.bottomInset) + SPACE_XL
     })
   }
 
   build() {
     Stack({ alignContent: Alignment.Top }) {
       if (this.pageError !== '') {
-        // 整页错误态：空 + 失败（HomeScreen.kt:128-141 语义）
         Column() {
           EmptyView({
             message: this.pageError,
@@ -1334,14 +1333,13 @@ export struct ExplorePage {
         .width('100%')
         .height('100%')
         .justifyContent(FlexAlign.Center)
-        .padding({ bottom: !this.embeddedInShell && this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset : this.bottomInset })
+        .padding({ bottom: this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset : this.bottomInset })
       } else {
-        // 主滚动流：下拉刷新（E-14 刷新）+ 上拉加载更多（E-08 分页）
         Refresh({ refreshing: $$this.refreshing, offset: 14, friction: 42 }) {
           List({ space: SPACE_M, scroller: this.scroller }) {
             ListItem() {
               Column()
-                .height(TOP_BAR_H + (this.embeddedInShell ? 0 : this.topInset) + SPACE_S)
+                .height(this.embeddedInShell ? SPACE_S : TOP_BAR_H + this.topInset + SPACE_S)
             }
             ListItem() {
               this.RankingSection()
@@ -1378,7 +1376,9 @@ export struct ExplorePage {
           });
         })
       }
-      this.TopBar()
+      if (!this.embeddedInShell) {
+        this.TopBar()
+      }
     }
     .width('100%')
     .height('100%')

@@ -5,10 +5,10 @@
  * 算法：
  *  - segments：pid<scrambleId→0（老图无加密）；pid<268850→10（固定）；否则
  *    x = pid<421926?10:8，n = md5hex(pid十进制 + 不带扩展名的文件名) 末字符码 % x，段数 = n*2+2。
- *    ★ 哈希输入是【不带扩展名】的文件名（v0.2.2 修复，最易踩的坑）。
+ *    哈希输入是不带扩展名的文件名。
  *  - 重排：h%segments 为余数 over；自底向上第 i 条带搬到自顶向下第 i 槽位（垂直带级倒序），
  *    余数行并入第 0 条、其余段整体下移 over。
- *  - 必须【原始尺寸】解码 → 反混淆 → 最后才缩放（先缩放会使分段边界取整错位出现横线瑕疵）。
+ *  - 原始尺寸解码后反混淆，最后缩放。
  */
 
 import image from '@ohos.multimedia.image';
@@ -129,23 +129,38 @@ function releaseEntryPm(e: RefEntry): void {
     return;
   }
   e.disposed = true;
-  e.pm.release().catch((err: Error): void => {
+  leased.delete(e.pm);
+  e.pm.release().catch((_err: Error): void => {
   });
 }
 
 /**
- * 归还借出的页位图（ReaderImageItem/PageThumb/预取链在 aboutToDisappear 或替换时调用）。
- * 未登记的实例（未入缓存的成功解码）按独占语义直接释放。
+ * 判断 PixelMap 是否仍然有效（防止已被释放的实例继续读取导致 info.size 报错）
+ */
+export function isPixelMapValid(pm: image.PixelMap | null | undefined): boolean {
+  if (pm === null || pm === undefined) {
+    return false;
+  }
+  try {
+    const info: image.ImageInfo | undefined = pm.getImageInfoSync();
+    return info !== undefined && info !== null && info.size !== undefined && info.size.width > 0 && info.size.height > 0;
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * 归还借出的页位图
+ * 仅在已不在缓存且无其他外借引用时释放底层资源
  */
 export function releasePagePixelMap(pm: image.PixelMap): void {
   const e: RefEntry | undefined = leased.get(pm);
   if (e === undefined) {
-    pm.release().catch((err: Error): void => {
+    pm.release().catch((_err: Error): void => {
     });
     return;
   }
-  leased.delete(pm);
-  e.borrows--;
+  e.borrows = Math.max(0, e.borrows - 1);
   if (e.borrows <= 0 && !e.inCache) {
     releaseEntryPm(e);
   }
@@ -160,7 +175,7 @@ class PixelMapLru {
     this.cap = capBytes;
   }
 
-  /** 借出：命中刷新 LRU 顺序并登记外借（零拷贝直返原实例）；未命中返回 null */
+  /** 借出：命中刷新 LRU 顺序并登记外借；未命中返回 null */
   acquire(key: string): RefEntry | null {
     const e: RefEntry | undefined = this.entries.get(key);
     if (e === undefined) {
@@ -171,9 +186,21 @@ class PixelMapLru {
     return e;
   }
 
+  /** 驱逐指定条目 */
+  evict(key: string): void {
+    const e: RefEntry | undefined = this.entries.get(key);
+    if (e !== undefined) {
+      this.entries.delete(key);
+      this.total -= e.bytes;
+      e.inCache = false;
+      if (e.borrows <= 0) {
+        releaseEntryPm(e);
+      }
+    }
+  }
+
   /**
-   * 发布新解码结果：入表并外借给发布方。同键已被占位（等信号量期间的竞态）时后来者
-   * 直接释放、改为外借既有条目；单项超 MEMORY_CAP 不入表（返回 null，实例归调用方独占）。
+   * 发布新解码结果：入表并外借给发布方。
    */
   publish(key: string, pm: image.PixelMap, byteCount: number): RefEntry | null {
     if (byteCount <= 0 || byteCount > MEMORY_CAP) {
@@ -194,13 +221,13 @@ class PixelMapLru {
     return e;
   }
 
-  /** 超 96MB 时自最旧（插入序）起淘汰；仍有外借的条目挂起待归还后释放 */
+  /** 超限时自最旧起淘汰 */
   private trim(): void {
     if (this.total <= this.cap) {
       return;
     }
     const keys: Array<string> = [];
-    this.entries.forEach((e: RefEntry, k: string) => {
+    this.entries.forEach((_e: RefEntry, k: string) => {
       keys.push(k);
     });
     for (const k of keys) {
@@ -223,15 +250,19 @@ class PixelMapLru {
 
 const memCache: PixelMapLru = new PixelMapLru(MEMORY_CAP);
 
-/** 内存缓存键（PageLoader.kt:63：`"{photoId}/{filename}@{scrambleId}@{targetWidth}"`） */
+/** 内存缓存键 */
 function memoryKey(photoId: string, filename: string, scrambleId: number, targetWidth: number): string {
   return `${photoId}/${filename}@${scrambleId}@${targetWidth}`;
 }
 
-/** 命中内存缓存：登记外借后零拷贝直返缓存内实例（评审 Step4）；未命中返回 null */
+/** 命中内存缓存：登记外借后零拷贝返回；未命中返回 null */
 async function takeFromMemory(key: string): Promise<image.PixelMap | null> {
   const e: RefEntry | null = memCache.acquire(key);
   if (e === null) {
+    return null;
+  }
+  if (!isPixelMapValid(e.pm)) {
+    memCache.evict(key);
     return null;
   }
   borrowEntry(e);

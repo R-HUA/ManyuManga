@@ -130,7 +130,7 @@ struct Index {
         authType: [userIAM.UserAuthType.FINGERPRINT],
         authTrustLevel: userIAM.AuthTrustLevel.ATL2
       };
-      const widgetParam: userIAM.WidgetParam = { title: '验证指纹以进入漫匣' };
+      const widgetParam: userIAM.WidgetParam = { title: '验证指纹解锁' };
       const auth: userIAM.UserAuthInstance = userIAM.getUserAuthInstance(authParam, widgetParam);
       const handler: LockAuthHandler = new LockAuthHandler(this);
       handler.setInstance(auth);
@@ -166,7 +166,7 @@ struct Index {
       .borderRadius(38)
       .backgroundColor('rgba(58,122,254,0.16)')
 
-      Text('漫匣已锁定')
+      Text('应用已锁定')
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor(Color.White)
@@ -210,7 +210,7 @@ struct Index {
       .borderRadius(34)
       .backgroundColor('rgba(58,122,254,0.16)')
 
-      Text('漫匣隐私保护中')
+      Text('隐私保护中')
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor('rgba(255,255,255,0.85)')

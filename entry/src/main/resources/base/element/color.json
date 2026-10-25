@@ -1,8 +1,8 @@
 {
   "color": [
     { "name": "start_window_background", "value": "#F4F6FB" },
-    { "name": "primary", "value": "#3A7AFE" },
-    { "name": "primary_soft", "value": "#1F3A7AFE" },
+    { "name": "primary", "value": "#0A59F7" },
+    { "name": "primary_soft", "value": "#140A59F7" },
     { "name": "accent", "value": "#6D28D9" },
     { "name": "accent_soft", "value": "#1A6D28D9" },
     { "name": "bg", "value": "#F4F6FB" },

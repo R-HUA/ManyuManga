@@ -797,7 +797,7 @@ export class DownloadManager {
           });
       });
 
-      // 5) 保存到应用 Download 目录（DL-07 简化：固定沙箱目录）
+      // 保存到应用 Download 目录（固定沙箱目录）
       const destDir: string = `${ctx.filesDir}/Download/${taskId}`;
       ensureDir(destDir);
       const dest: string = `${destDir}/${safeFileName(album.name)}`;

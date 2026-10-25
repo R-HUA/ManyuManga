@@ -1,18 +1,5 @@
 /**
- * util/Prefs.ets — 偏好设置封装（@ohos.data.preferences）
- *
- * 移植依据：
- *  - jinmanji-app/app/src/main/java/com/mobai/jm/util/AppPrefs.kt（SharedPreferences "mobai_prefs" 全键）
- *  - jinmanji-app/app/src/main/java/com/mobai/jm/data/JmApi.kt:56-62（JmApi 自用键 jm_*）
- *  - docs/api-spec.md §4（AppPrefs 全键与默认值）、§8（隧道/DOH 等键裁剪）
- *  - docs/conventions.md §4（所有 key 常量集中在此；当前镜像域名、主题模式、阅读器默认模式/预加载页数、
- *    亮度记忆、安全锁开关等）
- *
- * 裁剪（O 级，api-spec §8）：tunnel_mode / tor_bridges / masque_* / doh_* / sni_* / ech_enabled /
- * browser_* 一律不保留；PDF/7z/tar.gz 相关档位键不保留（鸿蒙版导出固定 CBZ）。
- *
- * 上下文获取：优先 setAppContext(context)（建议在 EntryAbility 或首页 aboutToAppear 调用
- * `jmApi.init(context)`，其内部会调用 setAppContext）。
+ * 偏好设置持久化封装（@ohos.data.preferences）
  */
 
 import preferences from '@ohos.data.preferences';

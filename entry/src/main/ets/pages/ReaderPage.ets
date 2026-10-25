@@ -193,7 +193,7 @@ class SpreadListSource implements IDataSource {
   }
 }
 
-/** 章节目录数据源（R-11 目录半模态） */
+/** 章节目录数据源 */
 class ChapterSource implements IDataSource {
   private list: Array<Chapter> = [];
   private listeners: Array<DataChangeListener> = [];
@@ -231,7 +231,7 @@ class ChapterSource implements IDataSource {
 // ───────────────────────── 子组件 ─────────────────────────
 
 /**
- * 单页渲染（R-24/R-25）：字节 → 原尺寸反混淆 → 缩放为 PixelMap 再显示（ImageDecode 整链路）。
+ * 单页渲染：字节 → 原尺寸反混淆 → 缩放为 PixelMap 再显示（ImageDecode 整链路）。
  * 三态：加载（灰底 + 转圈）/ 失败（点按重试，fetchPageBytes 内部自动换图床域名 3 次）/ 成功。
  * scrambleId/photoId/filename 变化时经 @Watch 触发重载（乱序参数后台回填场景）。
  */
@@ -304,9 +304,12 @@ struct ReaderImageItem {
         finally { releasePagePixelMap(original); }
         if (token !== this.loadToken) { await map.release(); return; }
       }
-      const info: image.ImageInfo = map.getImageInfoSync();
-      const h: number = info.size.height;
-      this.aspect = h > 0 ? info.size.width / h : 0.7;
+      const info: image.ImageInfo | undefined = map.getImageInfoSync();
+      if (info === undefined || info.size === undefined || info.size.height <= 0) {
+        releasePagePixelMap(map);
+        throw new Error('图像尺寸无效，请重试');
+      }
+      this.aspect = info.size.width / info.size.height;
       this.onMeasured(this.filename, this.aspect);
       this.pixelMap = map;
       this.loading = false;
@@ -395,19 +398,26 @@ struct ReaderImageItem {
 @Component
 struct HudButton {
   @Prop symbol: Resource = $r('sys.symbol.list_bullet');
+  @Prop label: string = '';
   @Prop active: boolean = false;
   onTap: () => void = (): void => {
   };
 
   build() {
-    Stack({ alignContent: Alignment.Center }) {
+    Column({ space: 4 }) {
       SymbolGlyph(this.symbol)
         .fontSize(20)
-        .fontColor([this.active ? Color.White : 'rgba(255,255,255,0.88)'])
+        .fontColor([this.active ? Color.White : 'rgba(255,255,255,0.92)'])
+      Text(this.label)
+        .fontSize(11)
+        .fontWeight(this.active ? FontWeight.Bold : FontWeight.Medium)
+        .fontColor(this.active ? Color.White : 'rgba(255,255,255,0.82)')
     }
     .layoutWeight(1)
-    .height(42)
-    .borderRadius(21)
+    .height(52)
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .borderRadius(16)
     .backgroundColor(this.active ? PRIMARY : 'rgba(255,255,255,0.08)')
     .border({ width: 0.5, color: this.active ? PRIMARY : 'rgba(255,255,255,0.12)' })
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
@@ -440,7 +450,7 @@ struct ChipOption {
   }
 }
 
-/** 阅读模式选项行（R-03/R-04/R-05） */
+/** 阅读模式选项行 */
 @Component
 struct ModeOptionRow {
   @Prop label: string = '';
@@ -496,7 +506,7 @@ export struct ReaderPage {
   private readerVisible: boolean = true;
   private activityBookKey: string = '';
 
-  // ── 路由参数（R-00）──
+  // ── 路由参数──
   private routeChapterId: string = '';
   private routeChapterIndex: number = -1;
   private routePage: number = -1;
@@ -527,7 +537,7 @@ export struct ReaderPage {
   @State topSafeVp: number = 38;
   @State bottomSafeVp: number = 18;
 
-  // ── 双指缩放（R-26：1x~5x + 边界回弹 + HUD 重置）──
+  // ── 双指缩放──
   @State zoomScale: number = 1;
   @State zoomOffsetX: number = 0;
   @State zoomOffsetY: number = 0;
@@ -589,11 +599,17 @@ export struct ReaderPage {
     }
   }
   private pageFailed(filename: string, error: Error): void {
-    if (this.pages[this.currentPage] === filename && !this.sliderDragging) { this.tryFallback(error); }
+    if (this.pages[this.currentPage] === filename && !this.sliderDragging) { this.tryFallback(error, false); }
   }
-  private async tryFallback(error: Error): Promise<boolean> {
+  private async tryFallback(error: Error, fatalIfNoSource: boolean = true): Promise<boolean> {
     if (this.switchingSource || this.destroyed || !this.readerVisible || this.currentAlbum === null) { return false; }
-    if (/登录|认证|401|403/.test(error.message)) { this.errorMsg = error.message; this.hudVisible = true; return false; }
+    if (/登录|认证|401|403/.test(error.message)) {
+      if (fatalIfNoSource) {
+        this.errorMsg = error.message;
+        this.hudVisible = true;
+      }
+      return false;
+    }
     const chapter: Chapter | undefined = this.chapters[this.chapterIndex];
     if (chapter === undefined) { return false; }
     const token: number = this.chapterToken;
@@ -614,15 +630,19 @@ export struct ReaderPage {
       await this.loadPrefs();
       if (token !== this.chapterToken || this.destroyed || !this.readerVisible) { return false; }
       await this.loadChapter(result.album.episodes.findIndex((c: Chapter) => c.id === result.chapter.id), result.page, true);
-      this.toastMsg(result.proportional ? '已切换书源，章节页数不同，已按阅读比例定位' : '已切换到可用书源');
+      this.toastMsg(result.proportional ? '已切换书源，已按阅读比例定位' : '已切换到可用书源');
       return true;
     } catch (e) {
-      if (token === this.chapterToken) { this.errorMsg = `${error.message}；${errorMessage(e as Error)}`; this.loadState = 'error'; this.hudVisible = true; }
+      if (token === this.chapterToken && fatalIfNoSource) {
+        this.errorMsg = `${error.message}；${errorMessage(e as Error)}`;
+        this.loadState = 'error';
+        this.hudVisible = true;
+      }
       return false;
     } finally { this.switchingSource = false; }
   }
 
-  // ───────────────────────── 初始化（R-00 / R-20）─────────────────────────
+  // ───────────────────────── 初始化─────────────────────────
 
   private initAfterParams(): void {
     this.measureSafeAreas().catch((e: Error): void => {
@@ -760,7 +780,7 @@ export struct ReaderPage {
     }
   }
 
-  /** 进入定位：路由参数优先（R-00），仅 aid 时读精确进度续读（B-03/R-20） */
+  /** 进入定位：路由参数优先，仅 aid 时读精确进度续读 */
   private beginReading(): void {
     if (this.readingStarted) {
       return;
@@ -812,7 +832,7 @@ export struct ReaderPage {
     });
   }
 
-  // ───────────────────────── 章节加载（R-23 缓存秒开→网络刷新→失败保留）─────────────────────────
+  // ───────────────────────── 章节加载─────────────────────────
 
   private async loadChapter(chapterIdx: number, targetPage: number, preserveAttempts: boolean = false): Promise<void> {
     const ch: Chapter | undefined = this.chapters[chapterIdx];
@@ -833,7 +853,7 @@ export struct ReaderPage {
     this.scrambleId = SCRAMBLE_DEFAULT;
     this.prefetched.clear();
     this.pages = [];
-    this.resetZoom(false); // 切章复位缩放（R-26）
+    this.resetZoom(false); // 切章复位缩放
     this.pagesSource.setList(this.pages);
     this.buildSpreads();
     const token: number = ++this.chapterToken;
@@ -934,7 +954,7 @@ export struct ReaderPage {
     }
   }
 
-  // ───────────────────────── 预加载（R-21 / R-22）─────────────────────────
+  // ───────────────────────── 预加载─────────────────────────
 
   /** 恒预加载当前页后 N 页（N = 预加载档位；受 autoCache 开关控制，ReaderScreen.kt:120-134） */
   private prefetchAhead(fromIndex: number): void {
@@ -1012,7 +1032,7 @@ export struct ReaderPage {
     }
   }
 
-  // ───────────────────────── 阅读进度（R-20 节流保存）─────────────────────────
+  // ───────────────────────── 阅读进度─────────────────────────
 
   private buildProgress(): ReadingProgress {
     const progress: ReadingProgress = new ReadingProgress();
@@ -1065,7 +1085,7 @@ export struct ReaderPage {
     }, delay);
   }
 
-  // ───────────────────────── 翻页 / 热区 / 模式（R-02/R-03/R-06）─────────────────────────
+  // ───────────────────────── 翻页 / 热区 / 模式─────────────────────────
 
   /** 点按三分：中央=HUD；两侧=翻页（条漫=滚动一屏）。方向按 uiux §四.3：点左=下一页、点右=上一页，日漫右翻镜像 */
   private handleCanvasClick(x: number, y: number): void {
@@ -1090,7 +1110,7 @@ export struct ReaderPage {
     }
   }
 
-  // ───────────────────────── 双指缩放（R-26：1x~5x + 边界回弹 + 重置）─────────────────────────
+  // ───────────────────────── 双指缩放─────────────────────────
 
   /**
    * 缩放/平移边界：放大后内容超出画布的部分允许平移看到，偏移量被夹在
@@ -1425,7 +1445,7 @@ export struct ReaderPage {
     return true;
   }
 
-  // ───────────────────────── 画布（R-01 / R-02）─────────────────────────
+  // ───────────────────────── 画布─────────────────────────
 
   @Builder
   private VerticalList() {
@@ -1443,7 +1463,7 @@ export struct ReaderPage {
           })
         }
       }, (filename: string) => filename)
-      // R-18 尾部：本章完 + 上一章/下一章（边界隐藏，ReaderScreen.kt:409-431）
+      // 尾部：本章完 + 上一章/下一章（边界隐藏，ReaderScreen.kt:409-431）
       ListItem() {
         Column({ space: 14 }) {
           Text('—— 本章完 ——')
@@ -1623,7 +1643,7 @@ export struct ReaderPage {
     .padding({ top: this.topSafeVp })
   }
 
-  // ───────────────────────── HUD（R-07 / R-08 / R-10）─────────────────────────
+  // ───────────────────────── HUD─────────────────────────
 
   @Builder
   private TopHud() {
@@ -1788,13 +1808,13 @@ export struct ReaderPage {
           .fontColor('#F2F2F4')
           .width(38)
         ChipOption({
-          label: '曜石黑底', selected: !this.bgPaper,
+          label: '深色纯黑', selected: !this.bgPaper,
           onTap: (): void => {
             this.toggleBackground(false);
           }
         })
         ChipOption({
-          label: '暖光纸感', selected: this.bgPaper,
+          label: '纸质护眼', selected: this.bgPaper,
           onTap: (): void => {
             this.toggleBackground(true);
           }
@@ -1953,7 +1973,7 @@ export struct ReaderPage {
 
   @Builder
   private BottomHud() {
-    Column({ space: 10 }) {
+    Column({ space: 12 }) {
       if (this.panel === 'mode') {
         this.ModePanel()
       } else if (this.panel === 'display') {
@@ -1961,7 +1981,7 @@ export struct ReaderPage {
       } else if (this.panel === 'settings') {
         this.SettingsPanel()
       }
-      // 拖动进度条时显示目标页缩略图预览小窗（240px 档，零拷贝缓存直读）
+      // 拖动进度条时显示目标页缩略图预览小窗
       if (this.sliderDragging && this.pages.length > 0) {
         Column({ space: 4 }) {
           PageThumbItem({
@@ -1982,73 +2002,81 @@ export struct ReaderPage {
         .border({ width: 0.5, color: 'rgba(255,255,255,0.16)' })
         .alignItems(HorizontalAlign.Center)
       }
-      // 进度滑动条 + 上一话/下一话（拖动实时页码、松手跳转；日漫右翻模式自动镜像进度条）
-      Row({ space: 10 }) {
-        Text('上一话')
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.chapterIndex > 0 ? Color.White : 'rgba(255,255,255,0.35)')
-          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-          .borderRadius(16)
-          .backgroundColor('rgba(255,255,255,0.10)')
-          .onClick(() => {
-            this.goChapter(-1);
-          })
-        Column({ space: 2 }) {
-          Slider({
-            value: this.sliderDragging ? this.sliderValue
-              : Math.min(this.currentPage + 1, Math.max(this.pages.length, 1)),
-            min: 1,
-            max: Math.max(this.pages.length, 1),
-            step: 1,
-            style: SliderStyle.OutSet,
-            reverse: this.mode === 'rtl'
-          })
-          .selectedColor(PRIMARY)
-          .trackColor('rgba(255,255,255,0.22)')
-          .blockColor(Color.White)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+      // 进度滑动条 + 上一话/下一话
+      if (this.pages.length > 0) {
+        Row({ space: 10 }) {
+          Button('上一话', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.chapterIndex > 0 ? Color.White : 'rgba(255,255,255,0.35)')
+            .backgroundColor('rgba(255,255,255,0.12)')
+            .height(34)
+            .onClick(() => {
+              this.goChapter(-1);
+            })
+
+          Column({ space: 2 }) {
+            Slider({
+              value: this.sliderDragging ? this.sliderValue
+                : Math.min(this.currentPage + 1, Math.max(this.pages.length, 1)),
+              min: 1,
+              max: Math.max(this.pages.length, 1),
+              step: 1,
+              style: SliderStyle.OutSet,
+              reverse: this.mode === 'rtl'
+            })
+              .selectedColor(PRIMARY)
+              .trackColor('rgba(255,255,255,0.22)')
+              .blockColor(Color.White)
+              .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+              .width('100%')
+              .height(28)
+              .onChange((value: number, mode: SliderChangeMode) => {
+                if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+                  this.sliderDragging = true;
+                  this.sliderValue = value;
+                } else {
+                  this.sliderDragging = false;
+                  if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+                    this.jumpToPage(Math.round(value) - 1);
+                  }
+                }
+              })
+            Text(`${this.sliderDragging ? Math.round(this.sliderValue) : Math.min(this.currentPage + 1, this.pages.length)} / ${this.pages.length}${this.mode === 'rtl' ? ' · 右翻' : ''}`)
+              .fontSize(11)
+              .fontColor('rgba(255,255,255,0.72)')
+              .textAlign(TextAlign.Center)
+              .width('100%')
+          }
           .layoutWeight(1)
-          .onChange((value: number, mode: SliderChangeMode) => {
-            if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
-              this.sliderDragging = true;
-              this.sliderValue = value;
-            } else {
-              this.sliderDragging = false;
-              if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-                this.jumpToPage(value - 1);
-              }
-            }
-          })
-          Text(`${this.sliderDragging ? Math.round(this.sliderValue) : Math.min(this.currentPage + 1, this.pages.length)} / ${this.pages.length}${this.mode === 'rtl' ? ' · 右翻' : ''}`)
-            .fontSize(11)
-            .fontColor('rgba(255,255,255,0.72)')
-            .textAlign(TextAlign.Center)
+
+          Button('下一话', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.chapterIndex < this.chapters.length - 1
+              ? Color.White : 'rgba(255,255,255,0.35)')
+            .backgroundColor('rgba(255,255,255,0.12)')
+            .height(34)
+            .onClick(() => {
+              this.goChapter(1);
+            })
         }
-        .layoutWeight(1)
-        Text('下一话')
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.chapterIndex < this.chapters.length - 1
-            ? Color.White : 'rgba(255,255,255,0.35)')
-          .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-          .borderRadius(16)
-          .backgroundColor('rgba(255,255,255,0.10)')
-          .onClick(() => {
-            this.goChapter(1);
-          })
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
       }
-      .width('100%')
-      // 目录 / 阅读模式 / 画面调节 / 设置（纯 SymbolGlyph 图标坞）
-      Row({ space: 8 }) {
+
+      // 核心功能入口
+      Row({ space: 10 }) {
         HudButton({
           symbol: $r('sys.symbol.list_bullet'),
+          label: '目录',
           onTap: (): void => {
             this.sheetVisible = true;
           }
         })
         HudButton({
           symbol: $r('sys.symbol.rectangle_on_rectangle'),
+          label: this.modeShortLabel(),
           active: this.panel === 'mode',
           onTap: (): void => {
             this.panel = this.panel === 'mode' ? 'none' : 'mode';
@@ -2056,6 +2084,7 @@ export struct ReaderPage {
         })
         HudButton({
           symbol: $r('sys.symbol.sun_max'),
+          label: '画面',
           active: this.panel === 'display',
           onTap: (): void => {
             this.panel = this.panel === 'display' ? 'none' : 'display';
@@ -2063,6 +2092,7 @@ export struct ReaderPage {
         })
         HudButton({
           symbol: $r('sys.symbol.gearshape'),
+          label: '设置',
           active: this.panel === 'settings',
           onTap: (): void => {
             this.panel = this.panel === 'settings' ? 'none' : 'settings';
@@ -2072,24 +2102,33 @@ export struct ReaderPage {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 14, right: 14, top: 12, bottom: this.bottomSafeVp + 12 })
+    .padding({ left: 16, right: 16, top: 14, bottom: this.bottomSafeVp + 12 })
     .backgroundColor(MASK_DARK)
     .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK }))
+    .onClick(() => {
+      // 阻断底栏点击穿透
+    })
   }
 
   @Builder
   private HudLayer() {
     Column() {
       this.TopHud()
-      Blank().layoutWeight(1)
-      if (this.pages.length > 0) {
-        this.BottomHud()
-      }
+      Column()
+        .width('100%')
+        .layoutWeight(1)
+        .onClick(() => {
+          if (this.panel !== 'none') {
+            this.panel = 'none';
+          } else {
+            this.hudVisible = false;
+          }
+        })
+      this.BottomHud()
     }
     .width('100%')
     .height('100%')
-    .hitTestBehavior(HitTestMode.Transparent)
-    .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
+    .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
   }
 
   /** HUD 隐藏时的微型常驻页码胶囊 */

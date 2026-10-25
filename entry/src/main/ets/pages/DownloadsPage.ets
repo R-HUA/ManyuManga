@@ -134,7 +134,7 @@ export struct DownloadsPage {
     this.taskDS.reload(this.tasks);
   }
 
-  /* ===== 多选（DL-08） ===== */
+  /* ===== 多选 ===== */
 
   private isSelected(id: number): boolean {
     return this.selectedIds.indexOf(id) >= 0;
@@ -246,7 +246,7 @@ export struct DownloadsPage {
     }
   }
 
-  /* ===== 已完成任务：打开 / 保存到用户所选位置（DL-10 / DL-07） ===== */
+  /* ===== 已完成任务：打开 / 保存到用户所选位置 ===== */
 
   private async onOpenFile(t: DownloadTask): Promise<void> {
     this.navPathStack.pushPathByName(ROUTE_READER, { aid: t.albumId } as MangaRouteParams);
@@ -267,7 +267,7 @@ export struct DownloadsPage {
     return fs.statSync(dstFd).size;
   }
 
-  /** DL-07 保存到用户所选位置：DocumentViewPicker 保存选择器 + 分块拷贝到所选 URI */
+  /** 保存到用户所选位置：DocumentViewPicker 保存选择器 + 分块拷贝到所选 URI */
   private async onSaveTo(t: DownloadTask): Promise<void> {
     if (t.savedTo === '') {
       this.showToast('文件路径为空，无法保存');
@@ -311,7 +311,7 @@ export struct DownloadsPage {
     }
   }
 
-  /* ===== 删除（DL-09：确认 + 可选删文件；进行中任务强制终止由 removeTask 承担） ===== */
+  /* ===== 删除 ===== */
 
   private onDelete(t: DownloadTask): void {
     this.deleteFileToo = false;
@@ -660,7 +660,7 @@ export struct DownloadsPage {
       .borderRadius(12)
   }
 
-  /** 多选态顶栏（DL-08：已选 N 项 + 全选/取消全选 + 退出） */
+  /** 多选态顶栏 */
   @Builder
   private SelectBar() {
     Row({ space: 10 }) {
@@ -737,7 +737,7 @@ export struct DownloadsPage {
       })
   }
 
-  /** 任务列表项（DL-01） */
+  /** 任务列表项 */
   @Builder
   private TaskRow(item: DownloadTask) {
     Column({ space: 10 }) {
@@ -849,7 +849,7 @@ export struct DownloadsPage {
     }))
   }
 
-  /** 删除确认弹层（DL-09：说明 + 同时删除原始文件 checkbox + 取消/删除） */
+  /** 删除确认弹层 */
   @Builder
   private DeleteOverlay() {
     Column() {

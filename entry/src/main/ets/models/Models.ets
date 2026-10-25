@@ -1,13 +1,5 @@
 /**
- * models/Models.ets — 数据模型与 JSON 解析辅助
- *
- * 移植依据：
- *  - jinmanji-app/app/src/main/java/com/mobai/jm/data/Models.kt（Comic/JmCategory/JmAlbum/Episode/JmComment）
- *  - jinmanji-app/app/src/main/java/com/mobai/jm/data/FavStore.kt:16-23（FavItem）
- *  - jinmanji-app/app/src/main/java/com/mobai/jm/data/HistoryStore.kt:17-24（HistoryItem）
- *  - docs/api-spec.md §7、docs/conventions.md §4（模型命名：Album/AlbumLite/Chapter/ChapterPage/CommentItem/SearchOptions/RankingType）
- *
- * 硬规则：全部 class + 显式类型 + 构造器默认值；禁止对象字面量直接构造 class。
+ * 数据模型与 JSON 解析辅助
  */
 
 /** 榜单排序（categories/filter 的 o 参数）：最新/总榜/月榜/周榜/日榜 */
@@ -212,9 +204,9 @@ export class HistoryItem {
 }
 
 /**
- * 精确阅读进度（conventions §4 / feature-spec B-03：鸿蒙版新增，原项目无）。
+ * 精确阅读进度（ /  鸿蒙版新增，原项目无）。
  * 基本字段严格为 { aid, chapterId, chapterIndex, page, totalPages, at }；
- * title/author/coverUrl 为展示冗余（书架续读横幅 B-02 直接可渲染，不必再查详情缓存）。
+ * title/author/coverUrl 为展示冗余（书架续读横幅 直接可渲染，不必再查详情缓存）。
  */
 export class ReadingProgress {
   aid: string;
@@ -242,7 +234,7 @@ export class ReadingProgress {
   }
 }
 
-/** 镜像域名测速结果（SET-22） */
+/** 镜像域名测速结果 */
 export class DomainSpeed {
   domain: string;
   ms: number;

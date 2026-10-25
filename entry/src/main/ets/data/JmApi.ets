@@ -980,7 +980,7 @@ export class JmApi {
     return result;
   }
 
-  // ───────────────────────── 镜像切换（SET-21/22/23，鸿蒙版新增 UI 支撑） ─────────────────────────
+  // ───────────────────────── 镜像切换 ─────────────────────────
 
   /** 当前域名候选池（健康排序后），设置页展示/选择用 */
   getDomains(): Array<string> {
@@ -1002,7 +1002,7 @@ export class JmApi {
     return this.appVersion;
   }
 
-  /** 一键测速：对全部候选域名请求 /setting（带 token 头）计时，按延迟升序返回（SET-22） */
+  /** 一键测速：对全部候选域名请求 /setting（带 token 头）计时，按延迟升序返回 */
   async testDomains(): Promise<Array<DomainSpeed>> {
     const candidates: Array<string> = this.withLastFirst(this.domains, this.lastDomain);
     const probes: Array<Promise<DomainSpeed>> = [];

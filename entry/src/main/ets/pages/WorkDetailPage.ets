@@ -1,6 +1,12 @@
 import promptAction from '@ohos.promptAction';
 import uiMaterial from '@ohos.arkui.uiMaterial';
-import { MangaRouteParams, ROUTE_READER, ROUTE_SEARCH, ROUTE_DOWNLOADS } from '../common/Route';
+import {
+  MangaRouteParams,
+  ROUTE_READER,
+  ROUTE_SEARCH,
+  ROUTE_DOWNLOADS,
+  ROUTE_PREVIEW
+} from '../common/Route';
 import {
   Album,
   Chapter,
@@ -25,7 +31,6 @@ import {
 } from '../data/SourceSwitch';
 import { matchingChapter } from '../data/Matching';
 import { SourceCover } from '../common/SourceCover';
-import { PagePreview } from '../common/PagePreview';
 import { IconCircleButton } from '../common/Components';
 import {
   BG,
@@ -62,11 +67,6 @@ export struct WorkDetailPage {
   @State ascending: boolean = true;
   @State descExpanded: boolean = false;
   @State sourceSheet: boolean = false;
-  @State previewSheet: boolean = false;
-  @State previewChapter: string = '';
-  @State previewTitle: string = '';
-  @State previewPages: Array<string> = [];
-  @State previewScramble: number = 0;
   @State comments: Array<CommentItem> = [];
   @State commentPage: number = 0;
   @State loadingComments: boolean = false;
@@ -215,17 +215,12 @@ export struct WorkDetailPage {
     }
   }
 
-  private async preview(chapter: Chapter): Promise<void> {
-    try {
-      const pages: Array<string> = await sourceApi.chapterImages(chapter.id);
-      this.previewScramble = await sourceApi.scrambleId(chapter.id);
-      this.previewChapter = chapter.id;
-      this.previewTitle = chapter.title || `第 ${chapter.sort} 章`;
-      this.previewPages = pages.slice(0, 4);
-      this.previewSheet = true;
-    } catch (e) {
-      this.error = errorMessage(e as Error);
-    }
+  private preview(chapter: Chapter): void {
+    this.stack.pushPathByName(ROUTE_PREVIEW, {
+      aid: this.aid,
+      chapterId: chapter.id,
+      query: chapter.title || `第 ${chapter.sort} 章`
+    } as MangaRouteParams);
   }
 
   private async loadComments(): Promise<void> {
@@ -339,8 +334,8 @@ export struct WorkDetailPage {
                 .backgroundColor(PRIMARY)
 
               Text(this.work !== null && this.work.albums.length > 1
-                ? `已聚合 ${this.work.albums.length} 个图源 · 点击换源`
-                : '多源聚合 · 点击比对')
+                ? `已关联 ${this.work.albums.length} 个书源 · 点击换源`
+                : '更多书源 · 点击比对')
                 .fontSize(11)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(TEXT_MAIN)
@@ -417,7 +412,7 @@ export struct WorkDetailPage {
 
         // Secondary Action Bar
         Row({ space: 10 }) {
-          Text('全本离线缓存')
+          Text('下载全本')
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
             .fontColor(TEXT_MAIN)
@@ -432,7 +427,7 @@ export struct WorkDetailPage {
               this.download();
             })
 
-          Text('切换 / 关联书源')
+          Text('换源与关联')
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
             .fontColor(TEXT_MAIN)
@@ -828,56 +823,6 @@ export struct WorkDetailPage {
     .width('100%')
   }
 
-  @Builder
-  private PreviewSheet() {
-    Column({ space: 12 }) {
-      Row() {
-        Text(`章节速览 · ${this.previewTitle}`)
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-        Text('进入阅读')
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-          .borderRadius(16)
-          .backgroundColor(PRIMARY)
-          .onClick(() => {
-            this.previewSheet = false;
-            this.stack.pushPathByName(ROUTE_READER, {
-              aid: this.aid,
-              chapterId: this.previewChapter,
-              page: 0
-            } as MangaRouteParams);
-          })
-      }
-      .width('100%')
-      .padding({ left: 20, right: 20, top: 14 })
-
-      Scroll() {
-        Column({ space: 12 }) {
-          ForEach(this.previewPages, (filename: string) => {
-            PagePreview({
-              chapter: this.previewChapter,
-              filename: filename,
-              scramble: this.previewScramble
-            })
-          }, (filename: string) => filename)
-        }
-        .padding({ left: 20, right: 20, bottom: 28 + this.bottomInset })
-        .width('100%')
-      }
-      .layoutWeight(1)
-      .width('100%')
-    }
-    .width('100%')
-    .height('100%')
-  }
-
   build() {
     NavDestination() {
       Column() {
@@ -952,12 +897,6 @@ export struct WorkDetailPage {
       .backgroundColor(BG)
       .bindSheet($$this.sourceSheet, this.SourcesSheet(), {
         height: SheetSize.MEDIUM,
-        dragBar: true,
-        backgroundColor: CARD,
-        systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
-      })
-      .bindSheet($$this.previewSheet, this.PreviewSheet(), {
-        height: '80%',
         dragBar: true,
         backgroundColor: CARD,
         systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })

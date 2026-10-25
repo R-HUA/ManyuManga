@@ -209,7 +209,7 @@ export struct SearchAllPage {
             }
           })
 
-          Text(this.matchAid === '' ? '全源并发检索' : '跨源比对与关联')
+          Text(this.matchAid === '' ? '全源搜索' : '跨源比对与关联')
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor(TEXT_MAIN)
@@ -236,7 +236,7 @@ export struct SearchAllPage {
         Row({ space: 8 }) {
           Search({
             value: this.query,
-            placeholder: this.matchAid === '' ? '输入书名、作者或标签并发检索…' : '查找同一作品的其他图源…'
+            placeholder: this.matchAid === '' ? '输入书名、作者或标签…' : '查找同一作品的其他图源…'
           })
             .layoutWeight(1)
             .height(40)

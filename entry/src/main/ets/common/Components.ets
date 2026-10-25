@@ -1,7 +1,7 @@
 /**
  * 全局复用组件
- * 
  */
+import { uiMaterial } from '@kit.ArkUI';
 import {
   PRIMARY,
   PRIMARY_SOFT,
@@ -17,34 +17,93 @@ import {
 import { sourceApi as jmApi } from '../data/SourceApi';
 
 /**
- * 圆形纯图标按钮（严禁 Emoji）
+ * 原生规范圆形图标按钮（40vp 外径 + 22fp 居中 SymbolGlyph）
  */
 @Component
 export struct IconCircleButton {
   @Prop symbol?: Resource = undefined;
   @Prop glyph: Resource = $r('sys.symbol.ellipsis_circle');
   @Prop active: boolean = false;
-  @Prop btnSize: number = 38;
-  @Prop iconSize: number = 18;
+  @Prop btnSize: number = 40;
+  @Prop iconSize: number = 22;
   @Prop iconColor: ResourceColor = TEXT_MAIN;
   @Prop bg: ResourceColor = SUB_CARD;
   onTap: () => void = () => {};
 
   build() {
-    Stack({ alignContent: Alignment.Center }) {
-      SymbolGlyph(this.symbol ?? this.glyph)
-        .fontSize(this.iconSize)
-        .fontColor([this.active ? PRIMARY : this.iconColor])
+    Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+      Row() {
+        SymbolGlyph(this.symbol ?? this.glyph)
+          .fontSize(this.iconSize)
+          .fontWeight(FontWeight.Medium)
+          .renderingStrategy(SymbolRenderingStrategy.SINGLE)
+          .fontColor([this.active ? PRIMARY : this.iconColor])
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
     }
     .width(this.btnSize)
     .height(this.btnSize)
-    .borderRadius(this.btnSize / 2)
     .backgroundColor(this.active ? PRIMARY_SOFT : this.bg)
     .border({ width: 0.5, color: this.active ? PRIMARY : DIVIDER })
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
     .onClick(() => {
       this.onTap();
     })
+  }
+}
+
+/**
+ * 官方风格设置下拉行（对齐系统设置选项规范）
+ */
+@Component
+export struct SettingSelectRow {
+  @Prop title: string = '';
+  @Prop subtitle: string = '';
+  @Prop options: Array<string> = [];
+  @Prop selectedIndex: number = 0;
+  onChanged: (index: number) => void = () => {};
+
+  private selectOptions(): Array<SelectOption> {
+    return this.options.map((item: string): SelectOption => ({ value: item }));
+  }
+
+  build() {
+    Row({ space: 12 }) {
+      Column({ space: 2 }) {
+        Text(this.title)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+        if (this.subtitle !== '') {
+          Text(this.subtitle)
+            .fontSize(11)
+            .fontColor($r('sys.color.font_secondary'))
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      Select(this.selectOptions())
+        .selected(this.selectedIndex)
+        .value(this.options[this.selectedIndex] ?? '')
+        .font({ size: 14, weight: FontWeight.Normal })
+        .fontColor($r('sys.color.font_secondary'))
+        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
+        .selectedOptionFontColor(PRIMARY)
+        .optionFont({ size: 15, weight: FontWeight.Normal })
+        .backgroundColor(Color.Transparent)
+        .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.REGULAR
+        }))
+        .onSelect((index: number) => {
+          this.onChanged(index);
+        })
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 48 })
+    .alignItems(VerticalAlign.Center)
   }
 }
 
@@ -84,8 +143,7 @@ export struct ComicCard {
   private CoverSkeleton() {
     Column()
       .width('100%')
-      .aspectRatio(COVER_ASPECT_RATIO)
-      .borderRadius(COVER_R)
+      .height('100%')
       .backgroundColor(DIVIDER)
       .opacity(this.skelAlpha)
       .onAppear(() => {
@@ -115,9 +173,8 @@ export struct ComicCard {
         } else {
           Image(this.coverSrc())
             .width('100%')
-            .aspectRatio(COVER_ASPECT_RATIO)
+            .height('100%')
             .objectFit(ImageFit.Cover)
-            .borderRadius(COVER_R)
             .backgroundColor(CHIP_BG)
             .onError(() => {
               if (this.coverRetry < 3 && this.aid !== '') {
@@ -130,6 +187,7 @@ export struct ComicCard {
         }
       }
       .width('100%')
+      .aspectRatio(COVER_ASPECT_RATIO)
       .borderRadius(COVER_R)
       .clip(true)
       .border({ width: 0.5, color: DIVIDER })
@@ -178,7 +236,7 @@ export struct ComicCard {
 }
 
 /**
- * 区块标题：左侧强调竖条 + 标题 + 右侧纯文本胶囊操作
+ * 区块标题：左侧强调竖条 + 标题 + 右侧操作
  */
 @Component
 export struct SectionTitle {
@@ -220,7 +278,7 @@ export struct SectionTitle {
 }
 
 /**
- * 空态/错误态视图：使用系统 SymbolGlyph 替代 Emoji
+ * 空态/错误态视图
  */
 @Component
 export struct EmptyView {
@@ -250,13 +308,12 @@ export struct EmptyView {
         .lineHeight(20)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       if (this.showRetry) {
-        Button(this.retryText)
-          .height(38)
+        Button(this.retryText, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+          .height(36)
           .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(Color.White)
-          .backgroundColor(PRIMARY)
-          .borderRadius(19)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(PRIMARY)
+          .backgroundColor(PRIMARY_SOFT)
           .padding({ left: 24, right: 24 })
           .onClick(() => {
             this.onRetry();
