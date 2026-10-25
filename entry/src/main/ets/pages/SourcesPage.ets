@@ -1,3 +1,4 @@
+import { SuwayomiConnectSheet } from './sources/SuwayomiConnectSheet';
 import promptAction from '@ohos.promptAction';
 import uiMaterial from '@ohos.arkui.uiMaterial';
 import { SourceEntry, SourceAuth, sourceStore, sourceKey } from '../data/Sources';
@@ -7,22 +8,7 @@ import { localSource } from '../data/LocalSource';
 import { library } from '../data/Library';
 import { Album, errorMessage } from '../models/Models';
 import { IconCircleButton } from '../common/Components';
-import {
-  BG,
-  CARD,
-  SUB_CARD,
-  PRIMARY,
-  PRIMARY_SOFT,
-  ACCENT,
-  ACCENT_SOFT,
-  DANGER,
-  DANGER_SOFT,
-  STATUS_OK,
-  TEXT_MAIN,
-  TEXT_SUB,
-  DIVIDER,
-  TAB_BAR_HEIGHT
-} from '../common/Theme';
+import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, ACCENT, ACCENT_SOFT, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -124,134 +110,18 @@ export struct SourcesPage {
   }
 
   @Builder
-  private AuthModePill(label: string, index: number) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(this.authIndex === index ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.authIndex === index ? Color.White : TEXT_MAIN)
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .padding({ top: 9, bottom: 9 })
-      .borderRadius(16)
-      .backgroundColor(this.authIndex === index ? PRIMARY : SUB_CARD)
-      .onClick(() => {
-        this.authIndex = index;
-      })
-  }
-
-  @Builder
   private ConnectionSheet() {
-    Scroll() {
-      Column({ space: 16 }) {
-        Text(this.instance === '' ? '接入 Suwayomi 聚合服务' : '书源服务连接配置')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .width('100%')
-
-        Text('支持接入自建 Suwayomi-Server，自动枚举服务端已安装的漫画扩展并纳入全源并发检索与无缝换源。')
-          .fontSize(12)
-          .fontColor(TEXT_SUB)
-          .lineHeight(18)
-          .width('100%')
-
-        Column({ space: 8 }) {
-          Text('服务别名')
-            .fontSize(12)
-            .fontColor(TEXT_SUB)
-          TextInput({ text: this.name, placeholder: '例如：家庭 NAS 书源库' })
-            .height(44)
-            .borderRadius(14)
-            .backgroundColor(SUB_CARD)
-            .fontColor(TEXT_MAIN)
-            .placeholderColor(TEXT_SUB)
-            .onChange((s: string) => {
-              this.name = s;
-            })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-
-        Column({ space: 8 }) {
-          Text('服务端地址')
-            .fontSize(12)
-            .fontColor(TEXT_SUB)
-          TextInput({ text: this.endpoint, placeholder: '如 http://192.168.1.10:4567' })
-            .height(44)
-            .borderRadius(14)
-            .backgroundColor(SUB_CARD)
-            .fontColor(TEXT_MAIN)
-            .placeholderColor(TEXT_SUB)
-            .onChange((s: string) => {
-              this.endpoint = s;
-            })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-
-        Column({ space: 8 }) {
-          Text('鉴权方式')
-            .fontSize(12)
-            .fontColor(TEXT_SUB)
-          Row({ space: 8 }) {
-            this.AuthModePill('免密直连', 0)
-            this.AuthModePill('基础认证', 1)
-            this.AuthModePill('会话登录', 2)
-          }
-          .width('100%')
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-
-        if (this.authIndex > 0) {
-          TextInput({ text: this.user, placeholder: '认证用户名' })
-            .height(44)
-            .borderRadius(14)
-            .backgroundColor(SUB_CARD)
-            .fontColor(TEXT_MAIN)
-            .placeholderColor(TEXT_SUB)
-            .onChange((s: string) => {
-              this.user = s;
-            })
-          TextInput({ text: this.password, placeholder: '认证密码' })
-            .height(44)
-            .borderRadius(14)
-            .backgroundColor(SUB_CARD)
-            .fontColor(TEXT_MAIN)
-            .placeholderColor(TEXT_SUB)
-            .type(InputType.Password)
-            .onChange((s: string) => {
-              this.password = s;
-            })
-        }
-
-        if (this.error !== '') {
-          Text(this.error)
-            .fontSize(12)
-            .fontColor(DANGER)
-            .width('100%')
-        }
-
-        Text(this.busy ? '正在连接并同步扩展列表…' : '测试连接并导入书源')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .height(46)
-          .borderRadius(23)
-          .backgroundColor(PRIMARY)
-          .opacity(this.busy ? 0.6 : 1.0)
-          .onClick(() => {
-            if (!this.busy) {
-              this.connect();
-            }
-          })
-      }
-      .width('100%')
-      .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
-    }
-    .width('100%')
+    SuwayomiConnectSheet({
+      instance: this.instance,
+      name: this.$name,
+      endpoint: this.$endpoint,
+      authIndex: this.$authIndex,
+      user: this.$user,
+      password: this.$password,
+      error: this.$error,
+      busy: this.$busy,
+      connect: (): Promise<void> => this.connect()
+    })
   }
 
   @Builder

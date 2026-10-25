@@ -1,29 +1,18 @@
+import { LibraryContinueBanner } from './library/LibraryContinueBanner';
+import { LibraryCoverCard } from './library/LibraryCoverCard';
+import { LibraryCategorySheet } from './library/LibraryCategorySheet';
+import { LibraryFilterSheet } from './library/LibraryFilterSheet';
 import promptAction from '@ohos.promptAction';
 import uiMaterial from '@ohos.arkui.uiMaterial';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, ROUTE_READER } from '../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
 import { library, LibraryWork } from '../data/Library';
 import { sourceApi } from '../data/SourceApi';
 import { localSource } from '../data/LocalSource';
 import { readProgressStore } from '../data/Stores';
 import { downloadManager, DownloadTask } from '../data/DownloadManager';
 import { Album, ReadingProgress, errorMessage } from '../models/Models';
-import { SourceCover } from '../common/SourceCover';
 import { IconCircleButton } from '../common/Components';
-import {
-  BG,
-  CARD,
-  SUB_CARD,
-  PRIMARY,
-  PRIMARY_SOFT,
-  ACCENT,
-  DANGER,
-  DANGER_SOFT,
-  TEXT_MAIN,
-  TEXT_SUB,
-  CHIP_BG,
-  DIVIDER,
-  TAB_BAR_HEIGHT
-} from '../common/Theme';
+import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { Prefs } from '../util/Prefs';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
@@ -102,10 +91,6 @@ export struct LibraryPage {
     return this.progress.find((p: ReadingProgress) => work.albums.some((a: Album) => a.id === p.aid))?.at ?? 0;
   }
 
-  private workProgress(work: LibraryWork): ReadingProgress | undefined {
-    return this.progress.find((p: ReadingProgress) => work.albums.some((a: Album) => a.id === p.aid));
-  }
-
   private toggle(work: LibraryWork): void {
     this.selected = this.selected.includes(work.id)
       ? this.selected.filter((id: string) => id !== work.id)
@@ -169,311 +154,35 @@ export struct LibraryPage {
   }
 
   @Builder
-  private SheetOptionPill(label: string, active: boolean, onTap: () => void) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(active ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(active ? Color.White : TEXT_MAIN)
-      .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-      .borderRadius(16)
-      .backgroundColor(active ? PRIMARY : SUB_CARD)
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-      .onClick(() => {
-        onTap();
-      })
-  }
-
-  @Builder
   private FilterSheet() {
-    Column({ space: 20 }) {
-      Row() {
-        Text('筛选与视图控制')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .layoutWeight(1)
-        if (this.readFilter !== 0 || this.downloadFilter !== 0 || this.sort !== 0) {
-          Text('重置')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(PRIMARY)
-            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-            .borderRadius(14)
-            .backgroundColor(PRIMARY_SOFT)
-            .onClick(() => {
-              this.readFilter = 0;
-              this.downloadFilter = 0;
-              this.sort = 0;
-            })
-        }
-      }
-      .width('100%')
-
-      Column({ space: 10 }) {
-        Text('排序方式')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(TEXT_SUB)
-        Row({ space: 10 }) {
-          this.SheetOptionPill('最近加入', this.sort === 0, () => { this.sort = 0; })
-          this.SheetOptionPill('作品名称', this.sort === 1, () => { this.sort = 1; })
-          this.SheetOptionPill('最近阅读', this.sort === 2, () => { this.sort = 2; })
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-
-      Column({ space: 10 }) {
-        Text('阅读状态')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(TEXT_SUB)
-        Row({ space: 10 }) {
-          this.SheetOptionPill('全部状态', this.readFilter === 0, () => { this.readFilter = 0; })
-          this.SheetOptionPill('已读完', this.readFilter === 1, () => { this.readFilter = 1; })
-          this.SheetOptionPill('未读完', this.readFilter === 2, () => { this.readFilter = 2; })
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-
-      Column({ space: 10 }) {
-        Text('离线状态')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(TEXT_SUB)
-        Row({ space: 10 }) {
-          this.SheetOptionPill('全部漫画', this.downloadFilter === 0, () => { this.downloadFilter = 0; })
-          this.SheetOptionPill('已离线下载', this.downloadFilter === 1, () => { this.downloadFilter = 1; })
-          this.SheetOptionPill('未离线', this.downloadFilter === 2, () => { this.downloadFilter = 2; })
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-
-      Column({ space: 8 }) {
-        Row() {
-          Text('书架网格密度')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(TEXT_SUB)
-            .layoutWeight(1)
-          Text(`每行 ${this.columns} 部`)
-            .fontSize(13)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(PRIMARY)
-        }
-        .width('100%')
-
-        Slider({ value: this.columns, min: 2, max: 6, step: 1, style: SliderStyle.OutSet })
-          .selectedColor(PRIMARY)
-          .trackColor(DIVIDER)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
-          .onChange((value: number) => {
-            const cols: number = Math.round(value);
-            this.columns = cols;
-            (async (): Promise<void> => {
-              await (await Prefs.getInstance()).putNumber('library_columns', cols);
-            })().catch((e: Error) => {
-              this.error = errorMessage(e);
-            });
-          })
-      }
-      .width('100%')
-
-      Text('完成')
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .height(44)
-        .borderRadius(22)
-        .backgroundColor(PRIMARY)
-        .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-        .onClick(() => {
-          this.sheet = false;
-        })
-    }
-    .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
-    .width('100%')
+    LibraryFilterSheet({
+      readFilter: this.$readFilter,
+      downloadFilter: this.$downloadFilter,
+      sort: this.$sort,
+      columns: this.$columns,
+      error: this.$error,
+      sheet: this.$sheet
+    })
   }
 
   @Builder
   private CategorySheet() {
-    Column({ space: 18 }) {
-      Text('设置作品分类')
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-        .width('100%')
-
-      TextInput({ text: this.categoryName, placeholder: '输入新分类名称（留空则移出分类）' })
-        .height(44)
-        .borderRadius(14)
-        .backgroundColor(SUB_CARD)
-        .fontColor(TEXT_MAIN)
-        .placeholderColor(TEXT_SUB)
-        .onChange((text: string) => {
-          this.categoryName = text;
-        })
-
-      if (this.categories.length > 0) {
-        Column({ space: 8 }) {
-          Text('已有分类')
-            .fontSize(12)
-            .fontColor(TEXT_SUB)
-          Flex({ wrap: FlexWrap.Wrap }) {
-            ForEach(this.categories, (cat: string) => {
-              Text(cat)
-                .fontSize(13)
-                .fontColor(this.categoryName === cat ? Color.White : TEXT_MAIN)
-                .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-                .margin({ right: 8, bottom: 8 })
-                .borderRadius(16)
-                .backgroundColor(this.categoryName === cat ? PRIMARY : SUB_CARD)
-                .onClick(() => {
-                  this.categoryName = cat;
-                })
-            }, (cat: string) => cat)
-          }
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-      }
-
-      Row({ space: 12 }) {
-        Text('取消')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(TEXT_MAIN)
-          .textAlign(TextAlign.Center)
-          .layoutWeight(1)
-          .height(44)
-          .borderRadius(22)
-          .backgroundColor(SUB_CARD)
-          .onClick(() => {
-            this.categorySheet = false;
-          })
-        Text('保存应用')
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .textAlign(TextAlign.Center)
-          .layoutWeight(1)
-          .height(44)
-          .borderRadius(22)
-          .backgroundColor(PRIMARY)
-          .onClick(() => {
-            this.action('category');
-          })
-      }
-      .width('100%')
-    }
-    .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
-    .width('100%')
+    LibraryCategorySheet({
+      categoryName: this.$categoryName,
+      categories: this.$categories,
+      categorySheet: this.$categorySheet,
+      action: (kind: string): Promise<void> => this.action(kind)
+    })
   }
 
   @Builder
   private Cover(work: LibraryWork) {
-    Column({ space: 6 }) {
-      Stack({ alignContent: Alignment.TopStart }) {
-        SourceCover({ url: work.cover, radius: 12 })
-
-        // Top-left & Top-right overlay row
-        Row() {
-          if (work.newChapters > 0) {
-            Text(`+${work.newChapters}`)
-              .fontColor(Color.White)
-              .fontSize(10)
-              .fontWeight(FontWeight.Bold)
-              .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-              .backgroundColor(PRIMARY)
-              .borderRadius(9)
-          } else if (work.albums.length > 1) {
-            Text(`${work.albums.length} 源`)
-              .fontColor(Color.White)
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-              .backgroundColor('rgba(14, 17, 26, 0.78)')
-              .borderRadius(9)
-          }
-          Blank()
-          if (this.selected.length > 0) {
-            Stack({ alignContent: Alignment.Center }) {
-              if (this.selected.includes(work.id)) {
-                SymbolGlyph($r('sys.symbol.checkmark'))
-                  .fontSize(13)
-                  .fontColor([Color.White])
-              }
-            }
-            .width(24)
-            .height(24)
-            .borderRadius(12)
-            .backgroundColor(this.selected.includes(work.id) ? PRIMARY : 'rgba(14, 17, 26, 0.65)')
-            .border({ width: 1.5, color: this.selected.includes(work.id) ? PRIMARY : 'rgba(255,255,255,0.65)' })
-          }
-        }
-        .width('100%')
-        .padding(7)
-
-        // Bottom reading status bar inside cover
-        if (this.workProgress(work) !== undefined) {
-          Column() {
-            Blank()
-            Row() {
-              Text(`读至 P.${this.workProgress(work)!.page + 1}`)
-                .fontSize(10)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('rgba(255,255,255,0.92)')
-                .maxLines(1)
-            }
-            .width('100%')
-            .padding({ left: 8, right: 8, top: 14, bottom: 6 })
-            .linearGradient({
-              angle: 180,
-              colors: [['rgba(0,0,0,0.0)', 0.0], ['rgba(8,10,16,0.84)', 1.0]]
-            })
-          }
-          .width('100%')
-          .height('100%')
-          .borderRadius(12)
-          .clip(true)
-          .hitTestBehavior(HitTestMode.None)
-        }
-      }
-      .width('100%')
-      .aspectRatio(0.75)
-
-      Text(work.title)
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(TEXT_MAIN)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-
-      Text(work.author || (work.read ? '已读完' : '未读'))
-        .fontSize(11)
-        .fontColor(TEXT_SUB)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-    }
-    .alignItems(HorizontalAlign.Start)
-    .width('100%')
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-    .onClick(() => {
-      if (this.selected.length > 0) {
-        this.toggle(work);
-      } else {
-        this.stack.pushPathByName(ROUTE_ALBUM, { aid: work.activeKey } as MangaRouteParams);
-      }
+    LibraryCoverCard({
+      selected: this.$selected,
+      progress: this.$progress,
+      toggle: (work: LibraryWork): void => this.toggle(work),
+      work: work
     })
-    .gesture(LongPressGesture().onAction(() => {
-      this.toggle(work);
-    }))
   }
 
   @Builder
@@ -591,10 +300,27 @@ export struct LibraryPage {
       })
   }
 
+  @Builder
+  private ContinueBanner() {
+    LibraryContinueBanner({
+      progress: this.$progress,
+      hideContinueBanner: this.$hideContinueBanner
+    })
+  }
+
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column({ space: 10 }) {
-        this.TopBar()
+        Column() {
+          this.TopBar()
+        }
+        .bindSheet($$this.sheet, this.FilterSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          backgroundColor: CARD,
+          systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
+        })
+
 
         if (this.showSearch || this.query !== '') {
           Row({ space: 8 }) {
@@ -764,59 +490,7 @@ export struct LibraryPage {
 
       // Floating L1 Continue Reading Capsule
       if (this.progress.length > 0 && this.selected.length === 0 && !this.hideContinueBanner) {
-        Row({ space: 12 }) {
-          Column() {
-            SourceCover({ url: this.progress[0].coverUrl, radius: 8 })
-          }
-          .width(36)
-          .height(48)
-
-          Column({ space: 3 }) {
-            Text(`继续阅读 · 第 ${this.progress[0].page + 1}/${Math.max(1, this.progress[0].totalPages)} 页`)
-              .fontColor(PRIMARY)
-              .fontSize(11)
-              .fontWeight(FontWeight.Bold)
-            Text(this.progress[0].title)
-              .fontColor(TEXT_MAIN)
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
-
-          Text('续读')
-            .fontSize(12)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-            .borderRadius(16)
-            .backgroundColor(PRIMARY)
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
-            .onClick(() => {
-              this.stack.pushPathByName(ROUTE_READER, { aid: this.progress[0].aid } as MangaRouteParams);
-            })
-
-          IconCircleButton({
-            glyph: $r('sys.symbol.xmark'),
-            btnSize: 28,
-            iconSize: 13,
-            onTap: (): void => {
-              this.hideContinueBanner = true;
-            }
-          })
-        }
-        .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-        .margin({
-          left: 16,
-          right: 16,
-          bottom: (this.breakpoint === 'lg' ? 16 : TAB_BAR_HEIGHT + 14) + this.bottomInset
-        })
-        .borderRadius(20)
-        .backgroundColor(CARD)
-        .border({ width: 0.5, color: DIVIDER })
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+        this.ContinueBanner()
       }
 
       // Bottom Batch Action Bar in Selection Mode
@@ -862,12 +536,6 @@ export struct LibraryPage {
     .width('100%')
     .height('100%')
     .backgroundColor(BG)
-    .bindSheet($$this.sheet, this.FilterSheet(), {
-      height: SheetSize.FIT_CONTENT,
-      dragBar: true,
-      backgroundColor: CARD,
-      systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
-    })
     .bindSheet($$this.categorySheet, this.CategorySheet(), {
       height: SheetSize.FIT_CONTENT,
       dragBar: true,

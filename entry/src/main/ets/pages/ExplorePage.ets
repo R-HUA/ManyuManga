@@ -1,40 +1,16 @@
-/**
- * 发现首页。
- *
- */
-
+import { ExploreRandomSection } from './jm/ExploreRandomSection';
+import { ExploreRankingSection } from './jm/ExploreRankingSection';
+import { SectionErrorRow } from './jm/SectionErrorRow';
+import { BasicDataSource } from '../common/DataSource';
+import { badgeForAlbum as badgeFor } from '../common/ComicBadge';
+import { PageJumpDialog } from './jm/PageJumpDialog';
 import { ROUTE_SEARCH, ROUTE_ALBUM } from '../common/Route';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } from '../entryability/EntryAbility';
-import {
-  PRIMARY,
-  CARD,
-  TEXT_MAIN,
-  TEXT_SUB,
-  CHIP_BG,
-  TAB_INACTIVE,
-  BAR_LIGHT,
-  STATUS_OK,
-  MEDAL_GOLD,
-  MEDAL_SILVER,
-  MEDAL_BRONZE,
-  TAB_BAR_HEIGHT,
-  CARD_R,
-  CHIP_R,
-  FONT_TITLE,
-  FONT_BODY,
-  FONT_CAPTION,
-  FONT_BADGE,
-  SPACE_XS,
-  SPACE_S,
-  SPACE_M,
-  SPACE_L,
-  SPACE_XL
-} from '../common/Theme';
+import { PRIMARY, TEXT_MAIN, TEXT_SUB, CHIP_BG, TAB_INACTIVE, BAR_LIGHT, STATUS_OK, TAB_BAR_HEIGHT, CHIP_R, FONT_TITLE, FONT_CAPTION, FONT_BADGE, SPACE_XS, SPACE_S, SPACE_M, SPACE_L, SPACE_XL } from '../common/Theme';
 import { ComicCard, EmptyView, SkeletonGrid } from '../common/Components';
 import { AlbumLite, RankingType, DomainSpeed, errorMessage } from '../models/Models';
 import { sourceApi as jmApi } from '../data/SourceApi';
 import { homeCacheStore, blockTagsStore, HomeCacheData } from '../data/Stores';
-
 /* ── 奖牌/状态灯语义色已切换 Theme token；
      仅银色角标上的深色数字保留本地常量（Theme 无对应文本色 token，保证对比度）── */
 /** 银色角标上的深色数字（保证对比度） */
@@ -46,75 +22,6 @@ const TOP_BAR_H: number = 52;
 const RANK_CARD_W: number = 108;
 
 /* ── 语言/全彩徽章启发式 ── */
-const KW_FULLCOLOR: Array<string> = ['全彩', 'フルカラー', 'full color', 'fullcolor', '彩漫', '彩色'];
-const KW_ZH: Array<string> = ['中文', '漢化', '汉化', '中字', '中國', '中国', 'chinese', '汉化组', '漢化組', '翻譯組', '翻译组', '烤肉'];
-const KW_JA: Array<string> = ['日本語', '日語', '日文', 'japanese', '生肉', '日版'];
-const KW_KO: Array<string> = ['한국', '한글', 'korean', '韓文', '韩文', '번역'];
-const KW_EN: Array<string> = ['english', '英文', '英譯', '英译', 'translated'];
-
-function containsAny(hay: string, words: Array<string>): boolean {
-  for (const w of words) {
-    if (hay.indexOf(w) >= 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** 字符脚本判定  */
-function scriptBadge(text: string): string {
-  let hangul: number = 0;
-  let kana: number = 0;
-  let han: number = 0;
-  let latin: number = 0;
-  for (let i: number = 0; i < text.length; i++) {
-    const c: number = text.charCodeAt(i);
-    if ((c >= 0xAC00 && c <= 0xD7AF) || (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F)) {
-      hangul++;
-    } else if ((c >= 0x3040 && c <= 0x309F) || (c >= 0x30A0 && c <= 0x30FF) || (c >= 0x31F0 && c <= 0x31FF)) {
-      kana++;
-    } else if ((c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)) {
-      han++;
-    } else if ((c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A)) {
-      latin++;
-    }
-  }
-  if (hangul > 0) {
-    return '韩漫';
-  }
-  if (kana > 0) {
-    return '日漫';
-  }
-  if (han > 0) {
-    return '中字';
-  }
-  if (latin >= 4) {
-    return 'EN';
-  }
-  return '';
-}
-
-/** 封面右上角文本徽章：全彩优先，其次语言关键词，最后脚本启发式 */
-function badgeFor(item: AlbumLite): string {
-  const hay: string = `${item.title} ${item.author} ${item.category} ${item.categorySub}`.toLowerCase();
-  if (containsAny(hay, KW_FULLCOLOR)) {
-    return '全彩';
-  }
-  if (containsAny(hay, KW_ZH)) {
-    return '中字';
-  }
-  if (containsAny(hay, KW_JA)) {
-    return '日漫';
-  }
-  if (containsAny(hay, KW_KO)) {
-    return '韩漫';
-  }
-  if (containsAny(hay, KW_EN)) {
-    return 'EN';
-  }
-  return scriptBadge(`${item.title}${item.author}`);
-}
-
 /** Fisher–Yates 洗牌  */
 function shuffle(list: Array<AlbumLite>): Array<AlbumLite> {
   const out: Array<AlbumLite> = list.slice();
@@ -155,29 +62,7 @@ class AlbumRow {
 }
 
 /** LazyForEach 数据源：最新更新按断点列数分行的行集合 */
-class LatestRowSource implements IDataSource {
-  private rows: Array<AlbumRow> = [];
-  private listeners: Array<DataChangeListener> = [];
-
-  totalCount(): number {
-    return this.rows.length;
-  }
-
-  getData(index: number): AlbumRow {
-    return this.rows[index];
-  }
-
-  registerDataChangeListener(listener: DataChangeListener): void {
-    if (this.listeners.indexOf(listener) < 0) {
-      this.listeners.push(listener);
-    }
-  }
-
-  unregisterDataChangeListener(listener: DataChangeListener): void {
-    this.listeners = this.listeners.filter((l: DataChangeListener) => l !== listener);
-  }
-
-  /** 按传入列数分行重载 */
+class LatestRowSource extends BasicDataSource<AlbumRow> {
   reload(items: Array<AlbumLite>, columns: number): void {
     const newRows: Array<AlbumRow> = [];
     for (let i: number = 0; i < items.length; i += columns) {
@@ -186,122 +71,7 @@ class LatestRowSource implements IDataSource {
       row.cards = items.slice(i, i + columns);
       newRows.push(row);
     }
-    this.rows = newRows;
-    for (const l of this.listeners) {
-      l.onDataReloaded();
-    }
-  }
-}
-
-/** 随机推荐卡片：换一批后按索引交错淡入  */
-@Component
-struct RandomCardCell {
-  @Prop aid: string = '';
-  @Prop coverUrl: string = '';
-  @Prop title: string = '';
-  @Prop author: string = '';
-  @Prop badge: string = '';
-  @Prop delayMs: number = 0;
-  onOpen: (aid: string) => void = () => {};
-  @State appearOpacity: number = 0;
-
-  build() {
-    Column() {
-      ComicCard({
-        aid: this.aid,
-        coverUrl: this.coverUrl,
-        title: this.title,
-        author: this.author,
-        badge: this.badge,
-        onCardClick: (): void => {
-          this.onOpen(this.aid);
-        }
-      })
-    }
-    .width('100%')
-    .opacity(this.appearOpacity)
-    .onAppear(() => {
-      this.getUIContext().animateTo({ duration: 300, delay: this.delayMs, curve: Curve.EaseOut }, () => {
-        this.appearOpacity = 1;
-      });
-    })
-  }
-}
-
-/**
- * 跳页弹窗
- * current 用闭包延迟读取，避免 CustomDialog builder 参数一次性快照旧页码。
- */
-@CustomDialog
-struct PageJumpDialog {
-  controller?: CustomDialogController;
-  @State input: string = '';
-  /** 打开时读取当前页码（页面侧闭包） */
-  current: () => number = () => 1;
-  onConfirm: (page: number) => void = () => {};
-
-  /** 解析输入页码；非法返回 0 交由页面 Toast */
-  private confirm(): void {
-    const n: number = Number(this.input.trim());
-    const page: number = Number.isNaN(n) ? 0 : Math.floor(n);
-    if (page < 1) {
-      this.onConfirm(0);
-      return;
-    }
-    this.onConfirm(page);
-    if (this.controller) {
-      this.controller.close();
-    }
-  }
-
-  build() {
-    Column({ space: 12 }) {
-      Text('跳转到指定页')
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-      Text(`当前第 ${this.current()} 页`)
-        .fontSize(11)
-        .fontColor(TEXT_SUB)
-        .width('100%')
-      TextInput({ text: this.input, placeholder: '输入页码，如 12' })
-        .type(InputType.Number)
-        .fontSize(FONT_BODY)
-        .fontColor(TEXT_MAIN)
-        .onChange((v: string) => {
-          this.input = v;
-        })
-      Row({ space: 12 }) {
-        Text('取消')
-          .fontSize(FONT_BODY)
-          .fontColor(TEXT_SUB)
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-          .padding({ top: 9, bottom: 9 })
-          .backgroundColor(CHIP_BG)
-          .borderRadius(CHIP_R)
-          .onClick(() => {
-            if (this.controller) {
-              this.controller.close();
-            }
-          })
-        Text('确定')
-          .fontSize(FONT_BODY)
-          .fontColor(Color.White)
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-          .padding({ top: 9, bottom: 9 })
-          .backgroundColor(PRIMARY)
-          .borderRadius(CHIP_R)
-          .onClick(() => {
-            this.confirm();
-          })
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding(20)
-    .backgroundColor(CARD)
+    this.setList(newRows);
   }
 }
 
@@ -866,17 +636,8 @@ export struct ExplorePage {
 
   /* ───────────────────────── 布局辅助 ───────────────────────── */
 
-  /** 响应式列数（sm 3 / md 4 / lg 5） */
-  private gridColumns(): number {
+    private gridColumns(): number {
     return this.bp === 'sm' ? 3 : (this.bp === 'md' ? 4 : 5);
-  }
-
-  private chunkRows(items: Array<AlbumLite>, size: number): Array<Array<AlbumLite>> {
-    const rows: Array<Array<AlbumLite>> = [];
-    for (let i: number = 0; i < items.length; i += size) {
-      rows.push(items.slice(i, i + size));
-    }
-    return rows;
   }
 
   private fillerIndexes(count: number): Array<number> {
@@ -959,248 +720,33 @@ export struct ExplorePage {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
   }
 
-  /** 榜单分段 */
+            /** 热门榜单区 */
   @Builder
-  RankSegments() {
-    Row({ space: 2 }) {
-      ForEach(this.rankTabs, (tab: RankTab) => {
-        Text(tab.label)
-          .fontSize(13)
-          .fontWeight(this.currentRank === tab.order ? FontWeight.Medium : FontWeight.Normal)
-          .fontColor(this.currentRank === tab.order ? TEXT_MAIN : TEXT_SUB)
-          .padding({ left: 14, right: 14, top: 6, bottom: 6 })
-          .backgroundColor(this.currentRank === tab.order ? CARD : Color.Transparent)
-          .borderRadius(CHIP_R - 3)
-          .onClick(() => {
-            this.onRankTabTap(tab.order);
-          })
-      }, (tab: RankTab) => 'seg_' + tab.order)
-    }
-    .padding(3)
-    .backgroundColor(CHIP_BG)
-    .borderRadius(CHIP_R)
-    .margin({ left: SPACE_L })
+  private RankingSection() {
+    ExploreRankingSection({
+      rankLoading: this.$rankLoading,
+      rankItems: this.$rankItems,
+      rankError: this.$rankError,
+      retryRanking: (): void => this.retryRanking(),
+      rankTabs: this.rankTabs,
+      currentRank: this.$currentRank,
+      onRankTabTap: (order: RankingType): void => this.onRankTabTap(order),
+      openAlbum: (aid: string): void => this.openAlbum(aid),
+    })
   }
 
-  /** 前 3 名数字角标 */
+      /** 随机推荐区 */
   @Builder
-  MedalBadge(rank: number) {
-    Text(rank.toString())
-      .fontSize(13)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(rank === 2 ? MEDAL_SILVER_TEXT : Color.White)
-      .textAlign(TextAlign.Center)
-      .width(22)
-      .height(22)
-      .borderRadius(11)
-      .backgroundColor(rank === 1 ? MEDAL_GOLD : (rank === 2 ? MEDAL_SILVER : MEDAL_BRONZE))
-      .margin(6)
-  }
-
-  /** 榜单横滑卡片流 */
-  @Builder
-  RankCardList() {
-    List({ space: SPACE_M }) {
-      ForEach(this.rankItems, (it: AlbumLite, index: number) => {
-        ListItem() {
-          Stack({ alignContent: Alignment.TopStart }) {
-            ComicCard({
-              aid: it.id,
-              coverUrl: it.coverUrl,
-              title: it.title,
-              author: it.author,
-              badge: badgeFor(it),
-              onCardClick: (): void => {
-                this.openAlbum(it.id);
-              }
-            })
-            if (index < 3) {
-              this.MedalBadge(index + 1)
-            }
-          }
-          .width(RANK_CARD_W)
-        }
-      }, (it: AlbumLite) => 'rank_' + it.id)
-    }
-    .listDirection(Axis.Horizontal)
-    .scrollBar(BarState.Off)
-    .width('100%')
-    .padding({ left: SPACE_L, right: SPACE_L })
-    .cachedCount(3)
-  }
-
-  /** 榜单骨架 */
-  @Builder
-  RankSkeleton() {
-    List({ space: SPACE_M }) {
-      ForEach(this.fillerIndexes(4), (i: number) => {
-        ListItem() {
-          Column() {
-            ComicCard({ loading: true })
-          }
-          .width(RANK_CARD_W)
-        }
-      }, (i: number) => 'rksk_' + i.toString())
-    }
-    .listDirection(Axis.Horizontal)
-    .scrollBar(BarState.Off)
-    .width('100%')
-    .padding({ left: SPACE_L, right: SPACE_L })
-    .cachedCount(2)
-  }
-
-  /** 区块级错误行：错误信息 + 重试 */
-  @Builder
-  SectionErrorRow(message: string, onRetry: () => void) {
-    Row({ space: SPACE_M }) {
-      Text(message)
-        .fontSize(FONT_CAPTION)
-        .fontColor(TEXT_SUB)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-      Text('重试')
-        .fontSize(FONT_CAPTION)
-        .fontColor(PRIMARY)
-        .padding({ left: SPACE_M, right: SPACE_M, top: SPACE_S, bottom: SPACE_S })
-        .onClick(() => {
-          onRetry();
-        })
-    }
-    .width('100%')
-    .padding({ left: SPACE_L, right: SPACE_M, top: SPACE_S, bottom: SPACE_S })
-    .backgroundColor(CARD)
-    .borderRadius(CARD_R)
-    .margin({ left: SPACE_L, right: SPACE_L })
-  }
-
-  /** 热门榜单区 */
-  @Builder
-  RankingSection() {
-    Column({ space: SPACE_M }) {
-      Text('热门榜单')
-        .fontSize(FONT_TITLE)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-        .padding({ left: SPACE_L })
-      this.RankSegments()
-      if (this.rankLoading && this.rankItems.length === 0) {
-        this.RankSkeleton()
-      } else if (this.rankError !== '' && this.rankItems.length === 0) {
-        this.SectionErrorRow(this.rankError, (): void => {
-          this.retryRanking();
-        })
-      } else if (this.rankItems.length === 0) {
-        Text('榜单暂无内容')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
-          .padding({ left: SPACE_L })
-      } else {
-        this.RankCardList()
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  /** 随机推荐骨架 */
-  @Builder
-  RandomSkeleton() {
-    Column({ space: SPACE_M }) {
-      ForEach(this.fillerIndexes(2), (r: number) => {
-        Row({ space: SPACE_L }) {
-          ForEach(this.fillerIndexes(this.gridColumns()), (c: number) => {
-            Column() {
-              ComicCard({ loading: true })
-            }
-            .layoutWeight(1)
-          }, (c: number) => `rnsk_${r}_${c}`)
-        }
-        .width('100%')
-        .padding({ left: SPACE_L, right: SPACE_L })
-      }, (r: number) => 'rnsk_row_' + r.toString())
-    }
-    .width('100%')
-  }
-
-  /** 随机推荐网格，应有上限，不无限刷 */
-  @Builder
-  RandomGrid() {
-    Column({ space: SPACE_M }) {
-      ForEach(this.chunkRows(this.randomItems, this.gridColumns()), (row: Array<AlbumLite>, rIdx: number) => {
-        Row({ space: SPACE_L }) {
-          ForEach(row, (it: AlbumLite, cIdx: number) => {
-            Column() {
-              RandomCardCell({
-                aid: it.id,
-                coverUrl: it.coverUrl,
-                title: it.title,
-                author: it.author,
-                badge: badgeFor(it),
-                delayMs: (rIdx * this.gridColumns() + cIdx) * 70,
-                onOpen: (aid: string): void => {
-                  this.openAlbum(aid);
-                }
-              })
-            }
-            .layoutWeight(1)
-          }, (it: AlbumLite) => `rand_${this.randomSeed}_${it.id}`)
-          ForEach(this.fillerIndexes(this.gridColumns() - row.length), (k: number) => {
-            Column()
-              .layoutWeight(1)
-          }, (k: number) => `rf_${this.randomSeed}_${k}`)
-        }
-        .width('100%')
-        .padding({ left: SPACE_L, right: SPACE_L })
-      }, (row: Array<AlbumLite>) => `randrow_${this.randomSeed}_${row[0].id}`)
-    }
-    .width('100%')
-  }
-
-  /** 随机推荐区 */
-  @Builder
-  RandomSection() {
-    Column({ space: SPACE_M }) {
-      Row() {
-        Text('随机推荐')
-          .fontSize(FONT_TITLE)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .layoutWeight(1)
-        Row({ space: SPACE_S }) {
-          Text(this.randomLoading ? '刷新中…' : '换一批')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(PRIMARY)
-        }
-        .padding({ left: 12, right: 12, top: 5, bottom: 5 })
-        .backgroundColor(CHIP_BG)
-        .borderRadius(CHIP_R)
-        .alignItems(VerticalAlign.Center)
-        .onClick(() => {
-          this.onShuffleTap();
-        })
-      }
-      .width('100%')
-      .padding({ left: SPACE_L, right: SPACE_M })
-
-      if (this.randomLoading && this.randomItems.length === 0) {
-        this.RandomSkeleton()
-      } else if (this.randomError !== '' && this.randomItems.length === 0) {
-        this.SectionErrorRow(this.randomError, (): void => {
-          this.retryRandom();
-        })
-      } else if (this.randomItems.length === 0) {
-        Text('点击「换一批」看看有什么新发现')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
-          .padding({ left: SPACE_L })
-      } else {
-        this.RandomGrid()
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
+  private RandomSection() {
+    ExploreRandomSection({
+      randomLoading: this.$randomLoading,
+      onShuffleTap: (): void => this.onShuffleTap(),
+      randomItems: this.$randomItems,
+      randomError: this.$randomError,
+      retryRandom: (): void => this.retryRandom(),
+      openAlbum: (aid: string): void => this.openAlbum(aid),
+      randomSeed: this.$randomSeed,
+    })
   }
 
   /** 最新更新区头：标题 + 页码胶囊+ 首屏骨架/错误/空态 */
@@ -1230,7 +776,7 @@ export struct ExplorePage {
         SkeletonGrid({ columns: this.gridColumns(), rows: 3 })
           .padding({ left: SPACE_L, right: SPACE_L })
       } else if (this.latestError !== '' && this.latestItems.length === 0) {
-        this.SectionErrorRow(this.latestError, (): void => {
+        SectionErrorRow(this.latestError, (): void => {
           this.retryLatestInitial();
         })
       } else if (this.latestItems.length === 0) {

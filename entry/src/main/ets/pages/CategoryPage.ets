@@ -1,15 +1,20 @@
-/**
- * 分类页面
- */
-import { uiMaterial } from '@kit.ArkUI';
-import { BAR_LIGHT, CARD, CHIP_BG, CHIP_R, COVER_ASPECT_RATIO, COVER_R, FONT_BADGE, FONT_BODY,
-  FONT_CAPTION, FONT_TITLE, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TAB_BAR_HEIGHT, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
-import { EmptyView, SkeletonGrid, TagChip } from '../common/Components';
-import { ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
+import { CategoryFilterBar } from './jm/CategoryFilterBar';
+import { BasicDataSource } from '../common/DataSource';
+import { formatCount, langBadgeFor } from '../common/ComicBadge';
+import { AlbumCard } from './jm/AlbumCard';
+import { AddCatDialog } from './jm/AddCatDialog';
+import { FONT_CAPTION, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TAB_BAR_HEIGHT, TEXT_SUB } from '../common/Theme';
+import { EmptyView, SkeletonGrid } from '../common/Components';
+import { ROUTE_ALBUM } from '../common/Route';
 import { AlbumLite, CategoryItem, errorMessage } from '../models/Models';
 import { sourceApi as jmApi } from '../data/SourceApi';
 import { blockTagsStore, customCatStore } from '../data/Stores';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } from '../entryability/EntryAbility';
+export { formatCount, langBadgeFor } from '../common/ComicBadge';
+export { AlbumCard } from './jm/AlbumCard';
+/**
+ * 分类页面
+ */
 
 /* ===== 路由参数（ 契约表；ArkTS 严格模式禁对象字面量传参，用具名 class） ===== */
 
@@ -43,328 +48,15 @@ const ORDER_OPTIONS: Array<ChipOption> = [
   new ChipOption('mr', '最新')
 ];
 
-/** 数字本地化：10591 → 1.1万（；小于 1 万原样返回） */
-export function formatCount(raw: string): string {
-  if (raw === '') {
-    return raw;
-  }
-  const n: number = Number(raw);
-  if (Number.isNaN(n)) {
-    return raw;
-  }
-  if (n >= 10000) {
-    const w: number = Math.round(n / 1000) / 10;
-    return `${w}万`;
-  }
-  return raw;
-}
-
-const ZH_WORDS: Array<string> = ['中文', '漢化', '汉化', '中字', '中国', 'chinese', '翻譯', '翻译'];
-const JA_WORDS: Array<string> = ['日本語', '日語', '日文', 'japanese', '生肉', '日版'];
-const KO_WORDS: Array<string> = ['한국', '한글', '韓文', '韩文', 'korean'];
-const FC_WORDS: Array<string> = ['全彩', 'フルカラー', 'fullcolor', 'full color', '彩漫', '彩色'];
-
-function containsAny(hay: string, words: Array<string>): boolean {
-  for (const w of words) {
-    if (hay.indexOf(w) >= 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * 语言/全彩徽章启发式。
- */
-export function langBadgeFor(item: AlbumLite): string {
-  const hay: string = `${item.title} ${item.author} ${item.category} ${item.categorySub}`.toLowerCase();
-  if (containsAny(hay, ZH_WORDS)) {
-    return '中字';
-  }
-  if (containsAny(hay, JA_WORDS)) {
-    return '日漫';
-  }
-  if (containsAny(hay, KO_WORDS)) {
-    return '韩漫';
-  }
-  let hangul: number = 0;
-  let kana: number = 0;
-  let han: number = 0;
-  for (let i: number = 0; i < item.title.length; i++) {
-    const c: number = item.title.charCodeAt(i);
-    if ((c >= 0xAC00 && c <= 0xD7AF) || (c >= 0x3130 && c <= 0x318F)) {
-      hangul++;
-    } else if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x31F0 && c <= 0x31FF)) {
-      kana++;
-    } else if ((c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)) {
-      han++;
-    }
-  }
-  if (hangul > 0) {
-    return '韩漫';
-  }
-  if (kana > 0) {
-    return '日漫';
-  }
-  if (containsAny(hay, FC_WORDS)) {
-    return '全彩';
-  }
-  if (han > 0) {
-    return '中字';
-  }
-  return '';
-}
-
-/** 码点计数（≤16 字符校验用，等价 Kotlin codePointCount） */
-function codePointCount(s: string): number {
-  let n: number = 0;
-  for (let i: number = 0; i < s.length; i++) {
-    const c: number = s.charCodeAt(i);
-    if (c >= 0xD800 && c <= 0xDBFF && i + 1 < s.length) {
-      const c2: number = s.charCodeAt(i + 1);
-      if (c2 >= 0xDC00 && c <= 0xDFFF) {
-        i++;
-      }
-    }
-    n++;
-  }
-  return n;
-}
-
 // ───────────────────────── WaterFlow 数据源（LazyForEach + IDataSource） ─────────────────────────
 
 /** 专辑列表数据源：供 WaterFlow LazyForEach 懒加载（） */
-export class AlbumSource implements IDataSource {
-  private items: Array<AlbumLite> = [];
-  private listeners: Array<DataChangeListener> = [];
-
-  totalCount(): number {
-    return this.items.length;
-  }
-
-  getData(index: number): AlbumLite {
-    return this.items[index];
-  }
-
-  registerDataChangeListener(listener: DataChangeListener): void {
-    if (this.listeners.indexOf(listener) < 0) {
-      this.listeners.push(listener);
-    }
-  }
-
-  unregisterDataChangeListener(listener: DataChangeListener): void {
-    this.listeners = this.listeners.filter((l: DataChangeListener) => l !== listener);
-  }
-
-  /** 整体替换（筛选/排序变更、搜索翻页） */
-  setItems(list: Array<AlbumLite>): void {
-    this.items = list.slice();
-    for (const l of this.listeners) {
-      l.onDataReloaded();
-    }
-  }
-
-  /** 追加一页（分类上拉加载更多） */
-  appendItems(list: Array<AlbumLite>): void {
-    if (list.length === 0) {
-      return;
-    }
-    const at: number = this.items.length;
-    this.items = this.items.concat(list);
-    for (const l of this.listeners) {
-      for (let i: number = at; i < this.items.length; i++) {
-        l.onDataAdd(i);
-      }
-    }
-  }
-
-  count(): number {
-    return this.items.length;
-  }
+export class AlbumSource extends BasicDataSource<AlbumLite> {
+  setItems(items: Array<AlbumLite>): void { this.setList(items); }
+  count(): number { return this.totalCount(); }
 }
 
 // ───────────────────────── 瀑布流封面卡（3:4 封面 + 徽章 + 2 个高频标签胶囊） ─────────────────────────
-
-/**
- * 卡片底部 2 个标签胶囊取真实列表字段 category / category_sub（数据源 JmApi.parseComic，
- * 不依赖已裁剪的标签级 enrich）；两者皆空时降级为作者行。
- */
-@Component
-export struct AlbumCard {
-  @Prop item: AlbumLite = new AlbumLite();
-  onCardClick: () => void = () => {};
-  /** 封面图床轮换序号（评审 Step3：失败换备用图床，最多 3 次） */
-  @State coverRetry: number = 0;
-
-  /** retry>0 走 jmApi.albumThumbUrl(id, retry) 轮换域名；否则原 url（空 url 降级小图直链） */
-  private coverSrc(): string {
-    if (this.coverRetry > 0 && this.item.id !== '') {
-      return jmApi.albumThumbUrl(this.item.id, this.coverRetry);
-    }
-    return this.item.coverUrl === '' ? jmApi.albumThumbUrl(this.item.id) : this.item.coverUrl;
-  }
-
-  private badge(): string {
-    return langBadgeFor(this.item);
-  }
-
-  @Builder
-  private Capsule(label: string) {
-    Text(label)
-      .fontSize(FONT_BADGE)
-      .fontColor(TEXT_SUB)
-      .maxLines(1)
-      .padding({ left: 7, right: 7, top: 2, bottom: 2 })
-      .backgroundColor(CHIP_BG)
-      .borderRadius(CHIP_R)
-  }
-
-  build() {
-    Column({ space: 6 }) {
-      Stack({ alignContent: Alignment.TopEnd }) {
-        Image(this.coverSrc())
-          .width('100%')
-          .height('100%')
-          .objectFit(ImageFit.Cover)
-          .backgroundColor(CHIP_BG)
-          .onError(() => {
-            if (this.coverRetry < 3 && this.item.id !== '') {
-              this.coverRetry += 1;
-            }
-          })
-        if (this.badge() !== '') {
-          Text(this.badge())
-            .fontSize(FONT_BADGE)
-            .fontColor(Color.White)
-            .maxLines(1)
-            .padding({ left: 6, right: 6, top: 3, bottom: 3 })
-            .backgroundColor('rgba(14,17,26,0.78)')
-            .borderRadius(9)
-            .margin(6)
-        }
-      }
-      .width('100%')
-      .aspectRatio(COVER_ASPECT_RATIO)
-      .borderRadius(COVER_R)
-      .clip(true)
-      .border({ width: 0.5, color: 'rgba(255,255,255,0.15)' })
-
-      Text(this.item.title)
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(TEXT_MAIN)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-
-      if (this.item.category !== '' || this.item.categorySub !== '') {
-        Row({ space: 4 }) {
-          if (this.item.category !== '') {
-            this.Capsule(this.item.category)
-          }
-          if (this.item.categorySub !== '') {
-            this.Capsule(this.item.categorySub)
-          }
-        }
-        .width('100%')
-      } else if (this.item.author !== '') {
-        Text(this.item.author)
-          .fontSize(11)
-          .fontColor(TEXT_SUB)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .onClick(() => {
-      this.onCardClick();
-    })
-  }
-}
-
-// ───────────────────────── 自定义分类添加弹窗 ─────────────────────────
-
-@CustomDialog
-struct AddCatDialog {
-  controller?: CustomDialogController;
-  @State input: string = '';
-  @State err: string = '';
-  onAdded: () => void = () => {};
-
-  private cpCount(): number {
-    return codePointCount(this.input.trim());
-  }
-
-  private async doAdd(): Promise<void> {
-    const err: string = await customCatStore.add(this.input);
-    if (err === '') {
-      this.onAdded();
-      if (this.controller) {
-        this.controller.close();
-      }
-    } else {
-      this.err = err;
-    }
-  }
-
-  build() {
-    Column({ space: 12 }) {
-      Text('添加自定义分类 / tag')
-        .fontSize(16)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-      TextInput({ text: this.input, placeholder: '名称 / 关键词' })
-        .fontSize(FONT_BODY)
-        .fontColor(TEXT_MAIN)
-        .onChange((v: string) => {
-          this.input = v;
-          this.err = '';
-        })
-      Text(`${this.cpCount()} / 16 字符`)
-        .fontSize(11)
-        .fontColor(TEXT_SUB)
-        .width('100%')
-      if (this.err !== '') {
-        Text(this.err)
-          .fontSize(11)
-          .fontColor(PRIMARY)
-          .width('100%')
-      }
-      Row({ space: 12 }) {
-        Text('取消')
-          .fontSize(FONT_BODY)
-          .fontColor(TEXT_SUB)
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-          .padding({ top: 9, bottom: 9 })
-          .backgroundColor(CHIP_BG)
-          .borderRadius(CHIP_R)
-          .onClick(() => {
-            if (this.controller) {
-              this.controller.close();
-            }
-          })
-        Text('添加')
-          .fontSize(FONT_BODY)
-          .fontColor(Color.White)
-          .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-          .padding({ top: 9, bottom: 9 })
-          .backgroundColor(PRIMARY)
-          .borderRadius(CHIP_R)
-          .onClick(() => {
-            this.doAdd();
-          })
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding(20)
-    .backgroundColor(CARD)
-  }
-}
 
 // ───────────────────────── 分类页 ─────────────────────────
 
@@ -390,12 +82,6 @@ export struct CategoryPage {
   @State order: string = 'mr';
   @State expanded: boolean = true;
   @State catDrawerVisible: boolean = false;
-
-  private orderIndex(): number {
-    const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
-    const idx: number = codes.indexOf(this.order);
-    return idx >= 0 ? idx : 0;
-  }
 
   // 分类列表
   @State categories: Array<CategoryItem> = [];
@@ -656,17 +342,7 @@ export struct CategoryPage {
     this.reload();
   }
 
-  /** 当前排序的中文名（收起面板时的摘要胶囊用） */
-  private orderLabel(): string {
-    for (const opt of ORDER_OPTIONS) {
-      if (opt.code === this.order) {
-        return opt.label;
-      }
-    }
-    return this.order;
-  }
-
-  /** 响应式网格列数（评审 Step4：sm 3 / md 4 / lg 5） */
+    /** 响应式网格列数（评审 Step4：sm 3 / md 4 / lg 5） */
   private gridColumns(): number {
     return this.bp === 'sm' ? 3 : (this.bp === 'md' ? 4 : 5);
   }
@@ -678,13 +354,6 @@ export struct CategoryPage {
       parts.push('1fr');
     }
     return parts.join(' ');
-  }
-
-  private chipLabel(cat: CategoryItem): string {
-    if (cat.total !== '' && cat.total !== '0') {
-      return `${cat.name} ${formatCount(cat.total)}`;
-    }
-    return cat.name;
   }
 
   private openAlbum(item: AlbumLite): void {
@@ -717,196 +386,24 @@ export struct CategoryPage {
 
   // ── UI ──
 
-  @Builder
-  private CategoryDrawer() {
-    Column({ space: 14 }) {
-      Row() {
-        Text('全部分类与题材')
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .layoutWeight(1)
-
-        Button('添加自定义', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(PRIMARY)
-          .backgroundColor(CHIP_BG)
-          .height(30)
-          .onClick(() => {
-            this.catDrawerVisible = false;
-            this.addDialogCtrl.open();
-          })
-      }
-      .width('100%')
-      .padding({ left: 20, right: 20, top: 16 })
-
-      Scroll() {
-        Column({ space: 12 }) {
-          Flex({ wrap: FlexWrap.Wrap }) {
-            TagChip({
-              label: '全部题材',
-              selected: this.selectedCatId === '',
-              onChipClick: (): void => {
-                this.catDrawerVisible = false;
-                this.selectAll();
-              }
-            })
-              .margin({ right: SPACE_S, bottom: SPACE_S })
-
-            ForEach(this.categories, (cat: CategoryItem) => {
-              TagChip({
-                label: this.chipLabel(cat),
-                selected: this.selectedCatId === cat.id,
-                onChipClick: (): void => {
-                  this.catDrawerVisible = false;
-                  this.selectCategory(cat);
-                }
-              })
-                .margin({ right: SPACE_S, bottom: SPACE_S })
-            }, (cat: CategoryItem) => 'drawer_cat_' + cat.id)
-
-            ForEach(this.customCats, (term: string) => {
-              Row({ space: 6 }) {
-                Text(term)
-                  .fontSize(FONT_CAPTION)
-                  .fontColor(TEXT_SUB)
-                  .maxLines(1)
-                SymbolGlyph($r('sys.symbol.xmark'))
-                  .fontSize(11)
-                  .fontColor([TEXT_SUB])
-                  .onClick(() => {
-                    this.confirmDeleteCustom(term);
-                  })
-              }
-              .padding({ left: 10, right: 8, top: 5, bottom: 5 })
-              .backgroundColor(CHIP_BG)
-              .borderRadius(CHIP_R)
-              .margin({ right: SPACE_S, bottom: SPACE_S })
-              .onClick(() => {
-                this.catDrawerVisible = false;
-                const param: SearchRouteParam = new SearchRouteParam();
-                param.query = term;
-                this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
-              })
-            }, (term: string) => 'drawer_ccat_' + term)
-          }
-          .width('100%')
-        }
-        .padding({ left: 20, right: 20, bottom: 28 + this.bottomInset })
-        .width('100%')
-      }
-      .layoutWeight(1)
-      .width('100%')
-    }
-    .width('100%')
-    .height('100%')
-  }
+  private openAddDialog(): void { this.addDialogCtrl.open(); }
 
   @Builder
   private FilterHeader() {
-    Column({ space: 8 }) {
-      // 第 1 行：单行横滑分类轨 + 右侧「全部分类」抽屉按钮
-      Row({ space: 8 }) {
-        Scroll() {
-          Row({ space: 8 }) {
-            TagChip({
-              label: '全部',
-              selected: this.selectedCatId === '',
-              onChipClick: (): void => {
-                this.selectAll();
-              }
-            })
-            ForEach(this.categories, (cat: CategoryItem) => {
-              TagChip({
-                label: cat.name,
-                selected: this.selectedCatId === cat.id,
-                onChipClick: (): void => {
-                  this.selectCategory(cat);
-                }
-              })
-            }, (cat: CategoryItem) => 'cat_' + cat.id)
-            ForEach(this.customCats, (term: string) => {
-              TagChip({
-                label: `#${term}`,
-                selected: false,
-                onChipClick: (): void => {
-                  const param: SearchRouteParam = new SearchRouteParam();
-                  param.query = term;
-                  this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
-                }
-              })
-            }, (term: string) => 'ccat_' + term)
-          }
-          .padding({ right: 4 })
-        }
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
-        .layoutWeight(1)
-
-        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
-          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-            .fontSize(18)
-            .fontColor([TEXT_MAIN])
-        }
-        .width(34)
-        .height(34)
-        .backgroundColor(CHIP_BG)
-        .onClick(() => {
-          this.catDrawerVisible = true;
-        })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      // 第 2 行：左侧当前分类说明 + 右侧 Select 排序
-      Row() {
-        Text(`当前：${this.selectedCatId === '' ? '全部题材' : this.selectedCatName}`)
-          .fontSize(12)
-          .fontColor(TEXT_SUB)
-          .layoutWeight(1)
-
-        Select([
-          { value: '最新上架' },
-          { value: '日榜热门' },
-          { value: '周榜热门' },
-          { value: '月榜热门' },
-          { value: '总榜殿堂' }
-        ])
-          .selected(this.orderIndex())
-          .value(this.orderLabel())
-          .font({ size: 13, weight: FontWeight.Medium })
-          .fontColor(TEXT_MAIN)
-          .selectedOptionFont({ size: 14, weight: FontWeight.Bold })
-          .optionFont({ size: 14 })
-          .height(32)
-          .backgroundColor(CHIP_BG)
-          .borderRadius(16)
-          .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
-          }))
-          .onSelect((index: number) => {
-            const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
-            this.selectOrder(codes[index] ?? 'mr');
-          })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-    }
-    .width('100%')
-    .padding({
-      left: SPACE_L,
-      right: SPACE_L,
-      top: (this.embeddedInShell ? 0 : this.topInset) + 8,
-      bottom: 8
-    })
-    .backgroundColor(BAR_LIGHT)
-    .backgroundBlurStyle(BlurStyle.Regular)
-    .onAreaChange((_oldArea: Area, newArea: Area) => {
-      const h: number = Number(newArea.height);
-      if (!Number.isNaN(h) && h > 0) {
-        this.headerHeight = h;
-      }
+    CategoryFilterBar({
+      selectedCatId: this.$selectedCatId,
+      selectAll: (): void => this.selectAll(),
+      categories: this.$categories,
+      selectCategory: (cat: CategoryItem): void => this.selectCategory(cat),
+      customCats: this.$customCats,
+      catDrawerVisible: this.$catDrawerVisible,
+      selectedCatName: this.$selectedCatName,
+      selectOrder: (code: string): void => this.selectOrder(code),
+      embeddedInShell: this.embeddedInShell,
+      headerHeight: this.$headerHeight,
+      openAddDialog: (): void => this.openAddDialog(),
+      confirmDeleteCustom: (term: string): void => this.confirmDeleteCustom(term),
+      order: this.$order
     })
   }
 
@@ -1018,11 +515,6 @@ export struct CategoryPage {
     .width('100%')
     .height('100%')
     .padding({ bottom: this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset + SPACE_S : this.bottomInset + SPACE_S })
-    .bindSheet($$this.catDrawerVisible, this.CategoryDrawer(), {
-      height: '70%',
-      dragBar: true,
-      backgroundColor: CARD,
-      systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
-    })
+
   }
 }

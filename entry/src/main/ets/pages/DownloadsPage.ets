@@ -1,82 +1,22 @@
-/**
- * 下载管理
- *
- *
- */
-
-import fs from '@ohos.file.fs';
-import filePicker from '@ohos.file.picker';
-import {
-  PRIMARY,
-  PRIMARY_SOFT,
-  ACCENT,
-  BG,
-  CARD,
-  SUB_CARD,
-  DANGER,
-  DANGER_SOFT,
-  STATUS_OK,
-  CARD_R,
-  COVER_R,
-  CHIP_R,
-  TEXT_MAIN,
-  TEXT_SUB,
-  CHIP_BG,
-  DIVIDER,
-  MASK_DARK,
-  TAB_INACTIVE
-} from '../common/Theme';
+import { saveDownload } from './downloads/DownloadFileExporter';
+import { BasicDataSource } from '../common/DataSource';
+import { DownloadTaskCard } from './downloads/DownloadTaskCard';
+import { DownloadSummary } from './downloads/DownloadSummary';
+import { PRIMARY, PRIMARY_SOFT, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK } from '../common/Theme';
 import { EmptyView, IconCircleButton } from '../common/Components';
-import { SourceCover } from '../common/SourceCover';
 import { Album, errorMessage } from '../models/Models';
-import { downloadManager, DownloadTask, DownloadState } from '../data/DownloadManager';
+import { downloadManager, DownloadTask } from '../data/DownloadManager';
 import { albumCacheStore } from '../data/Stores';
 import { sourceApi as jmApi } from '../data/SourceApi';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
-
 /** 页下载并发展示值 */
 const DL_PAGE_CONCURRENCY: number = 3;
 
 /* ===== 任务列表懒加载数据源 ===== */
 
-class TaskDataSource implements IDataSource {
-  private items: Array<DownloadTask> = [];
-  private listeners: Array<DataChangeListener> = [];
-
-  totalCount(): number {
-    return this.items.length;
-  }
-
-  getData(index: number): DownloadTask {
-    return this.items[index];
-  }
-
-  registerDataChangeListener(listener: DataChangeListener): void {
-    if (this.listeners.indexOf(listener) < 0) {
-      this.listeners.push(listener);
-    }
-  }
-
-  unregisterDataChangeListener(listener: DataChangeListener): void {
-    this.listeners = this.listeners.filter((l: DataChangeListener): boolean => l !== listener);
-  }
-
-  reload(items: Array<DownloadTask>): void {
-    this.items = items;
-    for (const l of this.listeners) {
-      l.onDataReloaded();
-    }
-  }
-}
-
-function formatDateTime(ms: number): string {
-  if (ms <= 0) {
-    return '';
-  }
-  const d: Date = new Date(ms);
-  const pad = (n: number): string => n < 10 ? `0${n}` : `${n}`;
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+class TaskDataSource extends BasicDataSource<DownloadTask> {
+  reload(items: Array<DownloadTask>): void { this.setList(items); }
 }
 
 @Component
@@ -178,40 +118,6 @@ export struct DownloadsPage {
 
   /* ===== 汇总统计（总进度头部） ===== */
 
-  private countByState(state: DownloadState): number {
-    let n: number = 0;
-    for (const t of this.tasks) {
-      if (t.state === state) {
-        n++;
-      }
-    }
-    return n;
-  }
-
-  private totalDonePages(): number {
-    let n: number = 0;
-    for (const t of this.tasks) {
-      n += t.exporting && t.exportTotal > 0 ? t.exportDone : t.done;
-    }
-    return n;
-  }
-
-  private totalPagesCount(): number {
-    let n: number = 0;
-    for (const t of this.tasks) {
-      n += t.exporting && t.exportTotal > 0 ? t.exportTotal : t.total;
-    }
-    return n;
-  }
-
-  private overallProgress(): number {
-    const total: number = this.totalPagesCount();
-    if (total <= 0) {
-      return 0;
-    }
-    return Math.min(100, this.totalDonePages() / total * 100);
-  }
-
   /* ===== 单任务操作 ===== */
 
   private async onPause(id: number): Promise<void> {
@@ -252,63 +158,12 @@ export struct DownloadsPage {
     this.navPathStack.pushPathByName(ROUTE_READER, { aid: t.albumId } as MangaRouteParams);
   }
 
-  private fileNameOf(path: string): string {
-    const parts: Array<string> = path.split('/');
-    const name: string | undefined = parts.pop();
-    return name === undefined ? 'download.cbz' : name;
-  }
-
-  /**
-   * 分块拷贝沙箱文件到目标 fd（1MB 缓冲，避免整文件读入内存）。
-   * 使用系统文件拷贝，避免短写造成导出文件不完整。
-   */
-  private copyFileByChunk(srcFd: number, dstFd: number, total: number): number {
-    fs.copyFileSync(srcFd, dstFd);
-    return fs.statSync(dstFd).size;
-  }
-
-  /** 保存到用户所选位置：DocumentViewPicker 保存选择器 + 分块拷贝到所选 URI */
+    /** 保存到用户所选位置：DocumentViewPicker 保存选择器 + 分块拷贝到所选 URI */
   private async onSaveTo(t: DownloadTask): Promise<void> {
-    if (t.savedTo === '') {
-      this.showToast('文件路径为空，无法保存');
-      return;
-    }
-    let src: fs.File | null = null;
-    let dst: fs.File | null = null;
+    if (t.savedTo === '') { this.showToast('文件路径为空，无法保存'); return; }
     try {
-      const st: fs.Stat = fs.statSync(t.savedTo);
-      const picker: filePicker.DocumentViewPicker = new filePicker.DocumentViewPicker();
-      const opt: filePicker.DocumentSaveOptions = new filePicker.DocumentSaveOptions();
-      opt.newFileNames = [this.fileNameOf(t.savedTo)];
-      const uris: Array<string> = await picker.save(opt);
-      if (uris.length === 0) {
-        return; // 用户取消
-      }
-      src = fs.openSync(t.savedTo, fs.OpenMode.READ_ONLY);
-      dst = fs.openSync(uris[0], fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
-      const copied: number = this.copyFileByChunk(src.fd, dst.fd, st.size);
-      if (copied !== st.size) {
-        throw new Error(`保存不完整（${copied}/${st.size}）`);
-      }
-      this.showToast('已保存到所选位置');
-    } catch (e) {
-      this.showToast(`保存失败：${errorMessage(e as Error)}`);
-    } finally {
-      if (src !== null) {
-        try {
-          fs.closeSync(src);
-        } catch (e) {
-          // 关闭失败忽略
-        }
-      }
-      if (dst !== null) {
-        try {
-          fs.closeSync(dst);
-        } catch (e) {
-          // 关闭失败忽略
-        }
-      }
-    }
+      if (await saveDownload(t)) { this.showToast('已保存到所选位置'); }
+    } catch (e) { this.showToast(`保存失败：${errorMessage(e as Error)}`); }
   }
 
   /* ===== 删除 ===== */
@@ -349,90 +204,6 @@ export struct DownloadsPage {
   }
 
   /* ===== 展示辅助 ===== */
-
-  private statusText(t: DownloadTask): string {
-    if (t.state === 'queued') {
-      return '排队中…';
-    }
-    if (t.state === 'running') {
-      if (t.exporting) {
-        return `导出中 ${t.exportDone}/${t.exportTotal}（生成 CBZ）`;
-      }
-      return `下载中 ${t.done}/${t.total}（失败 ${t.failedPages} 页）`;
-    }
-    if (t.state === 'paused') {
-      return `已暂停（已完成 ${t.done}/${t.total} 页）`;
-    }
-    if (t.state === 'done') {
-      return `已完成 · CBZ 已导出：${t.savedTo}`;
-    }
-    if (t.state === 'failed') {
-      return `失败：${t.error === '' ? '未知错误' : t.error}`;
-    }
-    return '已取消';
-  }
-
-  private stateLabel(state: DownloadState): string {
-    if (state === 'queued') {
-      return '等待';
-    }
-    if (state === 'running') {
-      return '下载中';
-    }
-    if (state === 'paused') {
-      return '暂停';
-    }
-    if (state === 'done') {
-      return '完成';
-    }
-    if (state === 'failed') {
-      return '失败';
-    }
-    return '已取消';
-  }
-
-  private badgeTextColor(state: DownloadState): ResourceColor {
-    if (state === 'running' || state === 'done' || state === 'failed') {
-      return Color.White;
-    }
-    if (state === 'queued') {
-      return TEXT_SUB;
-    }
-    return TEXT_MAIN;
-  }
-
-  private badgeBgColor(state: DownloadState): ResourceColor {
-    if (state === 'running') {
-      return ACCENT;
-    }
-    if (state === 'done') {
-      return PRIMARY;
-    }
-    if (state === 'failed') {
-      return MASK_DARK;
-    }
-    if (state === 'queued') {
-      return CHIP_BG;
-    }
-    return DIVIDER;
-  }
-
-  private progressBarColor(state: DownloadState): ResourceColor {
-    if (state === 'running') {
-      return ACCENT;
-    }
-    return TAB_INACTIVE;
-  }
-
-  private progressValue(t: DownloadTask): number {
-    if (t.exporting && t.exportTotal > 0) {
-      return Math.min(100, t.exportDone / t.exportTotal * 100);
-    }
-    if (t.total > 0) {
-      return Math.min(100, t.done / t.total * 100);
-    }
-    return 0;
-  }
 
   private showToast(message: string): void {
     try {
@@ -602,62 +373,9 @@ export struct DownloadsPage {
   /** 总进度头部（总进度条 + 任务计数 + 合计页数 + 并发数展示） */
   @Builder
   private SummaryHeader() {
-    Column({ space: 10 }) {
-      Row() {
-        Text('队列总进度')
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .layoutWeight(1)
-        Text(`已完成 ${this.countByState('done')} / ${this.tasks.length} 部`)
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(PRIMARY)
-      }
-      .width('100%')
-
-      Progress({ value: this.overallProgress(), total: 100, type: ProgressType.Linear })
-        .width('100%')
-        .height(6)
-        .color(PRIMARY)
-        .backgroundColor(SUB_CARD)
-
-      Row({ space: 8 }) {
-        this.CountChip(`下载中 ${this.countByState('running')}`)
-        this.CountChip(`等待 ${this.countByState('queued')}`)
-        this.CountChip(`暂停 ${this.countByState('paused')}`)
-        this.CountChip(`失败 ${this.countByState('failed')}`)
-      }
-      .width('100%')
-
-      Row() {
-        Text(`累计进度 ${this.totalDonePages()} / ${this.totalPagesCount()} 页`)
-          .fontSize(11)
-          .fontColor(TEXT_SUB)
-        Text(`${DL_PAGE_CONCURRENCY} 线程并发下载`)
-          .fontSize(11)
-          .fontColor(TEXT_SUB)
-          .layoutWeight(1)
-          .textAlign(TextAlign.End)
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding(16)
-    .backgroundColor(CARD)
-    .borderRadius(18)
-    .border({ width: 0.5, color: DIVIDER })
-    .margin({ left: 16, right: 16, top: 4, bottom: 4 })
-  }
-
-  @Builder
-  private CountChip(label: string) {
-    Text(label)
-      .fontSize(11)
-      .fontColor(TEXT_SUB)
-      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-      .backgroundColor(SUB_CARD)
-      .borderRadius(12)
+    DownloadSummary({
+      tasks: this.$tasks
+    })
   }
 
   /** 多选态顶栏 */
@@ -722,131 +440,22 @@ export struct DownloadsPage {
     .border({ width: { top: 0.5 }, color: DIVIDER })
   }
 
-  @Builder
-  private TaskActionPill(label: string, primary: boolean, danger: boolean, onTap: () => void) {
-    Text(label)
-      .fontSize(12)
-      .fontWeight(primary ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(primary ? Color.White : (danger ? DANGER : TEXT_MAIN))
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .borderRadius(14)
-      .backgroundColor(primary ? PRIMARY : (danger ? DANGER_SOFT : SUB_CARD))
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-      .onClick(() => {
-        onTap();
-      })
-  }
-
   /** 任务列表项 */
   @Builder
   private TaskRow(item: DownloadTask) {
-    Column({ space: 10 }) {
-      Row({ space: 12 }) {
-        if (this.selectMode) {
-          Checkbox()
-            .select(this.isSelected(item.id))
-            .selectedColor(PRIMARY)
-            .onChange((value: boolean) => {
-              this.toggleSelect(item.id);
-            })
-        }
-        Column() {
-          SourceCover({ url: item.cover, radius: 8 })
-        }
-        .width(50)
-        .height(66)
-
-        Column({ space: 4 }) {
-          Row({ space: 8 }) {
-            Text(item.title)
-              .fontSize(14)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(TEXT_MAIN)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-            Text(this.stateLabel(item.state))
-              .fontSize(10)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.badgeTextColor(item.state))
-              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-              .backgroundColor(this.badgeBgColor(item.state))
-              .borderRadius(8)
-          }
-          .width('100%')
-
-          Text(this.statusText(item))
-            .fontSize(11)
-            .fontColor(TEXT_SUB)
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          if (item.createdAt > 0) {
-            Text(`创建于 ${formatDateTime(item.createdAt)}`)
-              .fontSize(10)
-              .fontColor(TAB_INACTIVE)
-          }
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-      }
-      .width('100%')
-
-      if (item.state === 'running' || item.state === 'queued' || item.state === 'paused') {
-        Progress({ value: this.progressValue(item), total: 100, type: ProgressType.Linear })
-          .width('100%')
-          .height(5)
-          .color(this.progressBarColor(item.state))
-          .backgroundColor(SUB_CARD)
-      }
-
-      if (!this.selectMode) {
-        Row({ space: 8 }) {
-          if (item.state === 'queued' || item.state === 'running') {
-            this.TaskActionPill('暂停', false, false, () => {
-              this.onPause(item.id);
-            })
-          }
-          if (item.state === 'paused') {
-            this.TaskActionPill('继续下载', true, false, () => {
-              this.onResume(item.id);
-            })
-          }
-          if (item.state === 'failed') {
-            this.TaskActionPill('重试任务', true, false, () => {
-              this.onRetry(item);
-            })
-          }
-          if (item.state === 'done') {
-            this.TaskActionPill('立即阅读', true, false, () => {
-              this.onOpenFile(item);
-            })
-            this.TaskActionPill('导出 CBZ…', false, false, () => {
-              this.onSaveTo(item);
-            })
-          }
-          Blank()
-          this.TaskActionPill('删除', false, true, () => {
-            this.onDelete(item);
-          })
-        }
-        .width('100%')
-      }
-    }
-    .width('100%')
-    .padding(14)
-    .backgroundColor(CARD)
-    .borderRadius(18)
-    .border({ width: 0.5, color: DIVIDER })
-    .onClick(() => {
-      if (this.selectMode) {
-        this.toggleSelect(item.id);
-      }
+    DownloadTaskCard({
+      selectMode: this.$selectMode,
+      selectedIds: this.$selectedIds,
+      toggleSelect: (id: number): void => this.toggleSelect(id),
+      onPause: (id: number): Promise<void> => this.onPause(id),
+      onResume: (id: number): Promise<void> => this.onResume(id),
+      onRetry: (t: DownloadTask): Promise<void> => this.onRetry(t),
+      onOpenFile: (t: DownloadTask): Promise<void> => this.onOpenFile(t),
+      onSaveTo: (t: DownloadTask): Promise<void> => this.onSaveTo(t),
+      onDelete: (t: DownloadTask): void => this.onDelete(t),
+      enterSelect: (id: number): void => this.enterSelect(id),
+      item: item
     })
-    .gesture(LongPressGesture().onAction(() => {
-      if (!this.selectMode) {
-        this.enterSelect(item.id);
-      }
-    }))
   }
 
   /** 删除确认弹层 */

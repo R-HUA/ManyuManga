@@ -91,6 +91,30 @@ async function test(name, run) { await run(environment()); checks++; console.log
 function book(models, id, title = '作品', author = '作者') { const a = new models.Album(id, title); a.author = author ? [author] : []; return a; }
 
 try {
+  await test('共享列表数据源保留重载、逐项追加和监听器注销语义', async env => {
+    const { BasicDataSource } = env.load('common/DataSource');
+    const source = new BasicDataSource(), events = [];
+    const listener = { onDataReloaded: () => events.push('reload'), onDataAdd: index => events.push(index) };
+    source.registerDataChangeListener(listener); source.registerDataChangeListener(listener);
+    const items = ['a']; source.setList(items); items.push('outside');
+    source.appendItems(['b', 'c']); source.appendItems([]);
+    assert.equal(source.totalCount(), 3); assert.equal(source.getData(2), 'c');
+    assert.deepEqual(events, ['reload', 1, 2]);
+    source.unregisterDataChangeListener(listener); source.setList([]); assert.deepEqual(events, ['reload', 1, 2]);
+  });
+  await test('拆分后的 CBZ 打包器保留文件内容、目录偏移及失败清理', async env => {
+    const { writeZipFile, ZipEntry } = env.load('data/CbzPacker');
+    const file = path.join(env.directory, 'pages.cbz'), payload = new Uint8Array([1, 2, 3]);
+    await writeZipFile(file, 1, async () => new ZipEntry('章节/001.jpg', payload.buffer));
+    const data = fs.readFileSync(file), nameLength = data.readUInt16LE(26), end = data.length - 22;
+    assert.equal(data.readUInt32LE(0), 0x04034b50);
+    assert.equal(data.subarray(30, 30 + nameLength).toString(), '章节/001.jpg');
+    assert.deepEqual([...data.subarray(30 + nameLength, 33 + nameLength)], [...payload]);
+    assert.equal(data.readUInt32LE(end), 0x06054b50); assert.equal(data.readUInt16LE(end + 10), 1);
+    assert.equal(data.readUInt32LE(data.readUInt32LE(end + 16)), 0x02014b50);
+    await assert.rejects(writeZipFile(file, 1, async () => { throw new Error('页面读取失败'); }), /页面读取失败/);
+    assert.equal(fs.existsSync(file), false);
+  });
   await test('来源主键隔离与无损解包', async env => {
     const s = env.load('data/Sources');
     const id = '同名/作品~1'; assert.notEqual(s.sourceKey('jm', id), s.sourceKey('local', id));
