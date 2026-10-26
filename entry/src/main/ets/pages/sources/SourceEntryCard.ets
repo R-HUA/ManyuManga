@@ -1,19 +1,18 @@
 import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
 import { SourceEntry, copySource, sourceStore } from '../../data/Sources';
-import { sourceApi } from '../../data/SourceApi';
 import { SourceCapabilities, capabilitiesFor } from '../../data/source/SourceContracts';
 import {
   SourceAction,
   SourcePresentation,
   presentationFor,
-  sourceActions,
-  sourceSubtitle
+  sourceActions
 } from '../../data/source/SourceCatalog';
 import { sourceGlyph } from '../../common/SourceGlyph';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_BLOCK_RULES, ROUTE_SEARCH } from '../../common/Route';
+import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS, ROUTE_SEARCH } from '../../common/Route';
 import { errorMessage } from '../../models/Models';
+import { IconCircleButton } from '../../common/Components';
 import {
-  CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, ACCENT, ACCENT_SOFT, DANGER, DANGER_SOFT,
+  CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, ACCENT, ACCENT_SOFT, DANGER,
   STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER
 } from '../../common/Theme';
 
@@ -22,7 +21,6 @@ export struct SourceEntryCard {
   @Consume('navPathStack') stack: NavPathStack;
   @Prop source: SourceEntry = new SourceEntry();
   @Prop busy: boolean = false;
-  @State directText: string = '';
   reportError: (message: string) => void = (_message: string): void => {};
   connectSource: (source: SourceEntry) => void = (_source: SourceEntry): void => {};
   openSettings: (entry: SourceEntry) => void = (_entry: SourceEntry): void => {};
@@ -37,15 +35,34 @@ export struct SourceEntryCard {
     return presentationFor(this.source.kind);
   }
 
-  private isActionEnabled(action: SourceAction): boolean {
-    if (action.requiresEnabled && (!this.source.enabled || this.busy)) {
-      return false;
+  /** 主动作：点击整行直接进入该图源的发现广场或检索页 */
+  private onPrimaryBrowse(): void {
+    if (!this.source.enabled) {
+      this.openSourceConfig();
+      return;
     }
-    return true;
+    const actions: Array<SourceAction> = sourceActions(this.source);
+    const primaryAction: SourceAction | undefined = actions.find((a: SourceAction) => a.primary) ?? actions[0];
+    if (primaryAction !== undefined) {
+      this.run(primaryAction);
+    }
+  }
+
+  /** 次动作：点击齿轮按钮进入节点/账号/连接设置 */
+  private openSourceConfig(): void {
+    if (this.source.kind === 'jm') {
+      this.stack.pushPathByName(ROUTE_JM_SETTINGS, {} as MangaRouteParams);
+    } else if (this.source.kind === 'eh') {
+      this.openSettings(this.source);
+    } else if (this.source.kind === 'suwayomi') {
+      this.connectSource(this.source);
+    } else if (this.source.kind === 'local') {
+      this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: this.source.id } as MangaRouteParams);
+    }
   }
 
   private run(action: SourceAction): void {
-    if (!this.isActionEnabled(action)) {
+    if (action.requiresEnabled && (!this.source.enabled || this.busy)) {
       return;
     }
     if (action.kind === 'import') {
@@ -91,123 +108,87 @@ export struct SourceEntryCard {
     });
   }
 
-  private jump(): void {
-    if (!this.source.enabled) {
-      return;
-    }
-    try {
-      const aid: string = sourceApi.resolveDirectKey(this.source, this.directText);
-      this.stack.pushPathByName(ROUTE_ALBUM, { aid: aid } as MangaRouteParams);
-    } catch (e) {
-      this.reportError(errorMessage(e as Error));
-    }
-  }
-
-  @Builder
-  private ActionPill(action: SourceAction) {
-    Text(action.label)
-      .fontSize(13)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(!this.isActionEnabled(action) ? TEXT_SUB : (action.primary ? PRIMARY : (action.danger ? DANGER : TEXT_MAIN)))
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .padding({ top: 9, bottom: 9 })
-      .borderRadius(16)
-      .backgroundColor(action.primary ? PRIMARY_SOFT : (action.danger ? DANGER_SOFT : SUB_CARD))
-      .border({ width: 0.5, color: action.primary ? PRIMARY : DIVIDER })
-      .opacity(this.isActionEnabled(action) ? 1.0 : 0.45)
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-      .onClick((): void => {
-        this.run(action);
-      })
-  }
-
   build() {
-    Column({ space: 14 }) {
-      Row({ space: 12 }) {
-        Stack({ alignContent: Alignment.Center }) {
-          SymbolGlyph(sourceGlyph(this.presentation().iconToken))
-            .fontSize(22)
-            .fontColor([this.presentation().useAccent ? ACCENT : PRIMARY])
-        }
-        .width(44)
-        .height(44)
-        .borderRadius(14)
-        .backgroundColor(this.presentation().useAccent ? ACCENT_SOFT : PRIMARY_SOFT)
+    Row({ space: 14 }) {
+      // 左侧图源光感图标
+      Stack({ alignContent: Alignment.Center }) {
+        SymbolGlyph(sourceGlyph(this.presentation().iconToken))
+          .fontSize(22)
+          .fontColor([!this.source.enabled ? TEXT_SUB : (this.presentation().useAccent ? ACCENT : PRIMARY)])
+      }
+      .width(46)
+      .height(46)
+      .borderRadius(14)
+      .backgroundColor(!this.source.enabled ? SUB_CARD : (this.presentation().useAccent ? ACCENT_SOFT : PRIMARY_SOFT))
 
-        Column({ space: 4 }) {
-          Row({ space: 6 }) {
-            Text(this.source.name)
-              .fontColor(TEXT_MAIN)
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-            Circle({ width: 6, height: 6 })
-              .fill(this.source.enabled ? STATUS_OK : TEXT_SUB)
-          }
-          Text(sourceSubtitle(this.source))
-            .fontColor(TEXT_SUB)
-            .fontSize(12)
+      // 中间名称与精简状态
+      Column({ space: 4 }) {
+        Row({ space: 6 }) {
+          Text(this.source.name)
+            .fontColor(this.source.enabled ? TEXT_MAIN : TEXT_SUB)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Circle({ width: 6, height: 6 })
+            .fill(this.source.enabled ? STATUS_OK : DIVIDER)
         }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
+        Text(this.source.kind === 'suwayomi' ? (this.source.endpoint || '点击连接服务')
+          : (this.source.enabled ? '点击进入广场浏览' : '已停用'))
+          .fontColor(TEXT_SUB)
+          .fontSize(12)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
 
-        Toggle({ type: ToggleType.Switch, isOn: this.source.enabled })
-          .selectedColor(PRIMARY)
-          .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
-          .onChange((enabled: boolean) => {
-            const updated: SourceEntry = copySource(this.source);
-            updated.enabled = enabled;
-            sourceStore.save(updated).catch((e: Error) => {
-              this.reportError(errorMessage(e));
-              this.reloadSources();
-            });
+      // 本地漫画专属快捷导入按钮
+      if (this.source.kind === 'local' && this.source.enabled) {
+        Text('导入')
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(PRIMARY)
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .borderRadius(14)
+          .backgroundColor(PRIMARY_SOFT)
+          .onClick(() => {
+            this.importLocal();
           })
       }
-      .width('100%')
 
-      if (this.caps().idJump) {
-        Row({ space: 8 }) {
-          TextInput({ text: this.directText, placeholder: this.presentation().idJumpPlaceholder })
-            .layoutWeight(1)
-            .height(38)
-            .borderRadius(14)
-            .backgroundColor(SUB_CARD)
-            .fontColor(TEXT_MAIN)
-            .placeholderColor(TEXT_SUB)
-            .type(this.caps().idJumpNumeric ? InputType.Number : InputType.Normal)
-            .onChange((value: string) => {
-              this.directText = value;
-            })
-          Text(this.presentation().idJumpLabel)
-            .fontSize(12)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.source.enabled ? PRIMARY : TEXT_SUB)
-            .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-            .borderRadius(14)
-            .backgroundColor(PRIMARY_SOFT)
-            .onClick((): void => {
-              this.jump();
-            })
+      // 配置齿轮按钮（收敛节点设置、账号登录、屏蔽规则）
+      IconCircleButton({
+        glyph: $r('sys.symbol.gearshape'),
+        btnSize: 36,
+        iconSize: 20,
+        bg: SUB_CARD,
+        onTap: (): void => {
+          this.openSourceConfig();
         }
-        .width('100%')
-      }
+      })
 
-      Row({ space: 10 }) {
-        ForEach(sourceActions(this.source), (action: SourceAction) => {
-          this.ActionPill(action)
-        }, (action: SourceAction) => `${this.source.id}_${action.label}`)
-      }
-      .width('100%')
-
+      // 启停开关
+      Toggle({ type: ToggleType.Switch, isOn: this.source.enabled })
+        .selectedColor(PRIMARY)
+        .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+        .onChange((enabled: boolean) => {
+          const updated: SourceEntry = copySource(this.source);
+          updated.enabled = enabled;
+          sourceStore.save(updated).catch((e: Error) => {
+            this.reportError(errorMessage(e));
+            this.reloadSources();
+          });
+        })
     }
-    .padding(16)
+    .padding({ left: 16, right: 14, top: 14, bottom: 14 })
     .width('100%')
     .backgroundColor(CARD)
-    .borderRadius(20)
+    .borderRadius(18)
     .border({ width: 0.5, color: DIVIDER })
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
+    .onClick(() => {
+      this.onPrimaryBrowse();
+    })
   }
 }

@@ -74,7 +74,7 @@ export struct SourceCover {
         if (ticket !== this.generation) {
           return;
         }
-        this.onColor(`rgba(${Math.round(red / count)},${Math.round(green / count)},${Math.round(blue / count)},0.28)`);
+        this.onColor(`rgba(${Math.round(red / count)},${Math.round(green / count)},${Math.round(blue / count)},0.16)`);
       }
       this.bitmap = bitmap;
       pending = null;

@@ -24,6 +24,7 @@ export struct EhSiteSheet {
   @State webUrl: string = FORUMS_LOGIN_URL;
   @State tagLabel: string = '';
   @State loginLabel: string = '';
+  @State showWebLogin: boolean = false;
   private controller: web_webview.WebviewController = new web_webview.WebviewController();
   close: () => void = (): void => {};
 
@@ -155,40 +156,71 @@ export struct EhSiteSheet {
             .width('100%')
         }
 
-        // ── 内置 WebView 登录 ──
-        Column({ space: 8 }) {
+        // ── 内置 WebView 登录（按需展开） ──
+        if (!this.showWebLogin) {
           Row({ space: 8 }) {
-            Text('网页登录（Cookie 自动同步）')
-              .fontSize(12)
-              .fontColor(TEXT_SUB)
-              .layoutWeight(1)
-            this.WebLinkButton('登录页', FORUMS_LOGIN_URL)
-            this.WebLinkButton('论坛首页', FORUMS_HOME_URL)
+            SymbolGlyph($r('sys.symbol.website'))
+              .fontSize(16)
+              .fontColor([PRIMARY])
+            Text('打开内置网页登录（Cookie 自动同步）')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(PRIMARY)
           }
           .width('100%')
-          Web({ src: this.webUrl, controller: this.controller })
-            .height(360)
+          .height(44)
+          .justifyContent(FlexAlign.Center)
+          .borderRadius(14)
+          .backgroundColor(PRIMARY_SOFT)
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+          .onClick(() => {
+            this.showWebLogin = true;
+          })
+        } else {
+          Column({ space: 8 }) {
+            Row({ space: 8 }) {
+              Text('网页登录（Cookie 自动同步）')
+                .fontSize(12)
+                .fontColor(TEXT_SUB)
+                .layoutWeight(1)
+              this.WebLinkButton('登录页', FORUMS_LOGIN_URL)
+              this.WebLinkButton('论坛首页', FORUMS_HOME_URL)
+              Text('收起')
+                .fontSize(12)
+                .fontColor(TEXT_SUB)
+                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .borderRadius(8)
+                .backgroundColor(SUB_CARD)
+                .onClick(() => {
+                  this.showWebLogin = false;
+                })
+            }
             .width('100%')
-            .borderRadius(14)
-            .backgroundColor(SUB_CARD)
-            .javaScriptAccess(true)
-            .domStorageAccess(true)
-            .mixedMode(MixedMode.All)
-          Text('完成')
-            .fontSize(13)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .textAlign(TextAlign.Center)
-            .width('100%')
-            .height(40)
-            .borderRadius(20)
-            .backgroundColor(PRIMARY)
-            .onClick(() => {
-              this.webDone();
-            })
+            Web({ src: this.webUrl, controller: this.controller })
+              .height(360)
+              .width('100%')
+              .borderRadius(14)
+              .backgroundColor(SUB_CARD)
+              .javaScriptAccess(true)
+              .domStorageAccess(true)
+              .mixedMode(MixedMode.All)
+            Text('完成')
+              .fontSize(13)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Color.White)
+              .textAlign(TextAlign.Center)
+              .width('100%')
+              .height(40)
+              .borderRadius(20)
+              .backgroundColor(PRIMARY)
+              .onClick(() => {
+                this.webDone();
+                this.showWebLogin = false;
+              })
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
         }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
 
         Divider().color(DIVIDER).width('100%')
 

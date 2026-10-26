@@ -16,7 +16,7 @@ export struct IconCircleButton {
   @Prop btnSize: number = 40;
   @Prop iconSize: number = 22;
   @Prop iconColor: ResourceColor = TEXT_MAIN;
-  @Prop bg: ResourceColor = SUB_CARD;
+  @Prop bg: ResourceColor = Color.Transparent;
   onTap: () => void = () => {};
 
   build() {
@@ -36,7 +36,8 @@ export struct IconCircleButton {
     .width(this.btnSize)
     .height(this.btnSize)
     .backgroundColor(this.active ? PRIMARY_SOFT : this.bg)
-    .border({ width: 0.5, color: this.active ? PRIMARY : DIVIDER })
+    .border({ width: this.active ? 0.5 : 0, color: PRIMARY })
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
     .onClick(() => {
       this.onTap();
     })

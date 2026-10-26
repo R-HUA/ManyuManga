@@ -83,16 +83,32 @@ export struct WorkChapterList {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      if (this.album !== null && this.album.episodes.length > 5) {
-        TextInput({ text: this.filter, placeholder: '筛选章节号或关键词…' })
-          .height(40)
-          .borderRadius(14)
-          .backgroundColor(CARD)
-          .fontColor(TEXT_MAIN)
-          .placeholderColor(TEXT_SUB)
-          .onChange((value: string) => {
-            this.filter = value;
-          })
+      if (this.album !== null && this.album.episodes.length > 12) {
+        Row() {
+          TextInput({ text: this.filter, placeholder: '筛选章节号或关键词…' })
+            .height(38)
+            .borderRadius(14)
+            .backgroundColor(CARD)
+            .fontColor(TEXT_MAIN)
+            .placeholderColor(TEXT_SUB)
+            .layoutWeight(1)
+            .onChange((value: string) => {
+              this.filter = value;
+            })
+          if (this.filter !== '') {
+            IconCircleButton({
+              symbol: $r('sys.symbol.xmark'),
+              btnSize: 32,
+              iconSize: 14,
+              onTap: (): void => {
+                this.filter = '';
+              }
+            })
+              .margin({ left: 6 })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
       }
 
       ForEach(this.chapters(), (chapter: Chapter) => {

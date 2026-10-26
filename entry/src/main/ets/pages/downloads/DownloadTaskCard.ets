@@ -167,7 +167,7 @@ export struct DownloadTaskCard {
       return `已暂停（已完成 ${t.done}/${t.total} 页）`;
     }
     if (t.state === 'done') {
-      return `已完成 · CBZ 已导出：${t.savedTo}`;
+      return `已导出 CBZ：${t.savedTo}`;
     }
     if (t.state === 'canceled') {
       return '失败：已取消，可重试';

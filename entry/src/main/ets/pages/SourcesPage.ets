@@ -5,6 +5,7 @@ import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { SourceEntry, SourceAuth, SourceInstance, sourceStore } from '../data/Sources';
 import { localSource } from '../data/LocalSource';
 import { suwayomi } from '../data/Suwayomi';
+import { sourceApi } from '../data/SourceApi';
 import { library } from '../data/Library';
 import { Album, errorMessage } from '../models/Models';
 import { presentationFor, registrablePresentation, SourcePresentation } from '../data/source/SourceCatalog';
@@ -115,6 +116,29 @@ export struct SourcesPage {
     this.form = true;
   }
 
+  private submitGlobalSearch(val: string, selection: SearchSelection | null = null): void {
+    const trimmed: string = val.trim();
+    if (trimmed === '') {
+      return;
+    }
+    for (const s of this.sources.filter((entry: SourceEntry) => entry.enabled)) {
+      try {
+        const directKey: string = sourceApi.resolveDirectKey(s, trimmed);
+        if (directKey !== '') {
+          this.stack.pushPathByName(ROUTE_ALBUM, { aid: directKey } as MangaRouteParams);
+          return;
+        }
+      } catch (_e) {
+        // continue
+      }
+    }
+    this.stack.pushPathByName(ROUTE_SEARCH, {
+      query: trimmed,
+      scope: 'all',
+      selection: selection === null ? undefined : selection
+    } as MangaRouteParams);
+  }
+
   @Builder
   private ConnectionSheet() {
     SuwayomiConnectSheet({
@@ -159,12 +183,6 @@ export struct SourcesPage {
         .alignItems(VerticalAlign.Center)
         .layoutWeight(1)
 
-        IconCircleButton({
-          glyph: $r('sys.symbol.folder_badge_plus'),
-          onTap: (): void => {
-            this.importLocal();
-          }
-        })
 
         if (registrablePresentation() !== null) {
           IconCircleButton({
@@ -181,10 +199,9 @@ export struct SourcesPage {
       Row({ space: 8 }) {
         SearchSuggestField({
           text: this.$globalQuery,
-          placeholder: '搜索全部已启用图源…',
+          placeholder: '搜索全源漫画，或输入车号/链接直达…',
           onSubmit: (val: string, selection: SearchSelection | null): void => {
-            this.stack.pushPathByName(ROUTE_SEARCH, { query: val.trim(), scope: 'all',
-              selection: selection === null ? undefined : selection } as MangaRouteParams);
+            this.submitGlobalSearch(val, selection);
           }
         })
           .layoutWeight(1)
@@ -197,7 +214,7 @@ export struct SourcesPage {
           .height(38)
           .padding({ left: 16, right: 16 })
           .onClick(() => {
-            this.stack.pushPathByName(ROUTE_SEARCH, { query: this.globalQuery.trim() } as MangaRouteParams);
+            this.submitGlobalSearch(this.globalQuery);
           })
       }
       .padding({ left: 16, right: 16 })

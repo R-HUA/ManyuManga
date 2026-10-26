@@ -78,9 +78,13 @@ export struct MainShell {
         .fontSize(11)
         .fontWeight(this.jmTab === index ? FontWeight.Bold : FontWeight.Medium)
         .fontColor(this.jmTab === index ? PRIMARY : $r('sys.color.font_secondary'))
+        .lineHeight(13)
     }
     .width('100%')
-    .height(56)
+    .height(48)
+    .padding({ top: 4, bottom: 6 })
+    .borderRadius(24)
+    .backgroundColor(this.jmTab === index ? PRIMARY_SOFT : Color.Transparent)
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
   }
@@ -89,8 +93,7 @@ export struct MainShell {
   private JmBrowseDestination() {
     NavDestination() {
       Column() {
-        // 单一沉浸顶栏：返回 + 图源名/节点设置 + 搜索
-        Row({ space: 12 }) {
+        Row({ space: 10 }) {
           IconCircleButton({
             symbol: $r('sys.symbol.chevron_left'),
             onTap: (): void => {
@@ -98,31 +101,23 @@ export struct MainShell {
             }
           })
 
-          Column({ space: 2 }) {
-            Text('禁漫天堂 · 发现')
-              .fontSize(17)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(TEXT_MAIN)
-              .maxLines(1)
-            Text('点击右侧图标可配置线路节点与过滤')
-              .fontSize(11)
-              .fontColor(TEXT_SUB)
-              .maxLines(1)
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-
-          IconCircleButton({
-            symbol: $r('sys.symbol.slider_horizontal_2'),
-            onTap: (): void => {
-              this.stack.pushPathByName(ROUTE_JM_SETTINGS, {} as MangaRouteParams);
-            }
-          })
+          Text('禁漫天堂')
+            .fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(TEXT_MAIN)
+            .layoutWeight(1)
 
           IconCircleButton({
             symbol: $r('sys.symbol.magnifyingglass'),
             onTap: (): void => {
               this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: 'jm' } as MangaRouteParams);
+            }
+          })
+
+          IconCircleButton({
+            symbol: $r('sys.symbol.slider_horizontal_2'),
+            onTap: (): void => {
+              this.stack.pushPathByName(ROUTE_JM_SETTINGS, {} as MangaRouteParams);
             }
           })
         }
@@ -132,7 +127,6 @@ export struct MainShell {
         .backgroundBlurStyle(BlurStyle.Regular)
         .border({ width: { bottom: 0.5 }, color: DIVIDER })
 
-        // 功能页签切换：底部悬浮 Dock 栏
         Tabs({ barPosition: BarPosition.End, index: this.jmTab }) {
           TabContent() {
             ExplorePage({ embeddedInShell: true, sourceIdValue: 'jm' })
@@ -146,12 +140,12 @@ export struct MainShell {
         }
         .scrollable(false)
         .barMode(BarMode.Fixed)
-        .barHeight(56)
+        .barHeight(60)
         .barOverlap(true)
         .barBackgroundColor(Color.Transparent)
         .barFloatingStyle({
-          barSideMargin: 64,
-          barBottomMargin: Math.max(16, this.bottom),
+          barSideMargin: this.breakpoint === 'lg' ? 240 : 104,
+          barBottomMargin: Math.max(10, this.bottom),
           systemMaterial: IMMERSIVE_TAB_BAR_MATERIAL
         })
         .onChange((idx: number) => {
@@ -244,7 +238,7 @@ export struct MainShell {
 
       this.RailItem('书架', $r('sys.symbol.books_vertical_fill'), 0)
       this.RailItem('动态', $r('sys.symbol.clock'), 1)
-      this.RailItem('图源', $r('sys.symbol.square_grid_2x2'), 2)
+      this.RailItem('图源', $r('sys.symbol.compass'), 2)
       this.RailItem('我的', $r('sys.symbol.person'), 3)
       Blank()
     }
@@ -264,17 +258,17 @@ export struct MainShell {
         Tabs({ barPosition: BarPosition.End, index: this.tab }) {
           TabContent() { LibraryPage() }.tabBar(this.Label('书架', $r('sys.symbol.books_vertical_fill'), 0))
           TabContent() { UpdatesPage() }.tabBar(this.Label('动态', $r('sys.symbol.clock'), 1))
-          TabContent() { SourcesPage() }.tabBar(this.Label('图源', $r('sys.symbol.square_grid_2x2'), 2))
+          TabContent() { SourcesPage() }.tabBar(this.Label('图源', $r('sys.symbol.compass'), 2))
           TabContent() { ProfilePage() }.tabBar(this.Label('我的', $r('sys.symbol.person'), 3))
         }
         .scrollable(false)
         .barMode(BarMode.Fixed)
-        .barHeight(this.breakpoint === 'lg' || this.selecting ? 0 : 56)
+        .barHeight(this.breakpoint === 'lg' || this.selecting ? 0 : 60)
         .barOverlap(this.breakpoint !== 'lg')
         .barBackgroundColor(Color.Transparent)
         .barFloatingStyle({
-          barSideMargin: 28,
-          barBottomMargin: Math.max(16, this.bottom + 8),
+          barSideMargin: 36,
+          barBottomMargin: Math.max(10, this.bottom),
           systemMaterial: IMMERSIVE_TAB_BAR_MATERIAL
         })
         .onChange((index: number) => {

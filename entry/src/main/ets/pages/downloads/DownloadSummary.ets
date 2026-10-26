@@ -40,11 +40,6 @@ export struct DownloadSummary {
         Text(`累计进度 ${this.totalDonePages()} / ${this.totalPagesCount()} 页`)
           .fontSize(11)
           .fontColor(TEXT_SUB)
-        Text(`${DL_PAGE_CONCURRENCY} 线程并发下载`)
-          .fontSize(11)
-          .fontColor(TEXT_SUB)
-          .layoutWeight(1)
-          .textAlign(TextAlign.End)
       }
       .width('100%')
     }

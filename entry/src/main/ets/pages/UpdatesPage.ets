@@ -312,10 +312,10 @@ export struct UpdatesPage {
         this.SegmentPill('最近阅读', this.recent.length, 1)
         this.SegmentPill('浏览历史', this.history.length, 2)
       }
-      .padding(4)
+      .padding(3)
       .margin({ left: 16, right: 16 })
-      .borderRadius(22)
-      .backgroundColor(CARD)
+      .borderRadius(19)
+      .backgroundColor(SUB_CARD)
       .border({ width: 0.5, color: DIVIDER })
 
       Scroll() {
@@ -343,8 +343,8 @@ export struct UpdatesPage {
             if (this.updatedWorks().length === 0) {
               this.EmptySection(
                 '暂无新章节提醒',
-                '书架中的漫画目前都是最新状态，可点按右上角刷新按钮巡检更新',
-                this.busy ? '巡检中…' : '立即巡检更新',
+                '书架作品均为最新状态',
+                this.busy ? '检查中…' : '检查更新',
                 () => {
                   this.refresh();
                 }
@@ -355,7 +355,7 @@ export struct UpdatesPage {
               this.Entry(
                 p.title,
                 p.coverUrl,
-                `${new Date(p.at).toLocaleDateString()} · 读至第 ${p.page + 1} / ${Math.max(1, p.totalPages)} 页`,
+                `${new Date(p.at).toLocaleDateString()} 读至第 ${p.page + 1} / ${Math.max(1, p.totalPages)} 页`,
                 '继续读',
                 p.aid,
                 true
@@ -377,7 +377,7 @@ export struct UpdatesPage {
               this.Entry(
                 h.title,
                 h.coverUrl,
-                `浏览于 ${new Date(h.viewedAt).toLocaleDateString()} ${h.author ? '· ' + h.author : ''}`,
+                `浏览于 ${new Date(h.viewedAt).toLocaleDateString()}${h.author ? '  ' + h.author : ''}`,
                 '查看',
                 h.id,
                 false

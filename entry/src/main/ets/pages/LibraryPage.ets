@@ -191,6 +191,7 @@ export struct LibraryPage {
       if (this.selected.length > 0) {
         IconCircleButton({
           glyph: $r('sys.symbol.xmark'),
+          bg: SUB_CARD,
           onTap: (): void => {
             this.selected = [];
             AppStorage.setOrCreate('librarySelection', false);
@@ -217,13 +218,15 @@ export struct LibraryPage {
             .fontSize(26)
             .fontWeight(FontWeight.Bold)
             .fontColor(TEXT_MAIN)
-          Text(`${this.filtered().length}`)
-            .fontSize(12)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(PRIMARY)
-            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-            .borderRadius(10)
-            .backgroundColor(PRIMARY_SOFT)
+          if (this.works.length > 0) {
+            Text(`${this.filtered().length}`)
+              .fontSize(12)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(PRIMARY)
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .borderRadius(10)
+              .backgroundColor(PRIMARY_SOFT)
+          }
         }
         .alignItems(VerticalAlign.Center)
         .layoutWeight(1)
@@ -238,18 +241,7 @@ export struct LibraryPage {
             }
           }
         })
-        IconCircleButton({
-          glyph: $r('sys.symbol.square_grid_2x2'),
-          onTap: (): void => {
-            this.stack.pushPathByName(ROUTE_SEARCH, {} as MangaRouteParams);
-          }
-        })
-        IconCircleButton({
-          glyph: $r('sys.symbol.folder_badge_plus'),
-          onTap: (): void => {
-            this.importLocalArchive();
-          }
-        })
+
         IconCircleButton({
           glyph: $r('sys.symbol.slider_horizontal_2'),
           active: this.readFilter !== 0 || this.downloadFilter !== 0 || this.sort !== 0,
@@ -348,30 +340,34 @@ export struct LibraryPage {
         }
 
         // Category & Quick Filter Capsule Rail
-        Scroll() {
-          Row({ space: 8 }) {
-            this.CategoryCapsule('全部', this.category === '' && this.readFilter === 0 && this.downloadFilter === 0, () => {
-              this.category = '';
-              this.readFilter = 0;
-              this.downloadFilter = 0;
-            })
-            this.CategoryCapsule('未读', this.readFilter === 2, () => {
-              this.readFilter = this.readFilter === 2 ? 0 : 2;
-            })
-            this.CategoryCapsule('已离线', this.downloadFilter === 1, () => {
-              this.downloadFilter = this.downloadFilter === 1 ? 0 : 1;
-            })
-            ForEach(this.categories, (c: string) => {
-              this.CategoryCapsule(c, this.category === c, () => {
-                this.category = this.category === c ? '' : c;
+        if (this.works.length > 0) {
+          Scroll() {
+            Row({ space: 8 }) {
+              this.CategoryCapsule('全部', this.category === '' && this.readFilter === 0 && this.downloadFilter === 0, () => {
+                this.category = '';
+                this.readFilter = 0;
+                this.downloadFilter = 0;
               })
-            }, (c: string) => c)
+              this.CategoryCapsule('未读', this.readFilter === 2, () => {
+                this.readFilter = this.readFilter === 2 ? 0 : 2;
+              })
+              this.CategoryCapsule('已离线', this.downloadFilter === 1, () => {
+                this.downloadFilter = this.downloadFilter === 1 ? 0 : 1;
+              })
+              ForEach(this.categories, (c: string) => {
+                this.CategoryCapsule(c, this.category === c, () => {
+                  this.category = this.category === c ? '' : c;
+                })
+              }, (c: string) => c)
+            }
+            .padding({ left: 16, right: 16 })
+            .justifyContent(FlexAlign.Start)
           }
-          .padding({ left: 16, right: 16 })
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          .align(Alignment.Start)
+          .width('100%')
         }
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
-        .width('100%')
 
         if (this.error !== '') {
           Row({ space: 8 }) {

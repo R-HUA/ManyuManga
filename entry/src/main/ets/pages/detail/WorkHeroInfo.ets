@@ -5,7 +5,7 @@ import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
-import { BG, CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { BG, CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 
 @Component
 export struct WorkHeroInfo {
@@ -21,6 +21,7 @@ export struct WorkHeroInfo {
   read: (chapter?: Chapter) => void = (chapter?: Chapter): void => {};
   reread: () => void = (): void => {};
   add: () => Promise<void> = async (): Promise<void> => {};
+  toggleShelf: () => Promise<void> = async (): Promise<void> => {};
   download: () => Promise<void> = async (): Promise<void> => {};
   @Link descExpanded: boolean;
 
@@ -37,7 +38,7 @@ export struct WorkHeroInfo {
     if (saved === null) {
       return '继续阅读';
     }
-    return `继续阅读 · P.${saved.page + 1}`;
+    return `继续阅读 P.${saved.page + 1}`;
   }
 
   private sourceBadge(): string {
@@ -99,8 +100,8 @@ export struct WorkHeroInfo {
                 .backgroundColor(PRIMARY)
 
               Text(this.work !== null && this.work.albums.length > 1
-                ? `已关联 ${this.work.albums.length} 个书源 · 点击换源`
-                : '更多书源 · 点击比对')
+                ? `已关联 ${this.work.albums.length} 个书源`
+                : '查看更多书源')
                 .fontSize(11)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(TEXT_MAIN)
@@ -136,91 +137,81 @@ export struct WorkHeroInfo {
         .width('100%')
         .alignItems(VerticalAlign.Top)
 
-        // Primary CTA Row
+        // 统一单行黄金动作栏：主阅读 CTA + 收藏 / 换源 / 下载
         Row({ space: 10 }) {
-          if (this.canContinue()) {
-            Button(this.continueLabel(), { buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
-              .backgroundColor(PRIMARY)
-              .layoutWeight(2)
-              .height(44)
-              .borderRadius(22)
-              .onClick(() => { this.read(); })
-            Button('重新阅读', { buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(14)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(PRIMARY)
-              .backgroundColor(PRIMARY_SOFT)
-              .layoutWeight(1)
-              .height(44)
-              .borderRadius(22)
-              .onClick(() => { this.reread(); })
-          } else {
-            Button('开始阅读', { buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
-              .backgroundColor(PRIMARY)
-              .layoutWeight(2)
-              .height(44)
-              .borderRadius(22)
-              .onClick(() => { this.read(); })
-          }
-
-          Text(this.work === null ? '加入书架' : '已在书架')
-            .fontSize(14)
+          Button(this.canContinue() ? this.continueLabel() : '开始阅读', { buttonStyle: ButtonStyleMode.NORMAL })
+            .fontSize(15)
             .fontWeight(FontWeight.Bold)
-            .fontColor(this.work === null ? PRIMARY : TEXT_SUB)
-            .textAlign(TextAlign.Center)
+            .fontColor(Color.White)
+            .backgroundColor(PRIMARY)
             .layoutWeight(1)
-            .height(44)
-            .borderRadius(22)
-            .backgroundColor(this.work === null ? PRIMARY_SOFT : CARD)
-            .border({ width: 0.5, color: this.work === null ? PRIMARY : DIVIDER })
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-            .onClick(() => {
-              if (this.work === null) {
-                this.add();
-              } else {
-                this.sourceSheet = true;
-              }
-            })
-        }
-        .width('100%')
+            .height(46)
+            .borderRadius(23)
+            .shadow({ radius: 16, color: 'rgba(10, 89, 247, 0.22)', offsetY: 4 })
+            .onClick(() => { this.read(); })
 
-        // Secondary Action Bar
-        Row({ space: 10 }) {
-          Text('下载全本')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(TEXT_MAIN)
-            .textAlign(TextAlign.Center)
-            .layoutWeight(1)
-            .height(38)
-            .borderRadius(19)
-            .backgroundColor(CARD)
-            .border({ width: 0.5, color: DIVIDER })
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-            .onClick(() => {
-              this.download();
-            })
+          // 1. 收藏/在架切换
+          Column({ space: 2 }) {
+            SymbolGlyph(this.work !== null ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
+              .fontSize(19)
+              .fontColor([this.work !== null ? PRIMARY : TEXT_MAIN])
+            Text(this.work !== null ? '已在架' : '收藏')
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.work !== null ? PRIMARY : TEXT_SUB)
+          }
+          .width(54)
+          .height(46)
+          .justifyContent(FlexAlign.Center)
+          .borderRadius(16)
+          .backgroundColor(this.work !== null ? PRIMARY_SOFT : CARD)
+          .border({ width: 0.5, color: this.work !== null ? PRIMARY : DIVIDER })
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
+          .onClick(() => {
+            this.toggleShelf();
+          })
 
-          Text('换源与关联')
-            .fontSize(13)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(TEXT_MAIN)
-            .textAlign(TextAlign.Center)
-            .layoutWeight(1)
-            .height(38)
-            .borderRadius(19)
-            .backgroundColor(CARD)
-            .border({ width: 0.5, color: DIVIDER })
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-            .onClick(() => {
-              this.sourceSheet = true;
-            })
+          // 2. 换源与多源角标（唯一主换源入口）
+          Column({ space: 2 }) {
+            SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
+              .fontSize(19)
+              .fontColor([this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_MAIN])
+            Text(this.work !== null && this.work.albums.length > 1 ? `${this.work.albums.length} 源` : '换源')
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_SUB)
+          }
+          .width(54)
+          .height(46)
+          .justifyContent(FlexAlign.Center)
+          .borderRadius(16)
+          .backgroundColor(CARD)
+          .border({ width: 0.5, color: DIVIDER })
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
+          .onClick(() => {
+            this.sourceSheet = true;
+          })
+
+          // 3. 离线下载
+          Column({ space: 2 }) {
+            SymbolGlyph($r('sys.symbol.arrow_down_circle'))
+              .fontSize(19)
+              .fontColor([TEXT_MAIN])
+            Text('下载')
+              .fontSize(10)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(TEXT_SUB)
+          }
+          .width(54)
+          .height(46)
+          .justifyContent(FlexAlign.Center)
+          .borderRadius(16)
+          .backgroundColor(CARD)
+          .border({ width: 0.5, color: DIVIDER })
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
+          .onClick(() => {
+            this.download();
+          })
         }
         .width('100%')
 

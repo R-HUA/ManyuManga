@@ -23,7 +23,7 @@ export struct ReaderChapterSheet {
           Scroll() {
             Row({ space: 8 }) {
               ForEach(this.bookmarks, (bookmark: ReadingProgress) => {
-                Text(`第 ${bookmark.chapterIndex + 1} 话 · P.${bookmark.page + 1}`)
+                Text(`第 ${bookmark.chapterIndex + 1} 话 P.${bookmark.page + 1}`)
                   .fontSize(12)
                   .fontWeight(FontWeight.Medium)
                   .fontColor(Color.White)

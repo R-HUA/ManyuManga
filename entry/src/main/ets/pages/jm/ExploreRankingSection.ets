@@ -128,6 +128,7 @@ export struct ExploreRankingSection {
     .listDirection(Axis.Horizontal)
     .scrollBar(BarState.Off)
     .width('100%')
+    .height(196)
     .padding({ left: SPACE_L, right: SPACE_L })
     .cachedCount(3)
   }
@@ -147,6 +148,7 @@ export struct ExploreRankingSection {
     .listDirection(Axis.Horizontal)
     .scrollBar(BarState.Off)
     .width('100%')
+    .height(196)
     .padding({ left: SPACE_L, right: SPACE_L })
     .cachedCount(2)
   }

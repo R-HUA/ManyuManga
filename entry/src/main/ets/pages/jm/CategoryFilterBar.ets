@@ -1,10 +1,12 @@
 import { formatCount } from '../../common/ComicBadge';
 import { IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../../common/ImmersiveMaterials';
-import { BAR_LIGHT, CARD, CHIP_BG, CHIP_R, FONT_CAPTION, PRIMARY, SPACE_L, SPACE_S, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { CARD, CHIP_BG, CHIP_R, DIVIDER, FONT_CAPTION, PRIMARY, PRIMARY_SOFT, SPACE_L, SPACE_S, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { TagChip } from '../../common/Components';
 import { ROUTE_SEARCH } from '../../common/Route';
 import { CategoryItem } from '../../models/Models';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
+
+export const CATEGORY_BAR_HEIGHT: number = 48;
 
 class SearchRouteParam { query: string = ''; sourceId: string = ''; }
 export class ChipOption {
@@ -26,126 +28,132 @@ const ORDER_OPTIONS: Array<ChipOption> = [
   new ChipOption('mr', '最新')
 ];
 
-
 @Component
 export struct CategoryFilterBar {
   @Prop sourceIdValue: string = '';
   @Link selectedCatId: string;
   selectAll: () => void = (): void => {};
   @Link categories: Array<CategoryItem>;
-  selectCategory: (cat: CategoryItem) => void = (cat: CategoryItem): void => {};
+  selectCategory: (cat: CategoryItem) => void = (_cat: CategoryItem): void => {};
   @Link customCats: Array<string>;
   @Consume('navPathStack') navPathStack: NavPathStack;
   @Link catDrawerVisible: boolean;
   @Link selectedCatName: string;
-  selectOrder: (code: string) => void = (code: string): void => {};
+  selectOrder: (code: string) => void = (_code: string): void => {};
   @Prop embeddedInShell: boolean = false;
   @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
   @Link headerHeight: number;
   openAddDialog: () => void = (): void => {};
-  confirmDeleteCustom: (term: string) => void = (term: string): void => {};
+  confirmDeleteCustom: (term: string) => void = (_term: string): void => {};
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 16;
   @Link order: string;
 
+  private orderIndex(): number {
+    const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
+    const idx: number = codes.indexOf(this.order);
+    return idx >= 0 ? idx : 0;
+  }
+
+  private orderShortLabel(): string {
+    const map: Record<string, string> = {
+      'mr': '最新',
+      'mv_t': '日榜',
+      'mv_w': '周榜',
+      'mv_m': '月榜',
+      'mv': '总榜'
+    };
+    return map[this.order] ?? '最新';
+  }
+
+  private chipLabel(cat: CategoryItem): string {
+    if (cat.total !== '' && cat.total !== '0') {
+      return `${cat.name} ${formatCount(cat.total)}`;
+    }
+    return cat.name;
+  }
+
   build() {
-    Column({ space: 8 }) {
-      // 第 1 行：单行横滑分类轨 + 右侧「全部分类」抽屉按钮
-      Row({ space: 8 }) {
-        Scroll() {
-          Row({ space: 8 }) {
+    Row({ space: 8 }) {
+      // 1. 左侧：紧凑排序选择器
+      Select([
+        { value: '最新上架' },
+        { value: '日榜热门' },
+        { value: '周榜热门' },
+        { value: '月榜热门' },
+        { value: '总榜殿堂' }
+      ])
+        .selected(this.orderIndex())
+        .value(this.orderShortLabel())
+        .font({ size: 12, weight: FontWeight.Bold })
+        .fontColor(PRIMARY)
+        .selectedOptionFont({ size: 14, weight: FontWeight.Bold })
+        .optionFont({ size: 14 })
+        .height(30)
+        .backgroundColor(PRIMARY_SOFT)
+        .borderRadius(15)
+        .menuSystemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+        .onSelect((index: number) => {
+          const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
+          this.selectOrder(codes[index] ?? 'mr');
+        })
+
+      Divider()
+        .vertical(true)
+        .height(16)
+        .color(DIVIDER)
+
+      // 2. 中间：单行横滑分类胶囊轨
+      Scroll() {
+        Row({ space: 6 }) {
+          TagChip({
+            label: '全部',
+            selected: this.selectedCatId === '',
+            onChipClick: (): void => {
+              this.selectAll();
+            }
+          })
+          ForEach(this.categories, (cat: CategoryItem) => {
             TagChip({
-              label: '全部',
-              selected: this.selectedCatId === '',
+              label: cat.name,
+              selected: this.selectedCatId === cat.id,
               onChipClick: (): void => {
-                this.selectAll();
+                this.selectCategory(cat);
               }
             })
-            ForEach(this.categories, (cat: CategoryItem) => {
-              TagChip({
-                label: cat.name,
-                selected: this.selectedCatId === cat.id,
-                onChipClick: (): void => {
-                  this.selectCategory(cat);
-                }
-              })
-            }, (cat: CategoryItem) => 'cat_' + cat.id)
-            ForEach(this.customCats, (term: string) => {
-              TagChip({
-                label: `#${term}`,
-                selected: false,
-                onChipClick: (): void => {
-                  const param: SearchRouteParam = new SearchRouteParam();
-                  param.query = term;
-                  param.sourceId = this.sourceIdValue;
-                  this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
-                }
-              })
-            }, (term: string) => 'ccat_' + term)
-          }
-          .padding({ right: 4 })
+          }, (cat: CategoryItem) => 'cat_' + cat.id)
         }
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
-        .layoutWeight(1)
-
-        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
-          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-            .fontSize(18)
-            .fontColor([TEXT_MAIN])
-        }
-        .width(34)
-        .height(34)
-        .backgroundColor(CHIP_BG)
-        .onClick(() => {
-          this.catDrawerVisible = true;
-        })
+        .justifyContent(FlexAlign.Start)
       }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .align(Alignment.Start)
+      .layoutWeight(1)
 
-      // 第 2 行：左侧当前分类说明 + 右侧 Select 排序
-      Row() {
-        Text(`当前：${this.selectedCatId === '' ? '全部题材' : this.selectedCatName}`)
-          .fontSize(12)
-          .fontColor(TEXT_SUB)
-          .layoutWeight(1)
-
-        Select([
-          { value: '最新上架' },
-          { value: '日榜热门' },
-          { value: '周榜热门' },
-          { value: '月榜热门' },
-          { value: '总榜殿堂' }
-        ])
-          .selected(this.orderIndex())
-          .value(this.orderLabel())
-          .font({ size: 13, weight: FontWeight.Medium })
-          .fontColor(TEXT_MAIN)
-          .selectedOptionFont({ size: 14, weight: FontWeight.Bold })
-          .optionFont({ size: 14 })
-          .height(32)
-          .backgroundColor(CHIP_BG)
-          .borderRadius(16)
-          .menuSystemMaterial(IMMERSIVE_REGULAR_MATERIAL)
-          .onSelect((index: number) => {
-            const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
-            this.selectOrder(codes[index] ?? 'mr');
-          })
+      // 3. 右侧：展开全部分类抽屉按钮
+      Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+        SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+          .fontSize(16)
+          .fontColor([TEXT_MAIN])
       }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
+      .width(30)
+      .height(30)
+      .backgroundColor(SUB_CARD)
+      .onClick(() => {
+        this.catDrawerVisible = true;
+      })
     }
     .width('100%')
+    .height(CATEGORY_BAR_HEIGHT + (this.embeddedInShell ? 0 : this.topInset))
     .padding({
       left: SPACE_L,
       right: SPACE_L,
-      top: (this.embeddedInShell ? 0 : this.topInset) + 8,
-      bottom: 8
+      top: this.embeddedInShell ? 0 : this.topInset
     })
-    .backgroundColor(BAR_LIGHT)
-    .backgroundBlurStyle(BlurStyle.Regular)
+    .alignItems(VerticalAlign.Center)
+    .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+    .border({ width: { bottom: 0.5 }, color: DIVIDER })
     .bindSheet($$this.catDrawerVisible, this.CategoryDrawer(), {
-      height: '70%',
+      height: SheetSize.MEDIUM,
       dragBar: true,
       systemMaterial: IMMERSIVE_SHEET_MATERIAL
     })
@@ -242,27 +250,5 @@ export struct CategoryFilterBar {
     }
     .width('100%')
     .height('100%')
-  }
-
-  private orderIndex(): number {
-    const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
-    const idx: number = codes.indexOf(this.order);
-    return idx >= 0 ? idx : 0;
-  }
-
-  private orderLabel(): string {
-    for (const opt of ORDER_OPTIONS) {
-      if (opt.code === this.order) {
-        return opt.label;
-      }
-    }
-    return this.order;
-  }
-
-  private chipLabel(cat: CategoryItem): string {
-    if (cat.total !== '' && cat.total !== '0') {
-      return `${cat.name} ${formatCount(cat.total)}`;
-    }
-    return cat.name;
   }
 }

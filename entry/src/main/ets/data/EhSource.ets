@@ -301,7 +301,7 @@ export class EhSource {
   }
 
   public toAlbumLite(item: NativeGallerySummary): AlbumLite {
-    const sub: string = item.rating > 0 ? `★${item.rating.toFixed(1)} · ${item.pages}P` : `${item.pages}P`;
+    const sub: string = item.rating > 0 ? `★${item.rating.toFixed(1)} ${item.pages}P` : `${item.pages}P`;
     const id: EhIdentity = { gid: item.gid, token: item.token };
     return new AlbumLite(this.fullKey(id), item.titleJpn !== '' ? item.titleJpn : item.title,
       item.uploader !== '' ? item.uploader : 'E-Hentai', item.thumb, item.categoryLabel, sub);
@@ -337,7 +337,7 @@ export class EhSource {
     album.author = authors.length > 0 ? authors :
       (detail.uploader !== '' ? [new MetadataTerm(detail.uploader, detail.uploader, 'uploader')] : []);
     album.tags = tags;
-    album.episodes = [new Chapter(key, `全一册 · 共 ${detail.pages} 页 (${detail.categoryLabel})`, '1')];
+    album.episodes = [new Chapter(key, `全一册 共 ${detail.pages} 页 (${detail.categoryLabel})`, '1')];
     return album;
   }
 

@@ -83,7 +83,7 @@ export struct JmSourceSettingsPage {
           })
 
           Column({ space: 2 }) {
-            Text('禁漫天堂 · 节点与过滤设置')
+            Text('节点与过滤设置')
               .fontSize(17)
               .fontWeight(FontWeight.Bold)
               .fontColor(TEXT_MAIN)

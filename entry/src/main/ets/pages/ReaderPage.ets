@@ -308,7 +308,7 @@ export struct ReaderPage {
   @Builder
   private PagePill() {
     Column() {
-      Text(`${this.controller.chapterTitle()} · ${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
+      Text(`${this.controller.chapterTitle()} P.${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
         .fontSize(10)
         .fontWeight(FontWeight.Medium)
         .fontColor('rgba(255,255,255,0.86)')

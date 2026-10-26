@@ -1,7 +1,8 @@
 import { ComicCard } from '../../common/ComicCard';
 import promptAction from '@ohos.promptAction';
 import { EmptyView } from '../../common/Components';
-import { BG, CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { ROUTE_READER, MangaRouteParams } from '../../common/Route';
 import { Album, MetadataTerm, errorMessage } from '../../models/Models';
 import { downloadManager, DownloadTask } from '../../data/DownloadManager';
 import { offlineStore } from '../../data/OfflineStore';
@@ -27,6 +28,8 @@ class OfflineItem {
 
 @Component
 export struct DownloadedPane {
+  @Consume('navPathStack') stack: NavPathStack;
+  @State managing: boolean = false;
   @State items: Array<OfflineItem> = [];
   @State selected: Array<string> = [];
   @State jobs: Array<ExportJob> = [];
@@ -163,6 +166,14 @@ export struct DownloadedPane {
     this.busy = false;
   }
 
+  private async exportSmart(): Promise<void> {
+    if (this.selected.length === 1) {
+      await this.exportSingle();
+    } else {
+      await this.exportSelected(false);
+    }
+  }
+
   private async exportSingle(): Promise<void> {
     const queue: Array<ExportJob> = this.jobsForSelection();
     if (this.busy || queue.length !== 1) { return; }
@@ -238,6 +249,29 @@ export struct DownloadedPane {
         if (this.jobs.length > 0) {
           this.ExportList()
         }
+        Row() {
+          Text(this.managing ? `已选 ${this.selected.length} 部` : `共 ${this.items.length} 部离线漫画`)
+            .fontSize(13)
+            .fontColor(TEXT_SUB)
+            .layoutWeight(1)
+
+          Text(this.managing ? '完成' : '管理')
+            .fontSize(13)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(PRIMARY)
+            .padding({ left: 14, right: 14, top: 6, bottom: 6 })
+            .borderRadius(14)
+            .backgroundColor(PRIMARY_SOFT)
+            .onClick(() => {
+              this.managing = !this.managing;
+              if (!this.managing) {
+                this.selected = [];
+              }
+            })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+
         Grid() {
           ForEach(this.items, (item: OfflineItem) => {
             GridItem() {
@@ -247,13 +281,25 @@ export struct DownloadedPane {
                   aid: item.albumId,
                   title: item.title,
                   author: item.author,
-                  badge: this.selected.indexOf(item.albumId) >= 0 ? '已选' : '',
+                  badge: this.managing ? (this.selected.indexOf(item.albumId) >= 0 ? '已选' : '') : '',
                   onCardClick: (): void => {
-                    this.toggle(item.albumId);
+                    if (this.managing) {
+                      this.toggle(item.albumId);
+                    } else {
+                      this.stack.pushPathByName(ROUTE_READER, { aid: item.albumId } as MangaRouteParams);
+                    }
                   }
                 })
               }
               .width('100%')
+              .gesture(
+                LongPressGesture().onAction(() => {
+                  if (!this.managing) {
+                    this.managing = true;
+                    this.toggle(item.albumId);
+                  }
+                })
+              )
             }
           }, (item: OfflineItem) => item.albumId)
         }
@@ -262,8 +308,11 @@ export struct DownloadedPane {
         .rowsGap(12)
         .width('100%')
         .layoutWeight(1)
-        .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        this.ExportBar()
+        .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+
+        if (this.managing) {
+          this.ExportBar()
+        }
       }
       if (this.note !== '') { Text(this.note).fontSize(12).fontColor(TEXT_SUB).padding(8) }
     }

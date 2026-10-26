@@ -109,6 +109,31 @@ export struct WorkDetailPage {
     }
   }
 
+  private async toggleShelf(): Promise<void> {
+    if (this.work === null) {
+      await this.add();
+    } else {
+      const workId: string = this.work.id;
+      this.getUIContext().showAlertDialog({
+        title: '移出书架',
+        message: `确认将《${this.album?.name ?? ''}》移出书架吗？阅读记录与离线文件将保留。`,
+        primaryButton: { value: '取消', action: () => {} },
+        secondaryButton: {
+          value: '移出',
+          fontColor: DANGER,
+          action: () => {
+            library.remove([workId]).then(async () => {
+              await this.refresh();
+              promptAction.showToast({ message: '已移出书架' });
+            }).catch((e: Error) => {
+              this.error = errorMessage(e);
+            });
+          }
+        }
+      });
+    }
+  }
+
   private async add(): Promise<void> {
     const ticket: number = this.generation;
     try {
@@ -264,21 +289,6 @@ export struct WorkDetailPage {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
-
-      IconCircleButton({
-        glyph: $r('sys.symbol.arrow_left_arrow_right'),
-        active: this.work !== null && this.work.albums.length > 1,
-        onTap: (): void => {
-          this.sourceSheet = true;
-        }
-      })
-
-      IconCircleButton({
-        glyph: $r('sys.symbol.arrow_down_circle'),
-        onTap: (): void => {
-          this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams);
-        }
-      })
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 8 })
@@ -298,6 +308,7 @@ export struct WorkDetailPage {
       read: (chapter?: Chapter): void => this.read(chapter),
       reread: (): void => this.readFromStart(),
       add: (): Promise<void> => this.add(),
+      toggleShelf: (): Promise<void> => this.toggleShelf(),
       download: (): Promise<void> => this.download(),
       descExpanded: this.$descExpanded
     })

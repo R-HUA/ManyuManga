@@ -14,6 +14,8 @@ import { RequestAbortGroup, isRequestCancelled } from '../../util/RequestAbort';
 import { AlbumLite, errorMessage } from '../../models/Models';
 import { IconCircleButton } from '../../common/Components';
 import { ComicCard } from '../../common/ComicCard';
+import { SourceCover } from '../../common/SourceCover';
+import { IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../../common/ImmersiveMaterials';
 import { SearchSuggestField } from '../search/SearchSuggestField';
 import { searchHistoryStore, withoutBlockedAlbums } from '../../data/stores/FilterStores';
 import { BasicDataSource } from '../../common/DataSource';
@@ -66,6 +68,7 @@ export struct EhBrowsePage {
   @State containerWidth: number = 0;
   @State filter: EhSearchFilter = new EhSearchFilter();
   @State filterSheet: boolean = false;
+  @State refreshing: boolean = false;
   private ticket: number = 0;
   private listGate: RequestAbortGroup = new RequestAbortGroup();
   private gallerySource: BasicDataSource<AlbumLite> = new BasicDataSource<AlbumLite>();
@@ -202,45 +205,112 @@ export struct EhBrowsePage {
       })
   }
 
-  @Builder
-  private PagerButton(label: string, enabled: boolean, onTap: () => void) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(enabled ? PRIMARY : TEXT_SUB)
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .padding({ top: 9, bottom: 9 })
-      .borderRadius(16)
-      .backgroundColor(SUB_CARD)
-      .opacity(enabled ? 1.0 : 0.45)
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-      .onClick(() => {
-        if (enabled) {
-          onTap();
-        }
-      })
+    /** 根据 EH 官方分类名映射对应色标 */
+  private categoryColor(cat: string): string {
+    const key: string = cat.toLowerCase();
+    if (key.includes('doujinshi') || key.includes('同人')) return '#E53935';
+    if (key.includes('manga') || key.includes('漫画')) return '#FB8C00';
+    if (key.includes('artist') || key.includes('画师')) return '#FDD835';
+    if (key.includes('game') || key.includes('游戏')) return '#43A047';
+    if (key.includes('non-h') || key.includes('非')) return '#1E88E5';
+    if (key.includes('image set') || key.includes('图集')) return '#3949AB';
+    if (key.includes('cosplay')) return '#8E24AA';
+    if (key.includes('asian') || key.includes('亚洲')) return '#D81B60';
+    return 'rgba(14,17,26,0.78)';
   }
 
   @Builder
   private GalleryCard(item: AlbumLite) {
-    Column() {
-      ComicCard({
-        coverUrl: item.coverUrl,
-        aid: item.id,
-        title: item.title,
-        author: item.author,
-        badge: item.category,
-        onCardClick: (): void => {
-          this.open(item);
+    Column({ space: 6 }) {
+      Stack({ alignContent: Alignment.TopEnd }) {
+        SourceCover({ url: item.coverUrl, sourceKey: item.id, radius: 12 })
+
+        // 右上角：EH 分类色标徽章
+        if (item.category !== '') {
+          Text(item.category)
+            .fontSize(10)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+            .backgroundColor(this.categoryColor(item.category))
+            .borderRadius(8)
+            .margin(6)
         }
-      })
+
+        // 底部内嵌渐变层：评分与页数
+        if (item.categorySub !== '') {
+          Column() {
+            Blank()
+            Row() {
+              Text(item.categorySub)
+                .fontSize(10)
+                .fontWeight(FontWeight.Bold)
+                .fontColor('rgba(255,255,255,0.95)')
+                .maxLines(1)
+            }
+            .width('100%')
+            .padding({ left: 8, right: 8, top: 14, bottom: 6 })
+            .linearGradient({
+              angle: 180,
+              colors: [['rgba(0,0,0,0.0)', 0.0], ['rgba(8,10,16,0.84)', 1.0]]
+            })
+          }
+          .width('100%')
+          .height('100%')
+          .borderRadius(12)
+          .clip(true)
+          .hitTestBehavior(HitTestMode.None)
+        }
+      }
+      .width('100%')
+      .aspectRatio(0.72)
+
+      Text(item.title)
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(TEXT_MAIN)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+
+      if (item.author !== '') {
+        Text(item.author)
+          .fontSize(11)
+          .fontColor(TEXT_SUB)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+      }
     }
     .width('100%')
-    .padding(10)
-    .backgroundColor(CARD)
-    .borderRadius(16)
-    .border({ width: 0.5, color: DIVIDER })
+    .alignItems(HorizontalAlign.Start)
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+    .onClick(() => {
+      this.open(item);
+    })
+  }
+
+  @Builder
+  private FlowFooter() {
+    Row({ space: 8 }) {
+      if (this.loading && this.items.length > 0) {
+        LoadingProgress().width(18).height(18).color(PRIMARY)
+        Text('正在加载下一组画廊…').fontSize(12).fontColor(TEXT_SUB)
+      } else if (this.error !== '' && this.items.length > 0) {
+        Text('加载失败，点击重试')
+          .fontSize(12)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(PRIMARY)
+          .onClick(() => {
+            this.load('more');
+          })
+      } else if (this.items.length > 0 && this.nextUrl === '') {
+        Text('— 没有更多了 —').fontSize(12).fontColor(TEXT_SUB)
+      }
+    }
+    .width('100%')
+    .height(48)
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder
@@ -289,7 +359,7 @@ export struct EhBrowsePage {
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
     } else {
-      WaterFlow() {
+      WaterFlow({ footer: (): void => this.FlowFooter() }) {
         LazyForEach(this.gallerySource, (item: AlbumLite) => {
           FlowItem() {
             this.GalleryCard(item)
@@ -337,15 +407,17 @@ export struct EhBrowsePage {
           })
 
           Column({ space: 2 }) {
-            Text(`E-Hentai · ${this.siteLabel === 'EXHENTAI' ? '里站' : '表站'}`)
+            Text(this.siteLabel === 'EXHENTAI' ? 'ExHentai' : 'E-Hentai')
               .fontSize(17)
               .fontWeight(FontWeight.Bold)
               .fontColor(TEXT_MAIN)
               .maxLines(1)
-            Text(EhSettings.exDowngraded() ? '里站未登录，已临时回退表站' : '画廊广场 · 热门 · 关注 · 云端收藏')
-              .fontSize(11)
-              .fontColor(TEXT_SUB)
-              .maxLines(1)
+            if (EhSettings.exDowngraded()) {
+              Text('里站未登录，已临时回退表站')
+                .fontSize(11)
+                .fontColor(PRIMARY)
+                .maxLines(1)
+            }
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
@@ -410,43 +482,25 @@ export struct EhBrowsePage {
         .width('100%')
         .padding({ left: 16, right: 16, top: 10, bottom: 4 })
 
-        Column() {
-          this.ListBody()
+        Refresh({ refreshing: $$this.refreshing }) {
+          Column() {
+            this.ListBody()
+          }
+          .width('100%')
+          .height('100%')
         }
         .layoutWeight(1)
         .width('100%')
         .padding({ left: 16, right: 16 })
+        .onRefreshing(() => {
+          this.load('reset');
+        })
         .onAreaChange((_old: Area, newArea: Area) => {
           const width: number = ehLengthToNumber(newArea.width);
           if (width > 0 && Math.abs(width - this.containerWidth) >= 1) {
             this.containerWidth = width;
           }
         })
-
-        if (this.error !== '' && this.items.length > 0) {
-          Text(this.error)
-            .fontSize(12)
-            .fontColor(TEXT_SUB)
-            .width('100%')
-            .textAlign(TextAlign.Center)
-            .padding({ left: 16, right: 16, top: 4 })
-        }
-
-        if (this.items.length > 0 && (this.nextUrl !== '' || this.prevUrl !== '' || this.firstUrl !== '')) {
-          Row({ space: 10 }) {
-            this.PagerButton('首页', this.firstUrl !== '', () => {
-              this.load('first');
-            })
-            this.PagerButton('重载', true, () => {
-              this.load('reset');
-            })
-            this.PagerButton('加载更多', this.nextUrl !== '' && !this.loading, () => {
-              this.load('more');
-            })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-        }
       }
       .width('100%')
       .height('100%')
@@ -455,7 +509,7 @@ export struct EhBrowsePage {
       .bindSheet($$this.filterSheet, this.FilterSheetPanel(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
-        backgroundColor: CARD
+        systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }
     .hideTitleBar(true)

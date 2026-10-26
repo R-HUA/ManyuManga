@@ -59,7 +59,7 @@ export struct WorkSourceSheet {
                 }
                 .width('100%')
 
-                Text(`${item.episodes.length} 个章节 · ID: ${item.id}`)
+                Text(`${item.episodes.length} 个章节 (ID: ${item.id})`)
                   .fontColor(TEXT_SUB)
                   .fontSize(11)
               }

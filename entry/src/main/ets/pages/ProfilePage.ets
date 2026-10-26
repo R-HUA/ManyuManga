@@ -165,6 +165,42 @@ export struct ProfilePage {
     }
   }
 
+  private openBackupMenu(): void {
+    this.getUIContext().showAlertDialog({
+      title: '全量备份与恢复',
+      message: '请选择导出备份文件或从文件恢复备份：',
+      primaryButton: {
+        value: '导出备份',
+        fontColor: PRIMARY,
+        action: () => {
+          if (!this.busy) {
+            this.backup(false);
+          }
+        }
+      },
+      secondaryButton: {
+        value: '恢复备份',
+        fontColor: PRIMARY,
+        action: () => {
+          if (!this.busy) {
+            this.getUIContext().showAlertDialog({
+              title: '恢复全量备份',
+              message: '将使用备份文件替换当前的书架、书源配置与阅读记录，确认继续吗？',
+              primaryButton: { value: '取消', action: () => {} },
+              secondaryButton: {
+                value: '选择备份文件',
+                fontColor: PRIMARY,
+                action: () => {
+                  this.backup(true);
+                }
+              }
+            });
+          }
+        }
+      }
+    });
+  }
+
   private cleanLegacy(): void {
     if (this.busy) {
       return;
@@ -217,11 +253,63 @@ export struct ProfilePage {
     .alignItems(HorizontalAlign.Center)
   }
 
+  @Builder
+  private NavRow(icon: Resource, title: string, valueText: string, onTap: () => void) {
+    Row({ space: 12 }) {
+      SymbolGlyph(icon)
+        .fontSize(20)
+        .fontColor([PRIMARY])
+      Text(title)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(TEXT_MAIN)
+        .layoutWeight(1)
+      if (valueText !== '') {
+        Text(valueText)
+          .fontSize(13)
+          .fontColor(TEXT_SUB)
+      }
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(14)
+        .fontColor([TEXT_SUB])
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 48 })
+    .alignItems(VerticalAlign.Center)
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
+    .onClick(() => {
+      onTap();
+    })
+  }
+
+  @Builder
+  private ToggleRow(icon: Resource, title: string, isOn: boolean, onChange: (val: boolean) => void) {
+    Row({ space: 12 }) {
+      SymbolGlyph(icon)
+        .fontSize(20)
+        .fontColor([PRIMARY])
+      Text(title)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(TEXT_MAIN)
+        .layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: isOn })
+        .selectedColor(PRIMARY)
+        .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+        .onChange((v: boolean) => {
+          onChange(v);
+        })
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 48 })
+    .alignItems(VerticalAlign.Center)
+  }
+
   build() {
     Column() {
       // 顶栏
       Row({ space: 10 }) {
-        Text('设置')
+        Text('我的')
           .fontSize(26)
           .fontWeight(FontWeight.Bold)
           .fontColor(TEXT_MAIN)
@@ -233,11 +321,11 @@ export struct ProfilePage {
 
       Scroll() {
         Column({ space: 16 }) {
-          // 1. 阅读统计
+          // 1. 阅读统计看板
           Column({ space: 14 }) {
             Row() {
-              Text('阅读统计')
-                .fontSize(17)
+              Text('漫屿阅读看板')
+                .fontSize(16)
                 .fontColor(TEXT_MAIN)
                 .fontWeight(FontWeight.Bold)
                 .layoutWeight(1)
@@ -257,44 +345,6 @@ export struct ProfilePage {
               this.Metric(`${Math.floor(this.stats.milliseconds / 60000)}`, '分', '阅读时长')
             }
             .width('100%')
-
-            if (this.distribution.length > 0) {
-              Column({ space: 8 }) {
-                Text('书架书源分布')
-                  .fontSize(12)
-                  .fontColor(TEXT_SUB)
-                  .width('100%')
-                ForEach(this.distribution, (item: SourceCount) => {
-                  Column({ space: 4 }) {
-                    Row() {
-                      Text(item.name)
-                        .fontColor(TEXT_MAIN)
-                        .fontSize(12)
-                        .fontWeight(FontWeight.Medium)
-                        .layoutWeight(1)
-                      Text(`${item.count} 部`)
-                        .fontColor(PRIMARY)
-                        .fontSize(12)
-                        .fontWeight(FontWeight.Bold)
-                    }
-                    .width('100%')
-
-                    Progress({
-                      value: this.bookCount > 0 ? Math.round((item.count / this.bookCount) * 100) : 0,
-                      total: 100,
-                      type: ProgressType.Linear
-                    })
-                      .width('100%')
-                      .height(5)
-                      .color(PRIMARY)
-                      .backgroundColor(SUB_CARD)
-                  }
-                  .width('100%')
-                }, (item: SourceCount) => item.name)
-              }
-              .width('100%')
-              .padding({ top: 4 })
-            }
           }
           .padding(18)
           .width('100%')
@@ -302,41 +352,49 @@ export struct ProfilePage {
           .borderRadius(20)
           .border({ width: 0.5, color: DIVIDER })
 
-          // 2. 外观与阅读
-          Column({ space: 12 }) {
-            Text('外观与阅读')
-              .fontSize(17)
-              .fontColor(TEXT_MAIN)
-              .fontWeight(FontWeight.Bold)
-              .width('100%')
+          // 2. 常用功能快捷入口
+          Column({ space: 6 }) {
+            this.NavRow($r('sys.symbol.arrow_down_circle'), '离线下载与导出', '', () => {
+              this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams);
+            })
+            Divider().color(DIVIDER).margin({ left: 32 })
+            this.NavRow($r('sys.symbol.shield_checkered'), '全局屏蔽规则', '', () => {
+              this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: '' } as MangaRouteParams);
+            })
+          }
+          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+          .width('100%')
+          .backgroundColor(CARD)
+          .borderRadius(20)
+          .border({ width: 0.5, color: DIVIDER })
 
+          // 3. 外观与阅读偏好
+          Column({ space: 4 }) {
             SettingSelectRow({
               title: '全局色彩主题',
-              subtitle: '浅色、深色或跟随系统昼夜模式',
+              subtitle: '',
               options: ['跟随系统', '浅色', '深色'],
               selectedIndex: this.theme,
               onChanged: (idx: number): void => {
                 this.changeTheme(idx);
               }
             })
-
-            Divider().color(DIVIDER)
+            Divider().color(DIVIDER).margin({ left: 16 })
 
             SettingSelectRow({
               title: '默认阅读模式',
-              subtitle: '打开漫画时默认采用的翻页方式',
+              subtitle: '',
               options: this.modeLabels,
               selectedIndex: this.reader,
               onChanged: (idx: number): void => {
                 this.saveOption('reader', idx);
               }
             })
-
-            Divider().color(DIVIDER)
+            Divider().color(DIVIDER).margin({ left: 16 })
 
             SettingSelectRow({
               title: '章节预加载页数',
-              subtitle: '翻页时后台提前解码缓存的页数',
+              subtitle: '',
               options: ['省流 (1 页)', '标准 (3 页)', '进取 (5 页)', '极速 (8 页)'],
               selectedIndex: [1, 3, 5, 8].indexOf(this.preload) >= 0 ? [1, 3, 5, 8].indexOf(this.preload) : 1,
               onChanged: (idx: number): void => {
@@ -344,21 +402,14 @@ export struct ProfilePage {
                 this.saveOption('preload', counts[idx] ?? 3);
               }
             })
-
-            Divider().color(DIVIDER)
+            Divider().color(DIVIDER).margin({ left: 16 })
 
             Row() {
-              Column({ space: 2 }) {
-                Text('阅读时自动缓存原图')
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('sys.color.font_primary'))
-                Text('开启后翻页更流畅，关闭可节省空间')
-                  .fontSize(11)
-                  .fontColor($r('sys.color.font_secondary'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
+              Text('阅读时自动缓存原图')
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('sys.color.font_primary'))
+                .layoutWeight(1)
 
               Toggle({ type: ToggleType.Switch, isOn: this.autoCache })
                 .selectedColor(PRIMARY)
@@ -370,20 +421,14 @@ export struct ProfilePage {
             .width('100%')
             .constraintSize({ minHeight: 48 })
 
-            Divider().color(DIVIDER)
+            Divider().color(DIVIDER).margin({ left: 16 })
 
             Row() {
-              Column({ space: 2 }) {
-                Text('记录浏览历史')
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('sys.color.font_primary'))
-                Text('在更新页保留最近阅读与浏览记录')
-                  .fontSize(11)
-                  .fontColor($r('sys.color.font_secondary'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
+              Text('记录浏览历史')
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('sys.color.font_primary'))
+                .layoutWeight(1)
 
               Toggle({ type: ToggleType.Switch, isOn: this.history })
                 .selectedColor(PRIMARY)
@@ -395,166 +440,46 @@ export struct ProfilePage {
             .width('100%')
             .constraintSize({ minHeight: 48 })
           }
-          .padding(18)
+          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
           .width('100%')
           .backgroundColor(CARD)
           .borderRadius(20)
           .border({ width: 0.5, color: DIVIDER })
 
-          // 3. 存储与隐私
-          Column({ space: 14 }) {
-            Text('存储与隐私')
-              .fontSize(17)
-              .fontColor(TEXT_MAIN)
-              .fontWeight(FontWeight.Bold)
-              .width('100%')
+          // 4. 存储、隐私与数据备份
+          Column({ space: 4 }) {
+            this.ToggleRow($r('sys.symbol.lock_fill'), '应用锁保护', this.securityLock, (on: boolean) => {
+              this.confirmLock(on);
+            })
+            Divider().color(DIVIDER).margin({ left: 32 })
 
-            Row() {
-              Column({ space: 2 }) {
-                Text('应用锁')
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('sys.color.font_primary'))
-                Text(this.securityLock ? '已开启，关闭前需要再次验证' : '关闭。开启后冷启动和回到前台需要验证')
-                  .fontSize(11)
-                  .fontColor($r('sys.color.font_secondary'))
+            this.ToggleRow($r('sys.symbol.eye_slash'), '后台多任务模糊保护', this.previewOn, (on: boolean) => {
+              this.saveOption('preview', on);
+            })
+            Divider().color(DIVIDER).margin({ left: 32 })
+
+            this.NavRow($r('sys.symbol.arrow_clockwise'), '全量备份与恢复', '', () => {
+              this.openBackupMenu();
+            })
+            Divider().color(DIVIDER).margin({ left: 32 })
+
+            this.NavRow(
+              $r('sys.symbol.trash'),
+              '清理图片缓存',
+              `${(this.cache / 1048576).toFixed(1)} MB`,
+              () => {
+                clearPageCache();
+                this.cache = pageCacheSize();
+                promptAction.showToast({ message: '已释放图片缓存' });
               }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
+            )
+            Divider().color(DIVIDER).margin({ left: 32 })
 
-              Button(this.securityLock ? '关闭' : '开启', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                .fontSize(13)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(PRIMARY)
-                .backgroundColor(PRIMARY_SOFT)
-                .height(36)
-                .onClick((): void => {
-                  this.confirmLock(!this.securityLock);
-                })
-            }
-            .width('100%')
-            .constraintSize({ minHeight: 48 })
-
-            Divider().color(DIVIDER)
-
-            Row() {
-              Column({ space: 2 }) {
-                Text('后台预览保护')
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('sys.color.font_primary'))
-                Text('切到多任务时遮住画面，与应用锁分开')
-                  .fontSize(11)
-                  .fontColor($r('sys.color.font_secondary'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
-
-              Toggle({ type: ToggleType.Switch, isOn: this.previewOn })
-                .selectedColor(PRIMARY)
-                .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
-                .onChange((on: boolean) => {
-                  this.saveOption('preview', on);
-                })
-            }
-            .width('100%')
-            .constraintSize({ minHeight: 48 })
-
-            Divider().color(DIVIDER)
-
-            Button('全局屏蔽规则', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(14)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(PRIMARY)
-              .backgroundColor(PRIMARY_SOFT)
-              .width('100%')
-              .height(40)
-              .onClick(() => {
-                this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: '' } as MangaRouteParams);
-              })
-
-            Row({ space: 10 }) {
-              Button('离线下载管理', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                .fontSize(13)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(PRIMARY)
-                .backgroundColor(PRIMARY_SOFT)
-                .layoutWeight(1)
-                .height(40)
-                .onClick(() => {
-                  this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams);
-                })
-
-              Button(`清理缓存 (${(this.cache / 1048576).toFixed(1)} MB)`, {
-                type: ButtonType.Capsule,
-                buttonStyle: ButtonStyleMode.NORMAL
-              })
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(TEXT_MAIN)
-                .backgroundColor(SUB_CARD)
-                .layoutWeight(1)
-                .height(40)
-                .onClick(() => {
-                  clearPageCache();
-                  this.cache = pageCacheSize();
-                  promptAction.showToast({ message: '已释放图片缓存' });
-                })
-            }
-            .width('100%')
-
-            Row({ space: 10 }) {
-              Button('导出全量备份', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(TEXT_MAIN)
-                .backgroundColor(SUB_CARD)
-                .layoutWeight(1)
-                .height(40)
-                .onClick(() => {
-                  if (!this.busy) {
-                    this.backup(false);
-                  }
-                })
-
-              Button('恢复备份数据', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(TEXT_MAIN)
-                .backgroundColor(SUB_CARD)
-                .layoutWeight(1)
-                .height(40)
-                .onClick(() => {
-                  if (!this.busy) {
-                    this.getUIContext().showAlertDialog({
-                      title: '恢复全量备份',
-                      message: '将使用备份文件替换当前的书架、书源配置与阅读记录，确认继续吗？',
-                      primaryButton: { value: '取消', action: () => {} },
-                      secondaryButton: {
-                        value: '选择备份文件',
-                        fontColor: PRIMARY,
-                        action: () => {
-                          this.backup(true);
-                        }
-                      }
-                    });
-                  }
-                })
-            }
-            .width('100%')
-
-            Button('清理旧版数据', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(TEXT_MAIN)
-              .backgroundColor(SUB_CARD)
-              .width('100%')
-              .height(40)
-              .onClick((): void => {
-                this.cleanLegacy();
-              })
+            this.NavRow($r('sys.symbol.exclamationmark_circle'), '清理旧版遗留数据', '', () => {
+              this.cleanLegacy();
+            })
           }
-          .padding(18)
+          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
           .width('100%')
           .backgroundColor(CARD)
           .borderRadius(20)
@@ -568,12 +493,13 @@ export struct ProfilePage {
               .width('100%')
           }
 
+          // 品牌标识
           Column({ space: 4 }) {
-            Text('漫语')
+            Text('漫屿')
               .fontSize(15)
               .fontWeight(FontWeight.Bold)
               .fontColor(TEXT_MAIN)
-            Text('版本 v1.0.0')
+            Text('Manyu Manga v1.0.0')
               .fontSize(11)
               .fontColor(TEXT_SUB)
           }

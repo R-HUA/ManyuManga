@@ -351,8 +351,8 @@ export struct SearchAllPage {
             if (this.scope === 'library') {
               LibrarySearchResults({ works: this.libraryWorks, loading: this.libraryLoading })
             }
-            ForEach(this.visibleGroups(), (group: SearchGroup) => {
-              Column({ space: 12 }) {
+            ForEach(this.visibleGroups(), (group: SearchGroup, groupIndex: number) => {
+              Column({ space: 10 }) {
                 Row({ space: 8 }) {
                   Text(presentationFor(group.source.kind).shortLabel)
                     .fontSize(10)
@@ -371,11 +371,24 @@ export struct SearchAllPage {
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
 
                   if (group.loading) {
-                    LoadingProgress().width(20).height(20).color(PRIMARY)
-                  } else {
-                    Text(`${group.items.length} 部`)
-                      .fontSize(12)
-                      .fontColor(TEXT_SUB)
+                    LoadingProgress().width(18).height(18).color(PRIMARY)
+                  } else if (group.items.length > 0) {
+                    Row({ space: 4 }) {
+                      Text(`${group.items.length} 部`)
+                        .fontSize(12)
+                        .fontColor(TEXT_SUB)
+                      if (group.more) {
+                        SymbolGlyph($r('sys.symbol.arrow_right'))
+                          .fontSize(14)
+                          .fontColor([PRIMARY])
+                      }
+                    }
+                    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
+                    .onClick(() => {
+                      if (group.more && !group.loading) {
+                        this.loadGroup(groupIndex, group.page + 1);
+                      }
+                    })
                   }
                 }
                 .width('100%')
@@ -388,7 +401,7 @@ export struct SearchAllPage {
                       .fontColor(TEXT_SUB)
                       .layoutWeight(1)
                       .maxLines(2)
-                    Text('重试此源')
+                    Text('重试')
                       .fontSize(12)
                       .fontWeight(FontWeight.Bold)
                       .fontColor(PRIMARY)
@@ -396,10 +409,7 @@ export struct SearchAllPage {
                       .borderRadius(14)
                       .backgroundColor(PRIMARY_SOFT)
                       .onClick(() => {
-                        const idx: number = this.groups.indexOf(group);
-                        if (idx >= 0) {
-                          this.loadGroup(idx, Math.max(1, group.page));
-                        }
+                        this.loadGroup(groupIndex, Math.max(1, group.page));
                       })
                   }
                   .width('100%')
@@ -414,53 +424,100 @@ export struct SearchAllPage {
                 }
 
                 if (group.items.length > 0) {
-                  Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
-                    ForEach(group.items, (item: AlbumLite) => {
-                      Column({ space: 6 }) {
-                        SourceCover({ url: item.coverUrl, sourceKey: item.id, radius: 10 })
-                        Text(item.title)
-                          .fontSize(12)
-                          .fontWeight(FontWeight.Medium)
-                          .fontColor(TEXT_MAIN)
-                          .maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis })
-                          .width('100%')
-                        if (item.author !== '') {
-                          Text(item.author)
-                            .fontSize(10)
-                            .fontColor(TEXT_SUB)
+                  if (this.scope === 'all') {
+                    // 全源搜索：横向滑动画廊轨（一屏对比多源结果）
+                    List({ space: 10 }) {
+                      ForEach(group.items, (item: AlbumLite) => {
+                        ListItem() {
+                          Column({ space: 6 }) {
+                            Stack({ alignContent: Alignment.BottomStart }) {
+                              SourceCover({ url: item.coverUrl, sourceKey: item.id, radius: 10 })
+                              Text(item.title)
+                                .fontSize(11)
+                                .fontWeight(FontWeight.Medium)
+                                .fontColor(Color.White)
+                                .maxLines(2)
+                                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                .width('100%')
+                                .padding({ left: 6, right: 6, top: 16, bottom: 6 })
+                                .linearGradient({
+                                  angle: 180,
+                                  colors: [['rgba(0,0,0,0.0)', 0.0], ['rgba(8,10,16,0.85)', 1.0]]
+                                })
+                            }
+                            .width(108)
+                            .aspectRatio(0.72)
+                            .borderRadius(10)
+                            .clip(true)
+
+                            if (item.author !== '') {
+                              Text(item.author)
+                                .fontSize(10)
+                                .fontColor(TEXT_SUB)
+                                .maxLines(1)
+                                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                                .width(108)
+                            }
+                          }
+                          .width(108)
+                          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+                          .onClick(() => {
+                            this.choose(item);
+                          })
+                        }
+                      }, (item: AlbumLite) => item.id)
+                    }
+                    .listDirection(Axis.Horizontal)
+                    .scrollBar(BarState.Off)
+                    .width('100%')
+                    .height(180)
+                  } else {
+                    // 单源搜索：纵向折行卡片网格
+                    Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+                      ForEach(group.items, (item: AlbumLite) => {
+                        Column({ space: 6 }) {
+                          SourceCover({ url: item.coverUrl, sourceKey: item.id, radius: 10 })
+                          Text(item.title)
+                            .fontSize(12)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor(TEXT_MAIN)
                             .maxLines(1)
                             .textOverflow({ overflow: TextOverflow.Ellipsis })
                             .width('100%')
+                          if (item.author !== '') {
+                            Text(item.author)
+                              .fontSize(10)
+                              .fontColor(TEXT_SUB)
+                              .maxLines(1)
+                              .textOverflow({ overflow: TextOverflow.Ellipsis })
+                              .width('100%')
+                          }
                         }
-                      }
-                      .width('31%')
-                      .margin({ right: '2%', bottom: 12 })
-                      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-                      .onClick(() => {
-                        this.choose(item);
-                      })
-                    }, (item: AlbumLite) => item.id)
-                  }
-                  .width('100%')
-                }
-
-                if (group.more && !group.loading) {
-                  Text('加载更多结果')
-                    .fontSize(13)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor(PRIMARY)
-                    .textAlign(TextAlign.Center)
+                        .width('31%')
+                        .margin({ right: '2%', bottom: 12 })
+                        .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+                        .onClick(() => {
+                          this.choose(item);
+                        })
+                      }, (item: AlbumLite) => item.id)
+                    }
                     .width('100%')
-                    .padding({ top: 9, bottom: 9 })
-                    .borderRadius(14)
-                    .backgroundColor(SUB_CARD)
-                    .onClick(() => {
-                      const idx: number = this.groups.indexOf(group);
-                      if (idx >= 0) {
-                        this.loadGroup(idx, group.page + 1);
-                      }
-                    })
+
+                    if (group.more && !group.loading) {
+                      Text('加载更多结果')
+                        .fontSize(13)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(PRIMARY)
+                        .textAlign(TextAlign.Center)
+                        .width('100%')
+                        .padding({ top: 9, bottom: 9 })
+                        .borderRadius(14)
+                        .backgroundColor(SUB_CARD)
+                        .onClick(() => {
+                          this.loadGroup(groupIndex, group.page + 1);
+                        })
+                    }
+                  }
                 }
               }
               .padding(16)

@@ -37,7 +37,7 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   jm.capabilities.categories = true;
   jm.capabilities.domainTest = true;
   jm.presentation.shortLabel = 'JM';
-  jm.presentation.description = '内置图源 · 精选 / 分类 / 镜像测速';
+  jm.presentation.description = '精选推荐、分类检索与镜像测速';
   jm.presentation.useAccent = true;
   jm.presentation.idJumpPlaceholder = '输入 JM 纯数字车号直达详情…';
   jm.presentation.idJumpLabel = '车号直达';
@@ -51,7 +51,7 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   eh.capabilities.idJump = true;
   eh.capabilities.signedCover = true;
   eh.presentation.shortLabel = 'EH';
-  eh.presentation.description = '内置图源 · 画廊广场 / 排行 / 收藏 / 标签汉化';
+  eh.presentation.description = '画廊广场、排行榜与标签汉化';
   eh.presentation.iconToken = 'gallery';
   eh.presentation.useAccent = true;
   eh.presentation.idJumpPlaceholder = '粘贴画廊链接或 GID/Token…';

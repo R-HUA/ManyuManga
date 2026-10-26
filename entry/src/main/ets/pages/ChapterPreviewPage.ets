@@ -8,8 +8,6 @@ import { IconCircleButton, EmptyView } from '../common/Components';
 import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
-/** 每页展示 24 张缩略图 */
-const PAGE_SIZE: number = 24;
 
 @Component
 export struct ChapterPreviewPage {
@@ -50,30 +48,6 @@ export struct ChapterPreviewPage {
       parts.push('1fr');
     }
     return parts.join(' ');
-  }
-
-  private totalPageCount(): number {
-    return Math.max(1, Math.ceil(this.allPages.length / PAGE_SIZE));
-  }
-
-  private currentSlice(): Array<string> {
-    const start: number = this.currentPageIndex * PAGE_SIZE;
-    return this.allPages.slice(start, start + PAGE_SIZE);
-  }
-
-  private globalPageIndex(localIdx: number): number {
-    return this.currentPageIndex * PAGE_SIZE + localIdx;
-  }
-
-  private pageSelectOptions(): Array<SelectOption> {
-    const total: number = this.totalPageCount();
-    const out: Array<SelectOption> = [];
-    for (let i = 0; i < total; i++) {
-      const startPage: number = i * PAGE_SIZE + 1;
-      const endPage: number = Math.min(this.allPages.length, (i + 1) * PAGE_SIZE);
-      out.push({ value: `第 ${i + 1}/${total} 页 (P.${startPage}-${endPage})` });
-    }
-    return out;
   }
 
   private async load(): Promise<void> {
@@ -122,14 +96,14 @@ export struct ChapterPreviewPage {
           })
 
           Column({ space: 2 }) {
-            Text(`章节速览 · ${this.chapterTitle}`)
+            Text(this.chapterTitle || '章节速览')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
               .fontColor(TEXT_MAIN)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
             if (this.allPages.length > 0) {
-              Text(`共 ${this.allPages.length} 页 · 点击缩略图直达对应页`)
+              Text(`共 ${this.allPages.length} 页`)
                 .fontSize(11)
                 .fontColor(TEXT_SUB)
             }
@@ -177,7 +151,7 @@ export struct ChapterPreviewPage {
           .justifyContent(FlexAlign.Center)
         } else {
           Grid() {
-            ForEach(this.currentSlice(), (filename: string, idx: number) => {
+            ForEach(this.allPages, (filename: string, idx: number) => {
               GridItem() {
                 Column({ space: 4 }) {
                   Stack({ alignContent: Alignment.BottomStart }) {
@@ -190,7 +164,7 @@ export struct ChapterPreviewPage {
                       .width('100%')
                       .height('100%')
 
-                    Text(`P.${this.globalPageIndex(idx) + 1}`)
+                    Text(`P.${idx + 1}`)
                       .fontSize(10)
                       .fontWeight(FontWeight.Bold)
                       .fontColor(Color.White)
@@ -209,15 +183,15 @@ export struct ChapterPreviewPage {
                 .width('100%')
                 .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
                 .onClick(() => {
-                  this.openReaderAt(this.globalPageIndex(idx));
+                  this.openReaderAt(idx);
                 })
               }
-            }, (filename: string, idx: number) => `${this.currentPageIndex}_${idx}_${filename}`)
+            }, (filename: string, idx: number) => `${idx}_${filename}`)
           }
           .columnsTemplate(this.columnsTemplateStr())
           .columnsGap(10)
           .rowsGap(12)
-          .padding({ left: 16, right: 16, top: 12, bottom: 16 })
+          .padding({ left: 16, right: 16, top: 12, bottom: 16 + this.bottomInset })
           .width('100%')
           .layoutWeight(1)
           .onAreaChange((_oldArea: Area, newArea: Area) => {
@@ -226,55 +200,6 @@ export struct ChapterPreviewPage {
               this.gridWidthVp = w;
             }
           })
-
-          // 底部分页控制栏
-          if (this.totalPageCount() > 1) {
-            Row({ space: 12 }) {
-              Button('上一页', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.currentPageIndex > 0 ? TEXT_MAIN : TEXT_SUB)
-                .backgroundColor(SUB_CARD)
-                .enabled(this.currentPageIndex > 0)
-                .height(38)
-                .onClick(() => {
-                  if (this.currentPageIndex > 0) {
-                    this.currentPageIndex -= 1;
-                  }
-                })
-
-              Select(this.pageSelectOptions())
-                .selected(this.currentPageIndex)
-                .value(`第 ${this.currentPageIndex + 1} / ${this.totalPageCount()} 页`)
-                .font({ size: 13, weight: FontWeight.Bold })
-                .fontColor(PRIMARY)
-                .backgroundColor(PRIMARY_SOFT)
-                .borderRadius(19)
-                .height(38)
-                .layoutWeight(1)
-                .menuSystemMaterial(IMMERSIVE_REGULAR_MATERIAL)
-                .onSelect((index: number) => {
-                  this.currentPageIndex = index;
-                })
-
-              Button('下一页', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.currentPageIndex < this.totalPageCount() - 1 ? TEXT_MAIN : TEXT_SUB)
-                .backgroundColor(SUB_CARD)
-                .enabled(this.currentPageIndex < this.totalPageCount() - 1)
-                .height(38)
-                .onClick(() => {
-                  if (this.currentPageIndex < this.totalPageCount() - 1) {
-                    this.currentPageIndex += 1;
-                  }
-                })
-            }
-            .width('100%')
-            .padding({ left: 16, right: 16, top: 10, bottom: 12 + this.bottomInset })
-            .backgroundColor(CARD)
-            .border({ width: { top: 0.5 }, color: DIVIDER })
-          }
         }
       }
       .width('100%')

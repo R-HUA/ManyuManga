@@ -22,7 +22,7 @@ export struct LibraryContinueBanner {
       .height(48)
 
       Column({ space: 3 }) {
-        Text(`继续阅读 · 第 ${this.progress[0].page + 1}/${Math.max(1, this.progress[0].totalPages)} 页`)
+        Text(`继续阅读 第 ${this.progress[0].page + 1}/${Math.max(1, this.progress[0].totalPages)} 页`)
           .fontColor(PRIMARY)
           .fontSize(11)
           .fontWeight(FontWeight.Bold)

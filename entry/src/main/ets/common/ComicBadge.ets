@@ -83,52 +83,11 @@ export function formatCount(raw: string): string {
   }
   return raw;
 }
-const ZH_WORDS: Array<string> = ['中文', '漢化', '汉化', '中字', '中国', 'chinese', '翻譯', '翻译'];
-const JA_WORDS: Array<string> = ['日本語', '日語', '日文', 'japanese', '生肉', '日版'];
-const KO_WORDS: Array<string> = ['한국', '한글', '韓文', '韩文', 'korean'];
-const FC_WORDS: Array<string> = ['全彩', 'フルカラー', 'fullcolor', 'full color', '彩漫', '彩色'];
-
-
 /**
- * 语言/全彩徽章启发式。
+ * 语言/全彩徽章启发式（全工程统一对齐 badgeForAlbum）。
  */
 export function langBadgeFor(item: AlbumLite): string {
-  const hay: string = `${item.title} ${item.author} ${item.category} ${item.categorySub}`.toLowerCase();
-  if (containsAny(hay, ZH_WORDS)) {
-    return '中字';
-  }
-  if (containsAny(hay, JA_WORDS)) {
-    return '日漫';
-  }
-  if (containsAny(hay, KO_WORDS)) {
-    return '韩漫';
-  }
-  let hangul: number = 0;
-  let kana: number = 0;
-  let han: number = 0;
-  for (let i: number = 0; i < item.title.length; i++) {
-    const c: number = item.title.charCodeAt(i);
-    if ((c >= 0xAC00 && c <= 0xD7AF) || (c >= 0x3130 && c <= 0x318F)) {
-      hangul++;
-    } else if ((c >= 0x3040 && c <= 0x30FF) || (c >= 0x31F0 && c <= 0x31FF)) {
-      kana++;
-    } else if ((c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)) {
-      han++;
-    }
-  }
-  if (hangul > 0) {
-    return '韩漫';
-  }
-  if (kana > 0) {
-    return '日漫';
-  }
-  if (containsAny(hay, FC_WORDS)) {
-    return '全彩';
-  }
-  if (han > 0) {
-    return '中字';
-  }
-  return '';
+  return badgeForAlbum(item);
 }
 
 /** 码点计数（≤16 字符校验用，等价 Kotlin codePointCount） */

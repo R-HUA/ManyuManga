@@ -103,7 +103,7 @@ export struct ReaderHud {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         if (this.pages.length > 0) {
-          Text(`${this.albumTitle ? this.albumTitle + ' · ' : ''}P.${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
+          Text(`${this.albumTitle ? this.albumTitle + ' ' : ''}P.${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
             .fontSize(11)
             .fontColor('rgba(255,255,255,0.68)')
             .maxLines(1)
@@ -143,18 +143,6 @@ export struct ReaderHud {
         this.toggleBookmark();
       })
 
-      if (this.pages.length > 0) {
-        Text(this.modeShortLabel())
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-          .borderRadius(16)
-          .backgroundColor(PRIMARY)
-          .onClick(() => {
-            this.panel = this.panel === 'mode' ? 'none' : 'mode';
-          })
-      }
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: this.topSafeVp + 8, bottom: 10 })
@@ -193,7 +181,7 @@ export struct ReaderHud {
         .border({ width: 0.5, color: 'rgba(255,255,255,0.16)' })
         .alignItems(HorizontalAlign.Center)
       }
-      if (this.pages.length > 0) {
+      if (this.sliderDragging && this.panel === 'none' && this.pages.length > 0) {
         ReaderThumbStrip({
           pages: this.pages,
           currentPage: this.currentPage,
@@ -244,7 +232,7 @@ export struct ReaderHud {
                   }
                 }
               })
-            Text(`${this.sliderDragging ? Math.round(this.sliderValue) : Math.min(this.currentPage + 1, this.pages.length)} / ${this.pages.length}${this.mode === 'rtl' ? ' · 右翻' : ''}`)
+            Text(`${this.sliderDragging ? Math.round(this.sliderValue) : Math.min(this.currentPage + 1, this.pages.length)} / ${this.pages.length}${this.mode === 'rtl' ? ' (右翻)' : ''}`)
               .fontSize(11)
               .fontColor('rgba(255,255,255,0.72)')
               .textAlign(TextAlign.Center)

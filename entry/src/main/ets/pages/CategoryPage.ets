@@ -1,4 +1,6 @@
-import { CategoryFilterBar } from './jm/CategoryFilterBar';
+import { CategoryFilterBar, CATEGORY_BAR_HEIGHT } from './jm/CategoryFilterBar';
+import { ComicCard } from '../common/ComicCard';
+import { badgeForAlbum } from '../common/ComicBadge';
 import { BasicDataSource } from '../common/DataSource';
 import { formatCount, langBadgeFor } from '../common/ComicBadge';
 import { AlbumCard } from './jm/AlbumCard';
@@ -99,7 +101,7 @@ export struct CategoryPage {
   @State moreError: boolean = false;
   @State finished: boolean = false;
   @State loadedCount: number = 0;
-  @State headerHeight: number = 150;
+  @State headerHeight: number = CATEGORY_BAR_HEIGHT;
 
   private source: AlbumSource = new AlbumSource();
   private scroller: Scroller = new Scroller();
@@ -124,7 +126,7 @@ export struct CategoryPage {
 
   aboutToAppear(): void {
     // 评审 Step2：首帧头部高度估算补上状态栏避让（onAreaChange 随后校准为实际值，缓解首帧重叠）
-    this.headerHeight = (this.embeddedInShell ? 0 : this.topInset) + 150;
+    this.headerHeight = (this.embeddedInShell ? 0 : this.topInset) + CATEGORY_BAR_HEIGHT;
     sourceApi.init().catch((e: Error) => {
       console.info(`[CategoryPage] sourceApi.init: ${errorMessage(e)}`);
     });
@@ -446,11 +448,15 @@ export struct CategoryPage {
       .height('100%')
       .padding({ top: this.headerHeight })
     } else {
-      WaterFlow({ scroller: this.scroller }) {
+      WaterFlow({ scroller: this.scroller, footer: (): void => this.Footer() }) {
         LazyForEach(this.source, (item: AlbumLite) => {
           FlowItem() {
-            AlbumCard({
-              item: item,
+            ComicCard({
+              aid: item.id,
+              coverUrl: item.coverUrl,
+              title: item.title,
+              author: item.author,
+              badge: badgeForAlbum(item),
               onCardClick: (): void => {
                 this.openAlbum(item);
               }
@@ -483,7 +489,7 @@ export struct CategoryPage {
           .fontSize(FONT_CAPTION)
           .fontColor(TEXT_SUB)
       } else if (this.moreError) {
-        Text('加载失败 · 点此重试')
+        Text('加载失败，点击重试')
           .fontSize(FONT_CAPTION)
           .fontColor(PRIMARY)
           .onClick(() => {
@@ -494,7 +500,7 @@ export struct CategoryPage {
           .fontSize(FONT_CAPTION)
           .fontColor(TEXT_SUB)
       } else {
-        Text(`已加载 ${this.loadedCount} 本 · 上拉加载更多`)
+        Text('上拉加载更多')
           .fontSize(FONT_CAPTION)
           .fontColor(TEXT_SUB)
       }
@@ -505,21 +511,12 @@ export struct CategoryPage {
   }
 
   build() {
-    Column() {
-      Stack({ alignContent: Alignment.Top }) {
-        this.Content()
-        this.FilterHeader()
-      }
-      .layoutWeight(1)
-      .width('100%')
-
-      if (this.loadedCount > 0) {
-        this.Footer()
-      }
+    Stack({ alignContent: Alignment.Top }) {
+      this.Content()
+      this.FilterHeader()
     }
     .width('100%')
     .height('100%')
     .padding({ bottom: this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset + SPACE_S : this.bottomInset + SPACE_S })
-
   }
 }

@@ -167,7 +167,8 @@ struct Index {
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor(READER_BG)
+    .backgroundColor('rgba(14, 17, 26, 0.72)')
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
@@ -196,7 +197,8 @@ struct Index {
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor(PRIVACY_MASK)
+    .backgroundColor('rgba(14, 17, 26, 0.72)')
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
