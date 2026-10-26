@@ -3,7 +3,7 @@ import { ReaderHud } from './reader/ReaderHud';
 import { ReaderChapterSheet } from './reader/ReaderChapterSheet';
 import { ReaderImageItem } from './reader/ReaderImageItem';
 import display from '@ohos.display';
-import uiMaterial from '@ohos.arkui.uiMaterial';
+import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { EmptyView } from '../common/Components';
 import { READER_BG, PRIMARY, ACCENT, CHIP_R } from '../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode, asNumber, asRecord, asString } from '../models/Models';
@@ -37,14 +37,14 @@ export struct ReaderPage {
   @State errorMsg: string = '';
   @State currentPage: number = 0;
   @State mode: ReaderMode = 'vertical';
-  @State hudVisible: boolean = false;
-  @State panel: 'none' | 'mode' | 'display' | 'settings' = 'none';
-  @State sheetVisible: boolean = false;
+  @State @Watch('onHudIdle') hudVisible: boolean = false;
+  @State @Watch('onHudIdle') panel: 'none' | 'mode' | 'display' | 'settings' = 'none';
+  @State @Watch('onHudIdle') sheetVisible: boolean = false;
   @State brightnessValue: number = 100;
   @State bgPaper: boolean = false;
   @State preloadCount: number = 3;
   @State sliderValue: number = 1;
-  @State sliderDragging: boolean = false;
+  @State @Watch('onHudIdle') sliderDragging: boolean = false;
   @State canvasWidthVp: number = 0;
   @State canvasHeightVp: number = 0;
   @State topSafeVp: number = 38;
@@ -136,9 +136,7 @@ export struct ReaderPage {
         this.controller.scheduleProgressSave();
       }
     })
-    .onClick((event: ClickEvent) => {
-      this.controller.handleCanvasClick(event.x, event.y);
-    })
+    .gesture(this.readingGesture())
   }
 
   /** 横向翻页（评审 Step4）：跨页序列渲染——horizontal 单页顺排 / rtl 倒排右起 / double 双页并排 */
@@ -184,9 +182,7 @@ export struct ReaderPage {
       this.controller.prefetchAhead(page);
       this.controller.scheduleProgressSave();
     })
-    .onClick((event: ClickEvent) => {
-      this.controller.handleCanvasClick(event.x, event.y);
-    })
+    .gesture(this.readingGesture())
   }
 
   // ───────────────────────── 全屏状态（四态）─────────────────────────
@@ -277,8 +273,35 @@ export struct ReaderPage {
       scrollToPageDelayed: (page: number): void => this.controller.scrollToPageDelayed(page),
       persistOptions: (): Promise<void> => this.controller.persistOptions(),
       setPreload: (n: number): void => this.controller.setPreload(n),
-      bookmarks: this.$bookmarks
+      bookmarks: this.$bookmarks,
+      onHudTouch: (down: boolean): void => this.controller.onHudTouch(down)
     })
+  }
+
+  private onHudIdle(): void {
+    this.controller.syncHudTimer();
+  }
+
+  private readingGesture(): GestureType {
+    return GestureGroup(GestureMode.Exclusive,
+      TapGesture({ count: 2, fingers: 1 })
+        .onAction((event: GestureEvent): void => {
+          const point: Array<number> = this.tapPoint(event);
+          this.controller.onDoubleTap(point[0], point[1]);
+        }),
+      TapGesture({ count: 1, fingers: 1 })
+        .onAction((event: GestureEvent): void => {
+          const point: Array<number> = this.tapPoint(event);
+          this.controller.handleCanvasClick(point[0], point[1]);
+        })
+    );
+  }
+
+  private tapPoint(event: GestureEvent): Array<number> {
+    if (event.fingerList.length === 0) {
+      return [0, 0];
+    }
+    return [event.fingerList[0].localX, event.fingerList[0].localY];
   }
 
   /** HUD 隐藏时的微型常驻页码胶囊 */
@@ -407,8 +430,7 @@ export struct ReaderPage {
       .bindSheet($$this.sheetVisible, this.ChapterSheet(), {
         height: '62%',
         dragBar: true,
-        backgroundColor: '#141722',
-        systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK }),
+        systemMaterial: IMMERSIVE_SHEET_MATERIAL,
         onDisappear: (): void => {
           this.sheetVisible = false;
         }

@@ -1,13 +1,44 @@
 import fs from '@ohos.file.fs';
 import picker from '@ohos.file.picker';
 import zlib from '@ohos.zlib';
-import { Album, Chapter, AlbumLite, SearchResult } from '../models/Models';
-import { getAppContext, Prefs } from '../util/Prefs';
+import { Album, Chapter, AlbumLite, SearchResult, asArray, asRecord, asString } from '../models/Models';
+import { getAppContext } from '../util/Prefs';
 import { sourceKey } from './Sources';
+import { loadLocalBooks, LocalBookRow } from './db/ContentDao';
+import { assertDatabaseGeneration, databaseGeneration, dbTransaction } from './db/AppDatabase';
+import { albumToJson, syncAlbumRelations, txUpsert } from './db/RowCodec';
+import { StoreQueue } from './stores/StoreSupport';
+import { relationalStore } from '@kit.ArkData';
 
 class LocalBook {
   album: Album = new Album();
   files: Record<string, Array<string>> = {};
+}
+function filesFromJson(text: string): Record<string, Array<string>> {
+  const out: Record<string, Array<string>> = {};
+  let parsed: Object | null = null;
+  try {
+    parsed = JSON.parse(text) as Object;
+  } catch (e) {
+    throw new Error('本地漫画文件清单已损坏，请重新导入');
+  }
+  const rec: Record<string, Object> | null = asRecord(parsed);
+  if (rec === null) {
+    throw new Error('本地漫画文件清单格式无效，请重新导入');
+  }
+  const keys: Array<string> = Object.keys(rec);
+  for (const key of keys) {
+    const arr: Array<Object> | null = asArray(rec[key]);
+    if (arr === null) { throw new Error('本地漫画章节文件清单格式无效'); }
+    const paths: Array<string> = [];
+    for (const item of arr) {
+      const path: string = asString(item);
+      if (path === '') { throw new Error('本地漫画图片路径无效'); }
+      paths.push(path);
+    }
+    out[key] = paths;
+  }
+  return out;
 }
 function natural(a: string, b: string): number {
   const aa: Array<string> = a.toLowerCase().match(/\d+|\D+/g) ?? [];
@@ -22,14 +53,34 @@ function natural(a: string, b: string): number {
 
 /** 导入完成才发布书目，应用始终读取沙箱副本。 */
 class LocalSource {
+  private queue: StoreQueue = new StoreQueue();
   private books: Array<LocalBook> = [];
   private loading: Promise<void> | null = null;
   private async load(): Promise<void> {
-    this.books = JSON.parse(await (await Prefs.getInstance()).getString('local_books_v1', '[]')) as Array<LocalBook>;
+    const generation: number = databaseGeneration();
+    const rows: Array<LocalBookRow> = await loadLocalBooks();
+    assertDatabaseGeneration(generation);
+    const books: Array<LocalBook> = [];
+    for (const row of rows) {
+      const book: LocalBook = new LocalBook();
+      book.album = row.album;
+      book.files = filesFromJson(row.filesJson);
+      books.push(book);
+    }
+    this.books = books;
   }
   private async ready(): Promise<void> {
-    if (this.loading === null) { this.loading = this.load(); }
+    if (this.loading === null) {
+      this.loading = this.load().catch((error: Error): void => {
+        this.loading = null;
+        throw error;
+      });
+    }
     await this.loading;
+  }
+  invalidate(): void {
+    this.loading = null;
+    this.books = [];
   }
   async search(query: string): Promise<SearchResult> {
     await this.ready();
@@ -52,7 +103,7 @@ class LocalSource {
     throw new Error('本地章节文件不存在');
   }
   async importFiles(title: string): Promise<Album | null> {
-    await this.ready();
+    const generation: number = databaseGeneration();
     const dialog: picker.DocumentViewPicker = new picker.DocumentViewPicker(getAppContext());
     const uris: Array<string> = await dialog.select({
       maxSelectNumber: 500,
@@ -102,9 +153,16 @@ class LocalSource {
         if (title.trim() === '' && name !== null) { book.album.name = name[1]; }
         if (author !== null) { book.album.author = [author[1]]; }
       }
-      const next: Array<LocalBook> = this.books.concat([book]);
-      await (await Prefs.getInstance()).putString('local_books_v1', JSON.stringify(next));
-      this.books = next;
+      assertDatabaseGeneration(generation);
+      await this.queue.run(async (): Promise<void> => {
+        assertDatabaseGeneration(generation);
+        await dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
+          await txUpsert(tx, 'local_book', ['book_id'], ['book_id', 'payload', 'files_json', 'updated_at'],
+            [book.album.id, albumToJson(book.album), JSON.stringify(book.files), Date.now()]);
+          await syncAlbumRelations(tx, book.album);
+        });
+        this.invalidate();
+      });
       return book.album;
     } catch (e) {
       fs.rmdirSync(root);

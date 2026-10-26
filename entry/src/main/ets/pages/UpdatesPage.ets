@@ -3,6 +3,8 @@ import { library, LibraryWork } from '../data/Library';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_READER, ROUTE_DOWNLOADS } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
 import { sourceId } from '../data/Sources';
+import { capabilitiesForSourceId } from '../data/source/SourceContracts';
+import { presentationFor } from '../data/source/SourceCatalog';
 import { readProgressStore, historyStore } from '../data/Stores';
 import { ReadingProgress, HistoryItem, Album, errorMessage } from '../models/Models';
 import { SourceCover } from '../common/SourceCover';
@@ -113,9 +115,9 @@ export struct UpdatesPage {
 
   private safeSourceBadge(key: string): string {
     try {
-      return sourceId(key).toUpperCase();
+      return presentationFor(capabilitiesForSourceId(sourceId(key)).kind).shortLabel;
     } catch (e) {
-      return 'JM';
+      return '';
     }
   }
 
@@ -151,7 +153,7 @@ export struct UpdatesPage {
   private Entry(title: string, cover: string, subtitle: string, badge: string, key: string, reading: boolean) {
     Row({ space: 14 }) {
       Column() {
-        SourceCover({ url: cover, radius: 10 })
+        SourceCover({ url: cover, sourceKey: key, radius: 10 })
       }
       .width(56)
       .height(74)

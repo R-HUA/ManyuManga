@@ -1,6 +1,8 @@
 import { MangaRouteParams, ROUTE_SEARCH } from '../../common/Route';
 import { Album, Chapter, ReadingProgress } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
+import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
+import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
 import { BG, CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
@@ -17,9 +19,37 @@ export struct WorkHeroInfo {
   @Link sourceSheet: boolean;
   @Link progress: ReadingProgress | null;
   read: (chapter?: Chapter) => void = (chapter?: Chapter): void => {};
+  reread: () => void = (): void => {};
   add: () => Promise<void> = async (): Promise<void> => {};
   download: () => Promise<void> = async (): Promise<void> => {};
   @Link descExpanded: boolean;
+
+  private canContinue(): boolean {
+    const saved: ReadingProgress | null = this.progress;
+    if (saved === null) {
+      return false;
+    }
+    return saved.chapterId !== '' && saved.totalPages > 0 && saved.page >= 0 && saved.page < saved.totalPages;
+  }
+
+  private continueLabel(): string {
+    const saved: ReadingProgress | null = this.progress;
+    if (saved === null) {
+      return '继续阅读';
+    }
+    return `继续阅读 · P.${saved.page + 1}`;
+  }
+
+  private sourceBadge(): string {
+    if (this.sourceName !== '') {
+      return this.sourceName;
+    }
+    try {
+      return presentationFor(capabilitiesForSourceId(sourceId(this.aid)).kind).shortLabel;
+    } catch (e) {
+      return '';
+    }
+  }
 
   build() {
     if (this.album !== null) {
@@ -29,6 +59,7 @@ export struct WorkHeroInfo {
           Column() {
             SourceCover({
               url: this.album.coverUrl,
+              sourceKey: this.aid,
               radius: 14,
               deriveColor: true,
               onColor: (color: string): void => {
@@ -68,7 +99,7 @@ export struct WorkHeroInfo {
 
             // Multi-Source Aggregation Capsule
             Row({ space: 6 }) {
-              Text(this.sourceName || sourceId(this.aid).toUpperCase())
+              Text(this.sourceBadge())
                 .fontSize(11)
                 .fontWeight(FontWeight.Bold)
                 .fontColor(Color.White)
@@ -116,21 +147,36 @@ export struct WorkHeroInfo {
 
         // Primary CTA Row
         Row({ space: 10 }) {
-          Text(this.progress === null
-            ? '开始阅读'
-            : `继续阅读 · P.${this.progress.page + 1}`)
-            .fontSize(15)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .textAlign(TextAlign.Center)
-            .layoutWeight(2)
-            .height(44)
-            .borderRadius(22)
-            .backgroundColor(PRIMARY)
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-            .onClick(() => {
-              this.read();
-            })
+          if (this.canContinue()) {
+            Button(this.continueLabel(), { buttonStyle: ButtonStyleMode.NORMAL })
+              .fontSize(15)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Color.White)
+              .backgroundColor(PRIMARY)
+              .layoutWeight(2)
+              .height(44)
+              .borderRadius(22)
+              .onClick(() => { this.read(); })
+            Button('重新阅读', { buttonStyle: ButtonStyleMode.NORMAL })
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(PRIMARY)
+              .backgroundColor(PRIMARY_SOFT)
+              .layoutWeight(1)
+              .height(44)
+              .borderRadius(22)
+              .onClick(() => { this.reread(); })
+          } else {
+            Button('开始阅读', { buttonStyle: ButtonStyleMode.NORMAL })
+              .fontSize(15)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(Color.White)
+              .backgroundColor(PRIMARY)
+              .layoutWeight(2)
+              .height(44)
+              .borderRadius(22)
+              .onClick(() => { this.read(); })
+          }
 
           Text(this.work === null ? '加入书架' : '已在书架')
             .fontSize(14)

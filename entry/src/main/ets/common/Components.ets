@@ -1,5 +1,5 @@
 import { ComicCard } from './ComicCard';
-import { uiMaterial } from '@kit.ArkUI';
+import { IMMERSIVE_REGULAR_MATERIAL } from './ImmersiveMaterials';
 import { PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, SUB_CARD, DIVIDER, COVER_R, CHIP_R, COVER_ASPECT_RATIO } from './Theme';
 /**
  * 全局复用组件
@@ -83,9 +83,7 @@ export struct SettingSelectRow {
         .selectedOptionFontColor(PRIMARY)
         .optionFont({ size: 15, weight: FontWeight.Normal })
         .backgroundColor(Color.Transparent)
-        .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.REGULAR
-        }))
+        .menuSystemMaterial(IMMERSIVE_REGULAR_MATERIAL)
         .onSelect((index: number) => {
           this.onChanged(index);
         })

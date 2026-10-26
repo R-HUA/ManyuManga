@@ -31,6 +31,8 @@ export class PrefKeys {
   static readonly PRELOAD_PAGES: string = 'preload_pages';
   static readonly BRIGHTNESS: string = 'reader_brightness';
   static readonly SECURITY_LOCK: string = 'security_lock';
+  /** 后台预览遮罩。缺省视为开启，和已开启的应用锁互不覆盖。 */
+  static readonly PREVIEW_PROTECTION: string = 'preview_protection';
   // ── 鸿蒙版新增（api-spec §3.3 [M] 第 2 条：图片解码并发，0=自动；对应 PageLoader.kt:31-44）──
   static readonly DECODE_CONCURRENCY: string = 'decode_concurrency';
   // ── 本地 Store 持久化（JSON 字符串，Stores.ets / DownloadManager.ets 使用）──
@@ -160,6 +162,16 @@ export class Prefs {
     return next;
   }
 
+  async remove(key: string): Promise<void> {
+    const removal: Promise<void> = this.pendingWrite.then(async (): Promise<void> => {
+      const store: preferences.Preferences = await this.prefs();
+      await store.delete(key);
+      await store.flush();
+    });
+    this.pendingWrite = removal.catch((): void => {});
+    return removal;
+  }
+
   // ───────────────────────── 类型化便捷读写（页面层直接用） ─────────────────────────
 
   /** 自动缓存页图（默认开，AppPrefs auto_cache） */
@@ -241,6 +253,15 @@ export class Prefs {
 
   async setSecurityLock(v: boolean): Promise<void> {
     return this.putBool(PrefKeys.SECURITY_LOCK, v);
+  }
+
+  /** 后台预览保护（默认开）。与应用锁分开保存。 */
+  async previewProtection(): Promise<boolean> {
+    return this.getBool(PrefKeys.PREVIEW_PROTECTION, true);
+  }
+
+  async setPreviewProtection(v: boolean): Promise<void> {
+    return this.putBool(PrefKeys.PREVIEW_PROTECTION, v);
   }
 
   /** 收藏排序：time_desc / time_asc / title_asc / title_desc */

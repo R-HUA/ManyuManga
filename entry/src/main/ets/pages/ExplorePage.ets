@@ -9,7 +9,8 @@ import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } f
 import { PRIMARY, TEXT_MAIN, TEXT_SUB, CHIP_BG, TAB_INACTIVE, BAR_LIGHT, STATUS_OK, TAB_BAR_HEIGHT, CHIP_R, FONT_TITLE, FONT_CAPTION, FONT_BADGE, SPACE_XS, SPACE_S, SPACE_M, SPACE_L, SPACE_XL } from '../common/Theme';
 import { ComicCard, EmptyView, SkeletonGrid } from '../common/Components';
 import { AlbumLite, RankingType, DomainSpeed, errorMessage } from '../models/Models';
-import { sourceApi as jmApi } from '../data/SourceApi';
+import { sourceApi } from '../data/SourceApi';
+import { sourceId } from '../data/Sources';
 import { homeCacheStore, blockTagsStore, HomeCacheData } from '../data/Stores';
 /* ── 奖牌/状态灯语义色已切换 Theme token；
      仅银色角标上的深色数字保留本地常量（Theme 无对应文本色 token，保证对比度）── */
@@ -48,7 +49,7 @@ class RankTab {
 /** 路由参数  */
 class SearchRouteParam {
   query: string = '';
-  sourceId: string = 'jm';
+  sourceId: string = '';
 }
 
 class AlbumRouteParam {
@@ -80,6 +81,7 @@ export struct ExplorePage {
   /** 全局路由栈 */
   @Consume('navPathStack') navPathStack: NavPathStack;
   @Prop embeddedInShell: boolean = false;
+  @Prop sourceIdValue: string = '';
 
   /* ── 安全区/断点契约 ── */
   @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
@@ -226,7 +228,7 @@ export struct ExplorePage {
     }
     this.rankError = '';
     try {
-      const list: Array<AlbumLite> = await jmApi.ranking('0', order, 1);
+      const list: Array<AlbumLite> = await sourceApi.ranking(this.sourceIdValue, '0', order, 1);
       if (seq !== this.rankSeq) {
         return false;
       }
@@ -256,7 +258,7 @@ export struct ExplorePage {
   private async fetchRandom(manual: boolean): Promise<boolean> {
     this.randomLoading = true;
     try {
-      const list: Array<AlbumLite> = await jmApi.random();
+      const list: Array<AlbumLite> = await sourceApi.random(this.sourceIdValue);
       this.randomRaw = list;
       const filtered: Array<AlbumLite> = await this.filterBlocked(list);
       if (filtered.length > 0) {
@@ -294,7 +296,7 @@ export struct ExplorePage {
       this.latestLoading = true;
     }
     try {
-      const list: Array<AlbumLite> = await jmApi.latest(page);
+      const list: Array<AlbumLite> = await sourceApi.latest(this.sourceIdValue, page);
       const filtered: Array<AlbumLite> = await this.filterBlocked(list);
       if (page === 1) {
         this.latestRaw = list.slice();
@@ -340,7 +342,9 @@ export struct ExplorePage {
   private async filterBlocked(list: Array<AlbumLite>): Promise<Array<AlbumLite>> {
     const out: Array<AlbumLite> = [];
     for (const it of list) {
-      const blocked: boolean = await blockTagsStore.isBlocked(it.title, it.author, it.category, it.categorySub);
+      const owner: string = it.id.indexOf('~') > 0 ? sourceId(it.id) : '';
+      const blocked: boolean = await blockTagsStore.isBlocked(
+        it.title, it.author, it.category, it.categorySub, owner);
       if (!blocked) {
         out.push(it);
       }
@@ -407,7 +411,7 @@ export struct ExplorePage {
   /** 节点测速 */
   private async measureLatency(): Promise<void> {
     try {
-      const list: Array<DomainSpeed> = await jmApi.testDomains();
+      const list: Array<DomainSpeed> = await sourceApi.testDomains(this.sourceIdValue);
       if (list.length > 0) {
         this.latencyDomain = list[0].domain;
         this.latencyMs = list[0].ok ? list[0].ms : -1;
@@ -505,6 +509,7 @@ export struct ExplorePage {
 
   private openSearch(): void {
     const param: SearchRouteParam = new SearchRouteParam();
+    param.sourceId = this.sourceIdValue;
     this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
   }
 

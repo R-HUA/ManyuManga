@@ -4,7 +4,6 @@
  *  2. 应用锁：锁开启时，应用启动 / 回到前台（onPageShow）先以不透明全屏遮罩拦截，经 userAuth 指纹验证通过后才放行。
  *  3. 返回逻辑：栈内二级页先 pop；栈空且非首页 Tab 先回书架 Tab，已在书架 Tab 才默认退出。
  */
-import userIAM from '@ohos.userIAM.userAuth';
 import common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { MainShell } from './MainShell';
@@ -12,9 +11,9 @@ import { PRIMARY, READER_BG, PRIVACY_MASK } from '../common/Theme';
 import { Prefs, getAppContext } from '../util/Prefs';
 import { APP_IN_BACKGROUND_KEY } from '../entryability/EntryAbility';
 import { NAV_STACK_DEPTH_KEY } from '../common/Route';
+import { AuthOutcome, authenticate } from '../util/AppLock';
 
 const MAIN_TAB_INDEX_KEY: string = 'mainTabIndex';
-const AUTH_RESULT_SUCCESS: number = 12500000;
 
 function applyThemeModeToApp(context: common.Context, mode: string): void {
   try {
@@ -28,45 +27,17 @@ function applyThemeModeToApp(context: common.Context, mode: string): void {
   } catch (_e) {}
 }
 
-class LockAuthHandler implements userIAM.IAuthCallback {
-  private owner: Index;
-  private instance: userIAM.UserAuthInstance | null = null;
-  private settled: boolean = false;
-
-  constructor(owner: Index) {
-    this.owner = owner;
-  }
-
-  setInstance(instance: userIAM.UserAuthInstance): void {
-    this.instance = instance;
-  }
-
-  onResult(result: userIAM.UserAuthResult): void {
-    if (this.settled) {
-      return;
-    }
-    this.settled = true;
-    if (this.instance !== null) {
-      try {
-        this.instance.off('result');
-      } catch (_e) {}
-    }
-    if (result.result === AUTH_RESULT_SUCCESS) {
-      this.owner.onLockAuthResult(true, '');
-    } else {
-      this.owner.onLockAuthResult(false, `指纹验证未通过（码 ${result.result}），请重试`);
-    }
-  }
-}
-
 @Entry
 @Component
 struct Index {
-  @State locked: boolean = false;
+  @State locked: boolean = true;
   @State lockMsg: string = '';
   @State lockEnabled: boolean = false;
-  @StorageProp(APP_IN_BACKGROUND_KEY) inBackground: boolean = false;
-  private authInFlight: boolean = false;
+  @State previewOn: boolean = true;
+  @State authActive: boolean = false;
+  @StorageProp(APP_IN_BACKGROUND_KEY) @Watch('onBackground') inBackground: boolean = false;
+  private leftForeground: boolean = false;
+  private coldChecked: boolean = false;
 
   aboutToAppear(): void {
     this.applyThemeFromPrefs();
@@ -74,7 +45,24 @@ struct Index {
 
   onPageShow(): void {
     this.applyThemeFromPrefs();
-    this.checkAppLock();
+    if (!this.coldChecked) {
+      this.coldChecked = true;
+      this.armLock();
+    }
+  }
+
+  onBackground(): void {
+    if (this.authActive) {
+      return;
+    }
+    if (this.inBackground) {
+      this.leftForeground = true;
+      return;
+    }
+    if (this.leftForeground) {
+      this.leftForeground = false;
+      this.armLock();
+    }
   }
 
   onBackPress(): boolean {
@@ -96,60 +84,46 @@ struct Index {
     }).catch(() => {});
   }
 
-  private checkAppLock(): void {
-    Prefs.getInstance().then((p: Prefs): Promise<boolean> => p.securityLock()).then((on: boolean) => {
-      this.lockEnabled = on;
-      if (!on) {
+  private armLock(): void {
+    this.locked = true;
+    Prefs.getInstance().then(async (p: Prefs): Promise<void> => {
+      this.lockEnabled = await p.securityLock();
+      this.previewOn = await p.previewProtection();
+      if (!this.lockEnabled) {
         this.locked = false;
         return;
       }
-      if (this.locked) {
+      if (this.authActive) {
         return;
       }
       this.locked = true;
       this.lockMsg = '';
-      this.startLockAuth();
-    }).catch(() => {});
+      this.beginAuth();
+    }).catch((): void => {
+      this.locked = true;
+      this.lockMsg = '暂时无法确认应用锁状态，请重试';
+    });
   }
 
-  private startLockAuth(): void {
-    if (this.authInFlight) {
+  private async beginAuth(): Promise<void> {
+    if (this.authActive) {
       return;
     }
+    this.authActive = true;
     try {
-      userIAM.getAvailableStatus(userIAM.UserAuthType.FINGERPRINT, userIAM.AuthTrustLevel.ATL2);
-    } catch (_e) {
-      this.locked = false;
-      this.lockMsg = '指纹不可用，本次已跳过应用锁验证';
-      return;
-    }
-    try {
-      this.authInFlight = true;
-      const authParam: userIAM.AuthParam = {
-        challenge: new Uint8Array([7, 6, 5, 4, 3, 2, 1]),
-        authType: [userIAM.UserAuthType.FINGERPRINT],
-        authTrustLevel: userIAM.AuthTrustLevel.ATL2
-      };
-      const widgetParam: userIAM.WidgetParam = { title: '验证指纹解锁' };
-      const auth: userIAM.UserAuthInstance = userIAM.getUserAuthInstance(authParam, widgetParam);
-      const handler: LockAuthHandler = new LockAuthHandler(this);
-      handler.setInstance(auth);
-      auth.on('result', handler);
-      auth.start();
-    } catch (_e) {
-      this.authInFlight = false;
-      this.locked = false;
-      this.lockMsg = '指纹组件不可用，本次已跳过应用锁验证';
-    }
-  }
-
-  onLockAuthResult(ok: boolean, msg: string): void {
-    this.authInFlight = false;
-    if (ok) {
-      this.locked = false;
-      this.lockMsg = '';
-    } else {
-      this.lockMsg = msg;
+      const outcome: AuthOutcome = await authenticate('验证身份以继续');
+      if (outcome.ok) {
+        this.locked = false;
+        this.lockMsg = '';
+        return;
+      }
+      this.locked = true;
+      this.lockMsg = outcome.message === '' ? '验证未通过，请重试' : outcome.message;
+    } catch (e) {
+      this.locked = true;
+      this.lockMsg = '无法开始身份验证，请重试';
+    } finally {
+      this.authActive = false;
     }
   }
 
@@ -170,14 +144,14 @@ struct Index {
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
         .fontColor(Color.White)
-      Text(this.lockMsg !== '' ? this.lockMsg : '请验证指纹以继续访问书架与阅读进度')
+      Text(this.lockMsg !== '' ? this.lockMsg : '请验证人脸、指纹或锁屏密码以继续')
         .fontSize(13)
         .fontColor('rgba(255,255,255,0.65)')
         .textAlign(TextAlign.Center)
         .maxLines(3)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .padding({ left: 32, right: 32 })
-      Button('验证指纹解锁')
+      Button('重试解锁')
         .height(42)
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
@@ -186,7 +160,7 @@ struct Index {
         .borderRadius(21)
         .backgroundColor(PRIMARY)
         .onClick(() => {
-          this.startLockAuth();
+          this.beginAuth();
         })
     }
     .width('100%')
@@ -229,7 +203,7 @@ struct Index {
   build() {
     Stack() {
       MainShell()
-      if (this.lockEnabled && this.inBackground && !this.locked) {
+      if (this.previewOn && this.inBackground && !this.locked && !this.authActive) {
         this.PrivacyMask()
       }
       if (this.locked) {

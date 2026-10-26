@@ -7,6 +7,7 @@ import { EhSettings } from '../../data/eh/EhSettings';
 import { GallerySite } from '../../data/eh/EhNative';
 import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
+import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../../common/Route';
 
 const FORUMS_LOGIN_URL: string = 'https://forums.e-hentai.org/index.php?act=Login';
 const FORUMS_HOME_URL: string = 'https://forums.e-hentai.org/';
@@ -14,6 +15,7 @@ const FORUMS_HOME_URL: string = 'https://forums.e-hentai.org/';
 @Component
 export struct EhSiteSheet {
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
+  @Consume('navPathStack') stack: NavPathStack;
   @State siteMode: string = GallerySite.E;
   @State cookieInput: string = '';
   @State notice: string = '';
@@ -269,6 +271,18 @@ export struct EhSiteSheet {
             .fontColor(DANGER)
             .width('100%')
         }
+
+        Button('本源屏蔽规则', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(PRIMARY)
+          .backgroundColor(PRIMARY_SOFT)
+          .width('100%')
+          .height(40)
+          .onClick(() => {
+            this.close();
+            this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: 'eh' } as MangaRouteParams);
+          })
 
         Text('收起')
           .fontSize(14)

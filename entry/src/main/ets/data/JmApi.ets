@@ -1,5 +1,6 @@
 import { JmDomainPool } from './JmDomainPool';
 import common from '@ohos.app.ability.common';
+import { RequestAbortGroup } from '../util/RequestAbort';
 import { Album, AlbumLite, CategoryItem, Chapter, CommentItem, CommentsResult, DomainSpeed, SearchOptions, SearchResult, asArray, asBool, asNumber, asRecord, asString } from '../models/Models';
 export { utf8Encode, utf8Decode, md5Hex, javaStringHashCode } from '../util/JmCrypto';
 export class JmApi {
@@ -18,8 +19,8 @@ export class JmApi {
    * ts → token=md5(ts+SECRET) → 解析 {code,data} → AES 解密 data → 明文 JSON（对象或数组）。
    * 域名重试：前 3 个健康域名；总预算 18s；剩余 <800ms 放弃；单次尝试封顶剩余预算。
    */
-  private apiGet(pathAndQuery: string): Promise<Object> {
-    return this.domainPool.apiGet(pathAndQuery);
+  private apiGet(pathAndQuery: string, signal: RequestAbortGroup | null = null): Promise<Object> {
+    return this.domainPool.apiGet(pathAndQuery, signal);
   }
 
   // ───────────────────────── 解析（JmApi.kt:380-407） ─────────────────────────
@@ -116,8 +117,8 @@ export class JmApi {
   }
 
   /** 本子详情（含章节目录；series 按 sort 升序，空则回退单章节）（JmApi.kt:446-471） */
-  async album(albumId: string): Promise<Album> {
-    const o: Record<string, Object> | null = asRecord(await this.apiGet(`/album?id=${albumId}`));
+  async album(albumId: string, signal: RequestAbortGroup | null = null): Promise<Album> {
+    const o: Record<string, Object> | null = asRecord(await this.apiGet(`/album?id=${albumId}`, signal));
     if (o === null) {
       throw new Error('响应格式错误');
     }
@@ -179,8 +180,8 @@ export class JmApi {
   }
 
   /** 章节图片文件名列表（JmApi.kt:474-477） */
-  async chapterImages(photoId: string): Promise<Array<string>> {
-    const o: Record<string, Object> | null = asRecord(await this.apiGet(`/chapter?id=${photoId}`));
+  async chapterImages(photoId: string, signal: RequestAbortGroup | null = null): Promise<Array<string>> {
+    const o: Record<string, Object> | null = asRecord(await this.apiGet(`/chapter?id=${photoId}`, signal));
     const out: Array<string> = [];
     if (o === null) {
       return out;
@@ -198,9 +199,10 @@ export class JmApi {
   }
 
   /** 本子评论区（page 从 1 起，每页约 10 条）（JmApi.kt:480-498） */
-  async comments(albumId: string, page: number = 1): Promise<CommentsResult> {
+  async comments(albumId: string, page: number = 1,
+    signal: RequestAbortGroup | null = null): Promise<CommentsResult> {
     const o: Record<string, Object> | null = asRecord(await this.apiGet(
-      `/forum?mode=manhua&aid=${albumId}&page=${page}&lang=CN`));
+      `/forum?mode=manhua&aid=${albumId}&page=${page}&lang=CN`, signal));
     const result: CommentsResult = new CommentsResult();
     if (o === null) {
       return result;
@@ -232,6 +234,10 @@ export class JmApi {
         ));
       }
     }
+    const pageSize: number = 10;
+    const loaded: number = (page - 1) * pageSize + result.list.length;
+    result.hasNext = result.list.length > 0 &&
+      (result.total > loaded || (result.total <= 0 && result.list.length >= pageSize));
     return result;
   }
 
@@ -240,8 +246,8 @@ export class JmApi {
    * 特殊密钥 18comicAPPContent；返回 HTML 明文用正则提取 scramble_id；
    * 失败回退常量 220980；结果按 photoId 进程内缓存。
    */
-  scrambleId(photoId: string): Promise<number> {
-    return this.domainPool.scrambleId(photoId);
+  scrambleId(photoId: string, signal: RequestAbortGroup | null = null): Promise<number> {
+    return this.domainPool.scrambleId(photoId, signal);
   }
 
     /** 轮换到下一个图片域名（图床失败重试用）（JmApi.kt:564-570） */
@@ -275,8 +281,8 @@ export class JmApi {
   }
 
   /** 下载原始图片字节（整本下载用；失败由调用方换域名重试）（JmApi.kt:634-637） */
-  fetchBytes(url: string): Promise<ArrayBuffer> {
-    return this.domainPool.fetchBytes(url);
+  fetchBytes(url: string, signal: RequestAbortGroup | null = null): Promise<ArrayBuffer> {
+    return this.domainPool.fetchBytes(url, signal);
   }
 
       /**

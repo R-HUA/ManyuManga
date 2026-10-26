@@ -11,6 +11,7 @@ import { readingActivity } from '../../data/ReadingActivity';
 import { fallbackSource, SourceSwitchResult, switchedProgress } from '../../data/SourceSwitch';
 import { makeSpreads, spreadForPage, lastPageInSpread } from '../../data/ReaderLayout';
 import { loadPagePixelMap, releasePagePixelMap } from '../../data/ImageDecode';
+import { isRequestCancelled, RequestAbortGroup } from '../../util/RequestAbort';
 import { albumCacheStore, pagesCacheStore, readProgressStore } from '../../data/Stores';
 import { Prefs, getAppContext } from '../../util/Prefs';
 import { IS_DARK_MODE_KEY } from '../../entryability/EntryAbility';
@@ -66,7 +67,28 @@ export class ReaderController {
   private widePages: Set<string> = new Set();
   private switchingSource: boolean = false;
   activitySince: number = 0;
-  readerVisible: boolean = true;
+  private visible: boolean = true;
+
+  get readerVisible(): boolean { return this.visible; }
+
+  set readerVisible(value: boolean) {
+    const wasVisible: boolean = this.visible;
+    this.visible = value;
+    if (!value) {
+      this.albumToken++;
+      if (!this.readingResolved) { this.readingStarted = false; }
+      this.albumSignal.abortAll();
+      this.pageSignal.abortAll();
+      this.preloadSignal.abortAll();
+      this.prefetched.clear();
+    } else if (!wasVisible && !this.destroyed) {
+      if (this.pageSignal.aborted()) { this.pageSignal = new RequestAbortGroup(); }
+      if (this.preloadSignal.aborted()) { this.preloadSignal = new RequestAbortGroup(); }
+      if (this.paramReady && !this.readingResolved) {
+        this.loadAlbum().catch((e: Error): void => {});
+      }
+    }
+  }
   private activityBookKey: string = '';
   routeChapterId: string = '';
   routeChapterIndex: number = -1;
@@ -84,9 +106,14 @@ export class ReaderController {
   swiperController: SwiperController = new SwiperController();
   private prefetched: Set<string> = new Set<string>();
   chapterToken: number = 0;
+  private pageSignal: RequestAbortGroup = new RequestAbortGroup();
+  private albumSignal: RequestAbortGroup = new RequestAbortGroup();
+  private preloadSignal: RequestAbortGroup = new RequestAbortGroup();
   private albumToken: number = 0;
   private lastSavedAt: number = 0;
   private saveTimer: number = -1;
+  private hudTimer: number = -1;
+  private hudTouching: boolean = false;
   private readingStarted: boolean = false;
   readingResolved: boolean = false;
   private autoCacheOn: boolean = true;
@@ -101,11 +128,15 @@ export class ReaderController {
   }
 
   aboutToDisappear(): void {
+    this.clearHudTimer();
     this.flushProgress();
     this.activitySince = 0;
     this.chapterToken++;
     this.albumToken++;
     this.destroyed = true;
+    this.pageSignal.abortAll();
+    this.albumSignal.abortAll();
+    this.preloadSignal.abortAll();
   }
 
   backgroundChanged(): void {
@@ -131,11 +162,14 @@ export class ReaderController {
   }
 
   pageFailed(filename: string, error: Error): void {
+    if (isRequestCancelled(error)) {
+      return;
+    }
     if (this.host.pages[this.host.currentPage] === filename && !this.host.sliderDragging) { this.tryFallback(error, false); }
   }
 
   private async tryFallback(error: Error, fatalIfNoSource: boolean = true): Promise<boolean> {
-    if (this.switchingSource || this.destroyed || !this.readerVisible || this.currentAlbum === null) { return false; }
+    if (isRequestCancelled(error) || this.switchingSource || this.destroyed || !this.readerVisible || this.currentAlbum === null) { return false; }
     if (/登录|认证|401|403/.test(error.message)) {
       if (fatalIfNoSource) {
         this.host.errorMsg = error.message;
@@ -159,6 +193,7 @@ export class ReaderController {
       await library.activate(result.album.id);
       if (token !== this.chapterToken || this.destroyed || !this.readerVisible) { return false; }
       this.albumToken++;
+      this.albumSignal.abortAll();
       this.host.pages = []; this.host.aid = result.album.id; this.applyAlbum(result.album);
       await this.loadPrefs();
       if (token !== this.chapterToken || this.destroyed || !this.readerVisible) { return false; }
@@ -166,6 +201,7 @@ export class ReaderController {
       this.toastMsg(result.proportional ? '已切换书源，已按阅读比例定位' : '已切换到可用书源');
       return true;
     } catch (e) {
+      if (isRequestCancelled(e as Error)) { return false; }
       if (token === this.chapterToken && fatalIfNoSource) {
         this.host.errorMsg = `${error.message}；${errorMessage(e as Error)}`;
         this.host.loadState = 'error';
@@ -250,6 +286,10 @@ export class ReaderController {
   }
 
   private async loadAlbum(): Promise<void> {
+    if (this.destroyed) { return; }
+    this.albumSignal.abortAll();
+    const signal: RequestAbortGroup = new RequestAbortGroup();
+    this.albumSignal = signal;
     const token: number = ++this.albumToken;
     const aid: string = this.host.aid;
     let cachedAlbum: Album | null = null;
@@ -258,20 +298,21 @@ export class ReaderController {
     } catch (e) {
       cachedAlbum = null;
     }
-    if (token !== this.albumToken || aid !== this.host.aid || this.destroyed) { return; }
+    if (token !== this.albumToken || aid !== this.host.aid || this.destroyed || signal.aborted()) { return; }
     if (cachedAlbum !== null) {
       this.applyAlbum(cachedAlbum);
       this.beginReading();
     }
     try {
-      const fresh: Album = await jmApi.album(aid);
-      if (token !== this.albumToken || aid !== this.host.aid || this.destroyed) { return; }
+      const fresh: Album = await jmApi.album(aid, false, signal);
+      if (token !== this.albumToken || aid !== this.host.aid || this.destroyed || signal.aborted()) { return; }
       this.applyAlbum(fresh);
       albumCacheStore.put(fresh).catch((e: Error): void => {
       });
       this.beginReading();
     } catch (e) {
-      if (token !== this.albumToken || aid !== this.host.aid || this.destroyed) { return; }
+      if (isRequestCancelled(e as Error) || signal.aborted() ||
+        token !== this.albumToken || aid !== this.host.aid || this.destroyed) { return; }
       if (cachedAlbum === null) {
         if (!this.readingStarted) {
           this.host.loadState = 'error';
@@ -360,6 +401,7 @@ export class ReaderController {
   }
 
   async loadChapter(chapterIdx: number, targetPage: number, preserveAttempts: boolean = false): Promise<void> {
+    if (this.destroyed) { return; }
     const ch: Chapter | undefined = this.host.chapters[chapterIdx];
     if (ch === undefined) {
       this.host.loadState = 'error';
@@ -382,6 +424,12 @@ export class ReaderController {
     this.pagesSource.setList(this.host.pages);
     this.buildSpreads();
     const token: number = ++this.chapterToken;
+    this.pageSignal.abortAll();
+    this.preloadSignal.abortAll();
+    const signal: RequestAbortGroup = new RequestAbortGroup();
+    const preloadSignal: RequestAbortGroup = new RequestAbortGroup();
+    this.pageSignal = signal;
+    this.preloadSignal = preloadSignal;
     const initialTarget: number = targetPage;
 
     // 1) 秒开：章节图片列表缓存
@@ -391,7 +439,7 @@ export class ReaderController {
     } catch (e) {
       cached = null;
     }
-    if (token !== this.chapterToken) {
+    if (!this.chapterCurrent(token, signal)) {
       return;
     }
     if (cached !== null && cached.length > 0) {
@@ -407,8 +455,8 @@ export class ReaderController {
 
     // 2) 网络刷新：先撤 loading 再定位（防「布局等 loading、定位等布局」死锁，ReaderScreen.kt:177-182）
     try {
-      const fresh: Array<string> = await jmApi.chapterImages(ch.id);
-      if (token !== this.chapterToken) {
+      const fresh: Array<string> = await jmApi.chapterImages(ch.id, signal);
+      if (!this.chapterCurrent(token, signal)) {
         return;
       }
       const hadCache: boolean = cached !== null && cached.length > 0;
@@ -429,13 +477,13 @@ export class ReaderController {
         this.host.loadState = 'ready';
       }
     } catch (e) {
-      if (token !== this.chapterToken) {
+      if (isRequestCancelled(e as Error) || !this.chapterCurrent(token, signal)) {
         return;
       }
       if (cached === null || cached.length === 0) {
         this.host.currentPage = initialTarget;
         if (await this.tryFallback(e as Error)) { return; }
-        if (token !== this.chapterToken || this.destroyed) { return; }
+        if (!this.chapterCurrent(token, signal)) { return; }
         this.host.loadState = 'error';
         if (this.host.errorMsg === '') { this.host.errorMsg = errorMessage(e as Error); }
         this.host.hudVisible = true;
@@ -446,8 +494,8 @@ export class ReaderController {
 
     // 3) 乱序参数后台获取（默认 220980 与云端值算法等价）
     try {
-      const sid: number = await jmApi.scrambleId(ch.id);
-      if (token !== this.chapterToken) {
+      const sid: number = await jmApi.scrambleId(ch.id, signal);
+      if (!this.chapterCurrent(token, signal)) {
         return;
       }
       if (sid !== this.host.scrambleId) {
@@ -456,11 +504,13 @@ export class ReaderController {
         this.prefetchAhead(this.host.currentPage);
       }
     } catch (e) {
+      if (isRequestCancelled(e as Error) || !this.chapterCurrent(token, signal)) { return; }
       // 保留默认值
     }
+    if (!this.chapterCurrent(token, signal)) { return; }
 
     // 4) 预加载下一章（目录 + 前 5 页）
-    this.preloadNextChapter().catch((e: Error): void => {
+    this.preloadNextChapter(token, preloadSignal).catch((e: Error): void => {
     });
     this.saveProgressNow();
     library.activate(this.host.aid).catch((e: Error) => { this.toastMsg(`保存当前书源失败：${errorMessage(e)}`); });
@@ -480,7 +530,7 @@ export class ReaderController {
   }
 
   prefetchAhead(fromIndex: number): void {
-    if (!this.autoCacheOn) {
+    if (!this.autoCacheOn || this.destroyed || !this.readerVisible || this.pageSignal.aborted()) {
       return;
     }
     if (this.host.pages.length === 0) {
@@ -498,24 +548,30 @@ export class ReaderController {
         continue;
       }
       this.prefetched.add(key);
-      this.prefetchOne(photoId, filename, key);
+      this.prefetchOne(photoId, filename, key, this.host.scrambleId, this.chapterToken, this.pageSignal);
     }
   }
 
-  private async prefetchOne(photoId: string, filename: string, key: string): Promise<void> {
+  private chapterCurrent(token: number, signal: RequestAbortGroup): boolean {
+    return token === this.chapterToken && !signal.aborted() && !this.destroyed;
+  }
+
+  private async prefetchOne(photoId: string, filename: string, key: string, scrambleId: number,
+    token: number, signal: RequestAbortGroup): Promise<void> {
+    if (!this.chapterCurrent(token, signal)) { return; }
     try {
       const pm: image.PixelMap | null =
-        await loadPagePixelMap(photoId, filename, this.host.scrambleId, this.targetWidthPx);
+        await loadPagePixelMap(photoId, filename, scrambleId, this.targetWidthPx, signal);
       if (pm !== null) {
         releasePagePixelMap(pm); // 借出即归还：位图留在 96MB 零拷贝 LRU 供热区秒开
       }
     } catch (e) {
-      this.prefetched.delete(key);
+      if (this.chapterCurrent(token, signal)) { this.prefetched.delete(key); }
     }
   }
 
-  private async preloadNextChapter(): Promise<void> {
-    if (!this.autoCacheOn) {
+  private async preloadNextChapter(token: number, signal: RequestAbortGroup): Promise<void> {
+    if (!this.autoCacheOn || !this.chapterCurrent(token, signal)) {
       return;
     }
     const next: Chapter | undefined = this.host.chapters[this.host.chapterIndex + 1];
@@ -529,8 +585,10 @@ export class ReaderController {
       } catch (e) {
         list = null;
       }
+      if (!this.chapterCurrent(token, signal)) { return; }
       if (list === null || list.length === 0) {
-        list = await jmApi.chapterImages(next.id);
+        list = await jmApi.chapterImages(next.id, signal);
+        if (!this.chapterCurrent(token, signal)) { return; }
         if (list.length > 0) {
           pagesCacheStore.put(next.id, list).catch((e: Error): void => {
           });
@@ -539,11 +597,13 @@ export class ReaderController {
       if (list.length === 0) {
         return;
       }
-      const sid: number = await jmApi.scrambleId(next.id);
+      const sid: number = await jmApi.scrambleId(next.id, signal);
+      if (!this.chapterCurrent(token, signal)) { return; }
       const count: number = Math.min(5, list.length);
       for (let i: number = 0; i < count; i++) {
+        if (!this.chapterCurrent(token, signal)) { return; }
         const pm: image.PixelMap | null =
-          await loadPagePixelMap(next.id, list[i], sid, this.targetWidthPx);
+          await loadPagePixelMap(next.id, list[i], sid, this.targetWidthPx, signal);
         if (pm !== null) {
           releasePagePixelMap(pm);
         }
@@ -623,6 +683,54 @@ export class ReaderController {
     if (!this.host.hudVisible) {
       this.host.panel = 'none';
     }
+    this.syncHudTimer();
+  }
+
+  onHudTouch(down: boolean): void {
+    this.hudTouching = down;
+    this.syncHudTimer();
+  }
+
+  syncHudTimer(): void {
+    this.clearHudTimer();
+    if (!this.host.hudVisible || this.hudTouching || this.host.panel !== 'none' ||
+      this.host.sliderDragging || this.host.sheetVisible) {
+      return;
+    }
+    this.hudTimer = setTimeout((): void => {
+      this.hudTimer = -1;
+      if (this.host.panel === 'none' && !this.host.sliderDragging && !this.host.sheetVisible && !this.hudTouching) {
+        this.host.hudVisible = false;
+      }
+    }, 3500);
+  }
+
+  private clearHudTimer(): void {
+    if (this.hudTimer >= 0) {
+      clearTimeout(this.hudTimer);
+      this.hudTimer = -1;
+    }
+  }
+
+  onDoubleTap(x: number, y: number): void {
+    if (this.host.zoomScale > 1.05) {
+      this.resetZoom(true);
+      return;
+    }
+    const width: number = this.host.canvasWidthVp;
+    const height: number = this.host.canvasHeightVp;
+    const scale: number = 2;
+    let offsetX: number = (width / 2 - x) * (scale - 1);
+    let offsetY: number = (height / 2 - y) * (scale - 1);
+    const maxX: number = Math.max(0, (width * (scale - 1)) / 2);
+    const maxY: number = Math.max(0, (height * (scale - 1)) / 2);
+    offsetX = Math.max(-maxX, Math.min(maxX, offsetX));
+    offsetY = Math.max(-maxY, Math.min(maxY, offsetY));
+    this.host.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, (): void => {
+      this.host.zoomScale = scale;
+      this.host.zoomOffsetX = offsetX;
+      this.host.zoomOffsetY = offsetY;
+    });
   }
 
   private maxZoomOffsetX(): number {

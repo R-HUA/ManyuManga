@@ -1,5 +1,6 @@
 import { Album, Chapter, ReadingProgress, CommentItem } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
+import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { IconCircleButton } from '../../common/Components';
 import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
@@ -7,6 +8,17 @@ import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 @Component
 export struct WorkChapterList {
   @Link album: Album | null;
+  private commentsAvailable(): boolean {
+    if (this.aid === '') {
+      return false;
+    }
+    try {
+      return capabilitiesForSourceId(sourceId(this.aid)).comments;
+    } catch (e) {
+      return false;
+    }
+  }
+
   private chapters(): Array<Chapter> {
     if (this.album === null) {
       return [];
@@ -147,7 +159,7 @@ export struct WorkChapterList {
       }
 
       // 评论 Section（JM 漫评 / EH 画廊评论）
-      if (this.album !== null && (sourceId(this.aid) === 'jm' || sourceId(this.aid) === 'eh')) {
+      if (this.album !== null && this.commentsAvailable()) {
         Column({ space: 12 }) {
           Row() {
             Text('读者漫评')

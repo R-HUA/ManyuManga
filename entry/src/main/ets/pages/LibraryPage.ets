@@ -3,13 +3,14 @@ import { LibraryCoverCard } from './library/LibraryCoverCard';
 import { LibraryCategorySheet } from './library/LibraryCategorySheet';
 import { LibraryFilterSheet } from './library/LibraryFilterSheet';
 import promptAction from '@ohos.promptAction';
-import uiMaterial from '@ohos.arkui.uiMaterial';
+import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
 import { library, LibraryWork } from '../data/Library';
+import { offlineStore } from '../data/OfflineStore';
+import { downloadManager } from '../data/DownloadManager';
 import { sourceApi } from '../data/SourceApi';
 import { localSource } from '../data/LocalSource';
 import { readProgressStore } from '../data/Stores';
-import { downloadManager, DownloadTask } from '../data/DownloadManager';
 import { Album, ReadingProgress, errorMessage } from '../models/Models';
 import { IconCircleButton } from '../common/Components';
 import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
@@ -57,10 +58,7 @@ export struct LibraryPage {
     try {
       this.works = await library.list();
       this.progress = await readProgressStore.list();
-      await downloadManager.init();
-      this.downloaded = downloadManager.tasks
-        .filter((t: DownloadTask) => t.state === 'done')
-        .map((t: DownloadTask) => t.albumId);
+      this.downloaded = await offlineStore.albumIds();
       const categories: Array<string> = [];
       for (const work of this.works) {
         for (const c of work.categories) {
@@ -317,8 +315,7 @@ export struct LibraryPage {
         .bindSheet($$this.sheet, this.FilterSheet(), {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
-          backgroundColor: CARD,
-          systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
+          systemMaterial: IMMERSIVE_SHEET_MATERIAL
         })
 
 
@@ -530,7 +527,6 @@ export struct LibraryPage {
         .width('100%')
         .backgroundColor(CARD)
         .border({ width: { top: 0.5 }, color: DIVIDER })
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK }))
       }
     }
     .width('100%')
@@ -539,8 +535,7 @@ export struct LibraryPage {
     .bindSheet($$this.categorySheet, this.CategorySheet(), {
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
-      backgroundColor: CARD,
-      systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
+      systemMaterial: IMMERSIVE_SHEET_MATERIAL
     })
   }
 }

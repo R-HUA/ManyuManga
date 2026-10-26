@@ -1,14 +1,15 @@
-import { writeZipFile } from './CbzPacker';
-import { fileExists, ensureDir, readFileBytes, writeFileBytes, rmTree } from '../util/FileUtil';
+import { copyBytesAsync, makeArchiveEntry, writeBytesAsync, writeZipFile } from './CbzPacker';
+import { fileExists, ensureDir, rmTree } from '../util/FileUtil';
 import { ZipEntry } from './CbzPacker';
 import fs from '@ohos.file.fs';
-import image from '@ohos.multimedia.image';
 import common from '@ohos.app.ability.common';
-import { Prefs, PrefKeys, getAppContext } from '../util/Prefs';
+import { Prefs, getAppContext } from '../util/Prefs';
+import { deleteTask, DownloadPageRow, loadTasks, saveTasks, TaskRow } from './db/ContentDao';
+import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { sourceApi as jmApi } from './SourceApi';
 import { offlineStore } from './OfflineStore';
-import { cachedRawFilePath, descrambleFromBytes, packImage } from './ImageDecode';
-import { Album, ChapterPage, asArray, asBool, asNumber, asRecord, asString, errorMessage } from '../models/Models';
+import { cachedRawFilePath } from './ImageDecode';
+import { Album, ChapterPage, errorMessage } from '../models/Models';
 export { ZipEntry } from './CbzPacker';
 /** 任务状态机 */
 export type DownloadState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';
@@ -101,12 +102,6 @@ function sleep(ms: number): Promise<void> {
 
 // ───────────────────────── CRC32（自实现，无第三方依赖） ─────────────────────────
 
-/** 产物文件名 */
-function safeFileName(title: string): string {
-  const clean: string = title.replace(/[\\/:*?"<>|\n\r]/g, '_').trim().substring(0, 80);
-  return `${clean || '漫画'}.cbz`;
-}
-
 // ───────────────────────── 下载管理器 ─────────────────────────
 
 /** 页下载并发 */
@@ -121,51 +116,138 @@ export class DownloadManager {
   private activeTaskId: number = 0;
   private saveTimer: number = -1;
   private initPromise: Promise<void> | null = null;
+  private taskSignals: Map<number, RequestAbortGroup> = new Map();
+  private workerPromise: Promise<void> = Promise.resolve();
+  private saveGate: Promise<void> = Promise.resolve();
+  private suspensionGate: Promise<void> = Promise.resolve();
+  private suspensionCount: number = 0;
+  private committingTaskId: number = 0;
+  private dirtyTasks: Set<number> = new Set();
+  private taskWrites: Set<Promise<void>> = new Set();
+  private activeRun: Promise<void> = Promise.resolve();
 
-  /** 启动恢复（幂等、并发安全）：RUNNING/QUEUED → FAILED "已中断（应用重启）" */
+  /** 备份恢复屏障：暂停并等待所有在途写入，work 期间拒绝新任务及任务操作。 */
+  async withSuspendedWrites<T>(work: () => Promise<T>): Promise<T> {
+    this.suspensionCount++;
+    const previous: Promise<void> = this.suspensionGate;
+    let release: () => void = (): void => {};
+    this.suspensionGate = new Promise<void>((resolve: () => void): void => { release = resolve; });
+    try {
+      await previous;
+      await this.init();
+      for (const task of this.tasks) {
+        if (task.id !== this.committingTaskId && (task.state === 'queued' || task.state === 'running')) {
+          task.state = 'paused';
+          this.abortSignal(task.id);
+          this.dirtyTasks.add(task.id);
+          this.notify(task);
+        }
+      }
+      await this.workerPromise;
+      await this.activeRun;
+      await Promise.all(Array.from(this.taskWrites));
+      this.clearSaveTimer();
+      await this.persistTasks();
+      return await work();
+    } finally {
+      this.suspensionCount--;
+      release();
+    }
+  }
+
+  private assertWritable(): void {
+    if (this.suspensionCount > 0) { throw new Error('正在恢复数据，请稍后操作下载任务'); }
+  }
+
+  private async mutate(work: () => Promise<void>): Promise<void> {
+    this.assertWritable();
+    const next: Promise<void> = work();
+    const waiting: Promise<void> = next.catch((): void => {});
+    this.taskWrites.add(waiting);
+    waiting.then((): void => { this.taskWrites.delete(waiting); });
+    return next;
+  }
+
+  private clearSaveTimer(): void {
+    if (this.saveTimer >= 0) { clearTimeout(this.saveTimer); this.saveTimer = -1; }
+  }
+
+  private async waitCommit(id: number): Promise<void> {
+    if (this.committingTaskId === id) { await this.activeRun; }
+  }
+
+  private openSignal(id: number): RequestAbortGroup {
+    const previous: RequestAbortGroup | undefined = this.taskSignals.get(id);
+    if (previous !== undefined) {
+      previous.abortAll();
+    }
+    const next: RequestAbortGroup = new RequestAbortGroup();
+    this.taskSignals.set(id, next);
+    return next;
+  }
+
+  private abortSignal(id: number): void {
+    const current: RequestAbortGroup | undefined = this.taskSignals.get(id);
+    if (current !== undefined) {
+      current.abortAll();
+    }
+  }
+
+  async reloadTasks(): Promise<void> {
+    this.clearSaveTimer();
+    await this.saveGate;
+    this.tasks = [];
+    this.dirtyTasks.clear();
+    this.initPromise = null;
+    await this.init();
+    offlineStore.notifyChanged();
+    if (this.tasks.length === 0) { this.notify(new DownloadTask()); }
+    else { for (const task of this.tasks) { this.notify(task); } }
+  }
+
+  /** 启动恢复：排队和进行中改为暂停，等待用户继续。不自动开下。 */
   init(): Promise<void> {
     if (this.initPromise === null) {
-      this.initPromise = this.doInit();
+      this.initPromise = this.doInit().catch((e: Error): void => {
+        this.initPromise = null;
+        throw e;
+      });
     }
     return this.initPromise;
   }
 
   private async doInit(): Promise<void> {
-    try {
-      const prefs: Prefs = await Prefs.getInstance();
-      const text: string = await prefs.getString(PrefKeys.DOWNLOAD_TASKS, '[]');
-      const arr: Array<Object> | null = asArray(JSON.parse(text) as Object);
-      if (arr !== null) {
-        for (const it of arr) {
-          const rec: Record<string, Object> | null = asRecord(it);
-          if (rec === null) {
-            continue;
-          }
-          const t: DownloadTask = new DownloadTask();
-          t.id = asNumber(rec['id'], 0);
-          t.albumId = asString(rec['albumId']);
-          t.title = asString(rec['title']);
-          t.state = this.parseState(asString(rec['state'], 'queued'));
-          t.done = asNumber(rec['done'], 0);
-          t.total = asNumber(rec['total'], 0);
-          t.failedPages = asNumber(rec['failedPages'], 0);
-          t.savedTo = asString(rec['savedTo']);
-          t.cover = asString(rec['cover']);
-          t.createdAt = asNumber(rec['createdAt'], 0);
-          t.error = asString(rec['error']);
-          t.exporting = asBool(rec['exporting'], false);
-          t.exportDone = asNumber(rec['exportDone'], 0);
-          t.exportTotal = asNumber(rec['exportTotal'], 0);
-          if (t.state === 'running' || t.state === 'queued') {
-            t.state = 'failed';
-            t.error = '已中断（应用重启）';
-          }
-          this.tasks.push(t);
+      const rows: Array<TaskRow> = await loadTasks();
+      this.tasks = [];
+      let interrupted: boolean = false;
+      for (const rec of rows) {
+        const t: DownloadTask = new DownloadTask();
+        t.id = rec.id;
+        t.albumId = rec.albumId;
+        t.title = rec.title;
+        t.state = this.parseState(rec.state);
+        t.done = rec.done;
+        t.total = rec.total;
+        t.failedPages = rec.failedPages;
+        t.savedTo = rec.savedTo;
+        t.cover = rec.cover;
+        t.createdAt = rec.createdAt;
+        t.error = rec.error;
+        t.exporting = rec.exporting === 1;
+        t.exportDone = rec.exportDone;
+        t.exportTotal = rec.exportTotal;
+        if (t.state === 'running' || t.state === 'queued') {
+          t.state = 'paused';
+          t.error = '';
+          interrupted = true;
+          this.dirtyTasks.add(t.id);
         }
+        t.exporting = false;
+        this.tasks.push(t);
       }
-    } catch (e) {
-      console.info(`[Download] 恢复任务失败: ${errorMessage(e as Error)}`);
-    }
+      if (interrupted) {
+        await this.persistTasks();
+      }
   }
 
   private parseState(s: string): DownloadState {
@@ -185,8 +267,11 @@ export class DownloadManager {
   }
 
   /** 入队 */
-  async enqueue(album: Album): Promise<void> {
+  enqueue(album: Album): Promise<void> { return this.mutate(() => this.enqueueNow(album)); }
+  private async enqueueNow(album: Album): Promise<void> {
+    this.assertWritable();
     await this.init();
+    this.assertWritable();
     if (this.tasks.some((t: DownloadTask) => t.albumId === album.id && t.state !== 'canceled')) {
       throw new Error('该漫画已有下载任务，请前往下载管理查看或重试');
     }
@@ -197,30 +282,40 @@ export class DownloadManager {
     t.cover = jmApi.albumCoverUrl(album.id);
     t.createdAt = Date.now();
     this.tasks.push(t);
+    this.dirtyTasks.add(t.id);
     try { await this.persistTasks(); }
     catch (e) { this.tasks = this.tasks.filter((task: DownloadTask) => task.id !== t.id); throw e as Error; }
     this.notify(t);
     this.startWorker();
   }
 
-  /** 暂停：排队/进行中 → paused（鸿蒙版新增暂停态；恢复从头重下，不做断点续传） */
-  async pause(id: number): Promise<void> {
+  /** 暂停：排队/进行中 → paused。已完成页保留，恢复时跳过。 */
+  pause(id: number): Promise<void> { return this.mutate(() => this.pauseNow(id)); }
+  private async pauseNow(id: number): Promise<void> {
+    this.assertWritable();
+    await this.waitCommit(id);
     const t: DownloadTask | undefined = this.findTask(id);
     if (t !== undefined && (t.state === 'queued' || t.state === 'running')) {
       t.state = 'paused';
+      this.abortSignal(id);
+      this.dirtyTasks.add(id);
       this.notify(t);
       this.scheduleSave();
     }
   }
 
   /** 恢复：paused → queued */
-  async resume(id: number): Promise<void> {
+  resume(id: number): Promise<void> { return this.mutate(() => this.resumeNow(id)); }
+  private async resumeNow(id: number): Promise<void> {
+    this.assertWritable();
+    if (this.activeTaskId === id) { await this.activeRun; }
+    this.assertWritable();
     const t: DownloadTask | undefined = this.findTask(id);
     if (t !== undefined && t.state === 'paused') {
       t.state = 'queued';
-      t.done = 0;
       t.failedPages = 0;
       t.error = '';
+      this.dirtyTasks.add(id);
       this.notify(t);
       this.scheduleSave();
       this.startWorker();
@@ -228,17 +323,27 @@ export class DownloadManager {
   }
 
   /** 取消（原 cancel :136-141；进行中协作中止并清临时文件） */
-  async cancel(id: number): Promise<void> {
+  cancel(id: number): Promise<void> { return this.mutate(() => this.cancelNow(id)); }
+  private async cancelNow(id: number): Promise<void> {
+    this.assertWritable();
+    await this.waitCommit(id);
     const t: DownloadTask | undefined = this.findTask(id);
     if (t !== undefined && t.state !== 'done' && t.state !== 'failed' && t.state !== 'canceled') {
       t.state = 'canceled';
+      this.abortSignal(id);
+      this.dirtyTasks.add(id);
       this.notify(t);
       this.scheduleSave();
     }
   }
 
-  /** 删除任务：进行中/排队先置 canceled；deleteFile 同时删除产物（:148-158） */
-  async removeTask(id: number, deleteFile: boolean): Promise<void> {
+  /** 删除任务记录。deleteFile 只删除已打包的 CBZ，不删除离线内容索引。 */
+  removeTask(id: number, deleteFile: boolean): Promise<void> {
+    return this.mutate(() => this.removeTaskNow(id, deleteFile));
+  }
+  private async removeTaskNow(id: number, deleteFile: boolean): Promise<void> {
+    this.assertWritable();
+    await this.waitCommit(id);
     const t: DownloadTask | undefined = this.findTask(id);
     if (t === undefined) {
       return;
@@ -246,13 +351,34 @@ export class DownloadManager {
     if (t.state === 'running' || t.state === 'queued' || t.state === 'paused') {
       t.state = 'canceled';
     }
-    if (this.activeTaskId !== id) { this.cleanupTempFiles(id); }
-    if (deleteFile) {
-      if (t.state === 'done' || t.savedTo !== '') { await offlineStore.remove(t.albumId); }
-      if (t.savedTo !== '' && fileExists(t.savedTo)) { fs.unlinkSync(t.savedTo); }
-    }
+    this.abortSignal(id);
+    if (this.activeTaskId === id) { await this.activeRun; }
+    this.cleanupTempFiles(id);
+    // 成品属于离线内容；删除任务不会删除书目或用户导出的文件。
+    if (deleteFile && t.savedTo !== '' && fileExists(t.savedTo)) { await fs.unlink(t.savedTo); }
     this.tasks = this.tasks.filter((it: DownloadTask) => it.id !== id);
-    this.scheduleSave();
+    this.dirtyTasks.delete(id);
+    await this.saveGate;
+    await deleteTask(id);
+    rmTree(`${getAppContext().filesDir}/resume/${id}`);
+    this.notify(t);
+  }
+
+  /** 失败重试保留本任务已校验的续传页。 */
+  retry(id: number): Promise<void> { return this.mutate(() => this.retryNow(id)); }
+  private async retryNow(id: number): Promise<void> {
+    this.assertWritable();
+    if (this.activeTaskId === id) { await this.activeRun; }
+    this.assertWritable();
+    const task: DownloadTask | undefined = this.findTask(id);
+    if (task === undefined || (task.state !== 'failed' && task.state !== 'canceled')) { return; }
+    task.state = 'queued';
+    task.error = '';
+    task.failedPages = 0;
+    this.dirtyTasks.add(id);
+    await this.persistTasks();
+    this.notify(task);
+    this.startWorker();
   }
 
   private findTask(id: number): DownloadTask | undefined {
@@ -289,23 +415,33 @@ export class DownloadManager {
   }
 
   private async persistTasks(): Promise<void> {
-    const prefs: Prefs = await Prefs.getInstance();
-    const snapshots: Array<DownloadTask> = [];
+    const rows: Array<TaskRow> = [];
     for (const t of this.tasks) {
-      snapshots.push(cloneTask(t));
+      if (!this.dirtyTasks.has(t.id)) { continue; }
+      rows.push(taskRow(t));
     }
-    await prefs.putString(PrefKeys.DOWNLOAD_TASKS, JSON.stringify(snapshots));
+    this.dirtyTasks.clear();
+    const next: Promise<void> = this.saveGate.then(() => saveTasks(rows));
+    this.saveGate = next.catch((): void => {});
+    try { await next; }
+    catch (e) {
+      for (const row of rows) {
+        if (this.findTask(row.id) !== undefined) { this.dirtyTasks.add(row.id); }
+      }
+      throw e as Error;
+    }
   }
 
   /** 单飞 worker：循环取第一个 QUEUED（DownloadQueue.kt:202-212） */
   private startWorker(): void {
-    if (this.workerActive) {
+    if (this.workerActive || this.suspensionCount > 0) {
       return;
     }
     this.workerActive = true;
     const self: DownloadManager = this;
     const loop: Promise<void> = (async (): Promise<void> => {
       for (;;) {
+        if (self.suspensionCount > 0) { break; }
         let next: DownloadTask | undefined = undefined;
         for (const t of self.tasks) {
           if (t.state === 'queued') {
@@ -320,7 +456,7 @@ export class DownloadManager {
       }
       self.workerActive = false;
     })();
-    loop.catch((e: Error) => {
+    this.workerPromise = loop.catch((e: Error) => {
       self.workerActive = false;
       AppStorage.setOrCreate('crashErrorMessage', `下载未能完成：${errorMessage(e)}`);
     });
@@ -346,6 +482,7 @@ export class DownloadManager {
       return;
     }
     mutate(t);
+    this.dirtyTasks.add(id);
     this.notify(t);
     this.scheduleSave();
   }
@@ -367,7 +504,7 @@ export class DownloadManager {
       try {
         return await fn();
       } catch (e) {
-        if (e instanceof DownloadAbortError) {
+        if (e instanceof DownloadAbortError || isRequestCancelled(e as Error)) {
           throw e;
         }
         failure = e as Error;
@@ -379,7 +516,12 @@ export class DownloadManager {
   }
 
   /** 执行任务（runTask :253-413） */
-  private async runTask(task: DownloadTask): Promise<void> {
+  private runTask(task: DownloadTask): Promise<void> {
+    const next: Promise<void> = this.runTaskNow(task);
+    this.activeRun = next;
+    return next;
+  }
+  private async runTaskNow(task: DownloadTask): Promise<void> {
     const taskId: number = task.id;
     // 选中后、改成 running 之前若已暂停/取消/删除，不能把状态盖回去
     const live: DownloadTask | undefined = this.findTask(taskId);
@@ -399,9 +541,10 @@ export class DownloadManager {
       return;
     }
     this.activeTaskId = taskId;
+    const signal: RequestAbortGroup = this.openSignal(taskId);
     try {
       // 1) 本子信息（网络重试 3 次）
-      const album: Album | null = await this.retryNet<Album>(3, (): Promise<Album> => jmApi.album(task.albumId));
+      const album: Album | null = await this.retryNet<Album>(3, (): Promise<Album> => jmApi.album(task.albumId, false, signal));
       if (album === null) {
         throw new Error('获取本子信息失败');
       }
@@ -411,12 +554,12 @@ export class DownloadManager {
       for (const ep of album.episodes) {
         this.checkAbort(taskId);
         const images: Array<string> | null = await this.retryNet<Array<string>>(
-          3, (): Promise<Array<string>> => jmApi.chapterImages(ep.id));
+          3, (): Promise<Array<string>> => jmApi.chapterImages(ep.id, signal));
         if (images === null || images.length === 0) {
           const label: string = ep.title !== '' ? ep.title : ep.id;
           throw new Error(`章节图片获取失败：${label}`);
         }
-        const sid: number = await jmApi.scrambleId(ep.id);
+        const sid: number = await this.retryNet<number>(3, (): Promise<number> => jmApi.scrambleId(ep.id, signal)) ?? 0;
         for (const fn of images) {
           pages.push(new ChapterPage(ep.id, fn, sid));
         }
@@ -438,6 +581,7 @@ export class DownloadManager {
       let failCnt: number = 0;
       const pageErrors: Array<Error> = [];
       const workers: Array<Promise<void>> = [];
+      const finished: Array<DownloadPageRow> = await offlineStore.completedPages(taskId, task.albumId);
       for (let idx: number = 0; idx < pages.length; idx++) {
         const pageIdx: number = idx;
         const ref: ChapterPage = pages[pageIdx];
@@ -447,33 +591,71 @@ export class DownloadManager {
             this.checkAbort(taskId);
             const outFile: string = `${tmpDir}/${pad5(pageIdx)}.bin`;
             let ok: boolean = false;
-            // ① 页缓存原始字节复用（>1KB 才算命中）
-            try {
-              const cached: string | null = cachedRawFilePath(ref.photoId, ref.filename);
-              if (cached !== null) {
-                fs.copyFileSync(cached, outFile);
-                ok = fs.statSync(outFile).size > 1024;
+            let reused: boolean = false;
+            let kept: DownloadPageRow | undefined = undefined;
+            for (const row of finished) {
+              if (row.pageOrder === pageIdx && row.chapterId === ref.photoId && row.filename === ref.filename &&
+                row.scrambleId === ref.scrambleId) {
+                kept = row;
               }
-            } catch (e) {
-              // 缓存复用失败走网络
+            }
+            if (kept !== undefined) {
+              try {
+                await copyBytesAsync(`${ctx.filesDir}/${kept.relativePath}`, outFile, (): void => this.checkAbort(taskId));
+                reused = (await fs.stat(outFile)).size === kept.fileSize && kept.fileSize > 0;
+                ok = reused;
+              } catch (e) {
+                this.checkAbort(taskId);
+                reused = false;
+                ok = false;
+              }
+            }
+            // ① 页缓存原始字节复用（>1KB 才算命中）
+            if (!ok) {
+              try {
+                const cached: string | null = cachedRawFilePath(ref.photoId, ref.filename);
+                if (cached !== null) {
+                  await copyBytesAsync(cached, outFile, (): void => this.checkAbort(taskId));
+                  ok = (await fs.stat(outFile)).size > 1024;
+                }
+              } catch (e) {
+                this.checkAbort(taskId);
+                // 缓存复用失败走网络
+              }
             }
             // ② 网络：换域名重试 3 次
             if (!ok) {
               for (let attempt: number = 0; attempt <= 2; attempt++) {
                 this.checkAbort(taskId);
                 try {
-                  const bytes: ArrayBuffer = await jmApi.fetchPage(ref.photoId, ref.filename, attempt);
+                  const bytes: ArrayBuffer = await jmApi.fetchPage(ref.photoId, ref.filename, attempt, signal);
                   this.checkAbort(taskId);
                   if (bytes.byteLength === 0) { throw new Error('页面内容为空'); }
-                  writeFileBytes(outFile, bytes);
+                  await writeBytesAsync(outFile, bytes, (): void => this.checkAbort(taskId));
                   ok = true;
                   break;
                 } catch (e) {
                   if (e instanceof DownloadAbortError) { throw e; }
+                  if (isRequestCancelled(e as Error)) {
+                    this.checkAbort(taskId);
+                    throw new DownloadAbortError('canceled');
+                  }
                   if (attempt === 2 || /登录|认证|401|403/.test(errorMessage(e as Error))) {
                     pageErrors.push(e as Error); break;
                   }
                 }
+              }
+            }
+            if (ok && !reused) {
+              try {
+                await offlineStore.rememberPage(taskId, task.albumId, ref, pageIdx, outFile,
+                  (): void => this.checkAbort(taskId));
+              } catch (e) {
+                if (e instanceof DownloadAbortError || isRequestCancelled(e as Error)) {
+                  throw e;
+                }
+                ok = false;
+                pageErrors.push(e as Error);
               }
             }
             if (ok) {
@@ -512,7 +694,8 @@ export class DownloadManager {
       const outTemp: string = `${ctx.cacheDir}/cbz_${taskId}.cbz`;
       const self: DownloadManager = this;
       await writeZipFile(outTemp, total, (index: number): Promise<ZipEntry | null> => {
-        return self.makeArchiveEntry(`${tmpDir}/${pad5(index)}.bin`, pages[index], index, imgQ).then(
+        return makeArchiveEntry(`${tmpDir}/${pad5(index)}.bin`, pages[index], index, imgQ,
+          (): void => self.checkAbort(taskId)).then(
           (entry: ZipEntry | null): Promise<ZipEntry | null> => {
             self.checkAbort(taskId);
             self.update(taskId, (t: DownloadTask) => {
@@ -520,31 +703,39 @@ export class DownloadManager {
             });
             return Promise.resolve(entry);
           });
-      });
+      }, (): void => this.checkAbort(taskId));
 
-      // 保存到应用 Download 目录（固定沙箱目录）
-      const destDir: string = `${ctx.filesDir}/Download/${taskId}`;
-      ensureDir(destDir);
-      const dest: string = `${destDir}/${safeFileName(album.name)}`;
-      await offlineStore.install(album, pages, pages.map((p: ChapterPage, index: number) => `${tmpDir}/${pad5(index)}.bin`), (): void => { this.checkAbort(taskId); });
-      this.checkAbort(taskId);
-      fs.copyFileSync(outTemp, dest);
+      const finalRow: TaskRow = taskRow(task);
+      const dest: string = await offlineStore.install(album, pages,
+        pages.map((p: ChapterPage, index: number): string => `${tmpDir}/${pad5(index)}.bin`), outTemp, finalRow,
+        (): void => this.checkAbort(taskId), async (): Promise<void> => {
+          this.checkAbort(taskId);
+          this.committingTaskId = taskId;
+          this.clearSaveTimer();
+          await this.persistTasks();
+        });
       rmTree(tmpDir);
       try {
         fs.unlinkSync(outTemp);
       } catch (e) {
         // 临时文件清理失败可忽略
       }
-      const doneFinal: number = Math.max(total - failCnt, 0);
-      this.update(taskId, (t: DownloadTask) => {
-        t.state = 'done';
-        t.exporting = false;
-        t.savedTo = dest;
-        t.done = doneFinal;
-      });
-      await this.persistTasks();
+      task.state = 'done';
+      task.exporting = false;
+      task.savedTo = dest;
+      task.done = total;
+      task.failedPages = 0;
+      this.dirtyTasks.delete(taskId);
+      this.notify(task);
     } catch (e) {
-      const err: Error = e as Error;
+      let err: Error = e as Error;
+      if (isRequestCancelled(err)) {
+        try {
+          this.checkAbort(taskId);
+        } catch (abort) {
+          err = abort as Error;
+        }
+      }
       if (err instanceof DownloadAbortError) {
         if (err.kind === 'paused') {
           this.update(taskId, (t: DownloadTask) => {
@@ -564,48 +755,37 @@ export class DownloadManager {
           t.exporting = false;
           t.error = errorMessage(err);
         });
+        // 失败保留独立续传目录，重试复用同一任务。
         this.cleanupTempFiles(taskId);
       }
     } finally {
-      this.activeTaskId = 0;
+      this.committingTaskId = 0;
+      this.abortSignal(taskId);
+      this.taskSignals.delete(taskId);
+      this.clearSaveTimer();
+      try { await this.persistTasks(); }
+      finally { this.activeTaskId = 0; }
     }
   }
+}
 
-  /**
-   * 单条 CBZ 条目：解码 + 反混淆 + 按源格式重编码（archiveEntry :508-576 的 visual/compact 档）。
-   * 源 jpg/jpeg → JPEG q95/85；其它 → WebP q95/80。缺失或解码失败时停止导出，避免发布残缺文件。
-   * 条目名带全局序号前缀 pad5(idx+1)_：JM 每章文件名都从 00001 重新编号，整本摊平导出到
-   * 同一 ZIP 时必须消歧，否则跨章节重名导致部分阅读器丢页（Review H-1）。
-   */
-  private async makeArchiveEntry(binPath: string, ref: ChapterPage, idx: number,
-    imgQ: string): Promise<ZipEntry | null> {
-    const dot: number = ref.filename.lastIndexOf('.');
-    const srcExt: string = dot >= 0 ? ref.filename.substring(dot + 1).toLowerCase() : '';
-    const wantJpeg: boolean = srcExt === 'jpg' || srcExt === 'jpeg';
-    let packed: ArrayBuffer | null = null;
-    let ext: string = wantJpeg ? '.jpg' : '.webp';
-    if (fileExists(binPath)) {
-      try {
-        const bytes: ArrayBuffer = readFileBytes(binPath);
-        const pm: image.PixelMap | null = await descrambleFromBytes(bytes, ref.photoId, ref.filename, ref.scrambleId);
-        if (pm !== null) {
-          try {
-            if (wantJpeg) {
-              packed = await packImage(pm, 'image/jpeg', imgQ === 'compact' ? 85 : 95);
-            } else {
-              packed = await packImage(pm, 'image/webp', imgQ === 'compact' ? 80 : 95);
-            }
-          } finally {
-            await pm.release();
-          }
-        }
-      } catch (e) { throw new Error(`第 ${idx + 1} 页解码失败：${errorMessage(e as Error)}`); }
-    }
-    if (packed === null) {
-      throw new Error(`第 ${idx + 1} 页文件缺失`);
-    }
-    return new ZipEntry(`${pad5(idx + 1)}${ext}`, packed);
-  }
+function taskRow(task: DownloadTask): TaskRow {
+  const row: TaskRow = new TaskRow();
+  row.id = task.id;
+  row.albumId = task.albumId;
+  row.title = task.title;
+  row.state = task.state;
+  row.done = task.done;
+  row.total = task.total;
+  row.failedPages = task.failedPages;
+  row.savedTo = task.savedTo;
+  row.cover = task.cover;
+  row.createdAt = task.createdAt;
+  row.error = task.error;
+  row.exporting = task.exporting ? 1 : 0;
+  row.exportDone = task.exportDone;
+  row.exportTotal = task.exportTotal;
+  return row;
 }
 
 let taskIdSeq: number = 0;

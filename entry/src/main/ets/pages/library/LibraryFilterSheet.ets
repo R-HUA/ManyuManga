@@ -1,4 +1,4 @@
-import uiMaterial from '@ohos.arkui.uiMaterial';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
 import { errorMessage } from '../../models/Models';
 import { SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { Prefs } from '../../util/Prefs';
@@ -98,7 +98,7 @@ export struct LibraryFilterSheet {
         Slider({ value: this.columns, min: 2, max: 6, step: 1, style: SliderStyle.OutSet })
           .selectedColor(PRIMARY)
           .trackColor(DIVIDER)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+          .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
           .onChange((value: number) => {
             const cols: number = Math.round(value);
             this.columns = cols;

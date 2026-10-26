@@ -15,65 +15,6 @@ export interface NativeRequestControl {
   cancelled?: Promise<void>;
 }
 
-/** 把一次列表加载里的 HttpRequest 收口，页面离开或换页时立刻 destroy。 */
-export class NativeRequestGate {
-  private dead: boolean = false;
-  private inflight: Array<http.HttpRequest> = [];
-
-  cancel(): void {
-    this.dead = true;
-    const pending: Array<http.HttpRequest> = this.inflight;
-    this.inflight = [];
-    for (const request of pending) {
-      try {
-        request.destroy();
-      } catch (error) {
-      }
-    }
-  }
-
-  isCancelled(): boolean {
-    return this.dead;
-  }
-
-  noteStart(request: http.HttpRequest): void {
-    if (this.dead) {
-      try {
-        request.destroy();
-      } catch (error) {
-      }
-      return;
-    }
-    this.inflight.push(request);
-  }
-
-  noteFinish(request: http.HttpRequest): void {
-    const next: Array<http.HttpRequest> = [];
-    for (const item of this.inflight) {
-      if (item !== request) {
-        next.push(item);
-      }
-    }
-    this.inflight = next;
-  }
-
-  control(): NativeRequestControl {
-    const gate: NativeRequestGate = this;
-    const ctrl: NativeRequestControl = {
-      onStart: (request: http.HttpRequest): void => {
-        gate.noteStart(request);
-      },
-      onFinish: (request: http.HttpRequest): void => {
-        gate.noteFinish(request);
-      },
-      isCancelled: (): boolean => {
-        return gate.isCancelled();
-      }
-    };
-    return ctrl;
-  }
-}
-
 interface NativeRequestErrorInfo {
   code?: number | string;
   message?: string;
@@ -3247,24 +3188,34 @@ export class NativeEhClient {
     }
   }
 
-  private static async requestBinary(url: string, site: string, referer: string): Promise<ArrayBuffer> {
+  private static async requestBinary(url: string, site: string, referer: string,
+    control?: NativeRequestControl): Promise<ArrayBuffer> {
+    if (control !== undefined && control.isCancelled()) {
+      throw new Error('请求已取消');
+    }
     const request = http.createHttp();
-    const headers: Record<string, string> = {
-      'Accept': '*/*',
-      'Accept-Language': NativeEhClient.REQUEST_ACCEPT_LANGUAGE,
-      'Referer': referer,
-      'User-Agent': NativeEhClient.REQUEST_USER_AGENT
-    };
-    const host = NativeEhClient.hostFromUrl(url);
-    if (host.length > 0) {
-      headers['Host'] = host;
-    }
-    const cookie = NativeEhClient.readCookie(url, site);
-    if (cookie.length > 0) {
-      headers['Cookie'] = cookie;
-    }
     try {
-      const response = await request.request(url, {
+      if (control !== undefined) {
+        control.onStart(request);
+        if (control.isCancelled()) {
+          throw new Error('请求已取消');
+        }
+      }
+      const headers: Record<string, string> = {
+        'Accept': '*/*',
+        'Accept-Language': NativeEhClient.REQUEST_ACCEPT_LANGUAGE,
+        'Referer': referer,
+        'User-Agent': NativeEhClient.REQUEST_USER_AGENT
+      };
+      const host = NativeEhClient.hostFromUrl(url);
+      if (host.length > 0) {
+        headers['Host'] = host;
+      }
+      const cookie = NativeEhClient.readCookie(url, site);
+      if (cookie.length > 0) {
+        headers['Cookie'] = cookie;
+      }
+      const requestPromise = request.request(url, {
         method: http.RequestMethod.GET,
         expectDataType: http.HttpDataType.ARRAY_BUFFER,
         usingCache: false,
@@ -3273,6 +3224,15 @@ export class NativeEhClient {
         connectTimeout: 15000,
         header: headers
       });
+      const response = control && control.cancelled ? await Promise.race<http.HttpResponse>([
+        requestPromise,
+        control.cancelled.then((): http.HttpResponse => {
+          throw new Error('请求已取消');
+        })
+      ]) : await requestPromise;
+      if (control && control.isCancelled()) {
+        throw new Error('请求已取消');
+      }
       NativeEhClient.captureResponseCookies(url, response);
       const code = Number(response.responseCode);
       if (code < 200 || code >= 400) {
@@ -3289,11 +3249,23 @@ export class NativeEhClient {
       }
       return result as ArrayBuffer;
     } catch (error) {
+      if (control !== undefined && control.isCancelled()) {
+        throw new Error('请求已取消');
+      }
       const message = nativeRequestErrorMessage(error, 'Binary request failed');
       hilog.error(DOMAIN, LOG_TAG, 'Native binary request failed. Url=%{public}s Cause=%{public}s', url, message);
       throw new Error(message);
     } finally {
-      request.destroy();
+      try {
+        if (control !== undefined) {
+          control.onFinish(request);
+        }
+      } finally {
+        try {
+          request.destroy();
+        } catch (destroyError) {
+        }
+      }
     }
   }
 
@@ -3688,15 +3660,21 @@ export class NativeEhClient {
 
   public static async fetchGalleryDetailComments(
     site: string,
-    detail: NativeGalleryDetail
+    detail: NativeGalleryDetail,
+    control?: NativeRequestControl
   ): Promise<NativeGalleryDetail> {
     const requestUrl = EhUrl.galleryComments(site, detail.gid, detail.token);
     const html = await NativeEhClient.requestText(
       requestUrl,
       site,
       http.RequestMethod.GET,
-      detail.detailUrl
+      detail.detailUrl,
+      undefined,
+      control
     );
+    if (control && control.isCancelled()) {
+      throw new Error('请求已取消');
+    }
     const nextDetail = mergeDetailHtml(detail, html, site);
     nextDetail.comments = parseGalleryComments(html, 0);
     nextDetail.hasMoreComments = false;
@@ -3797,9 +3775,10 @@ export class NativeEhClient {
   public static async downloadBinary(
     site: string,
     url: string,
-    referer: string
+    referer: string,
+    control?: NativeRequestControl
   ): Promise<ArrayBuffer> {
-    return NativeEhClient.requestBinary(url, site, referer);
+    return NativeEhClient.requestBinary(url, site, referer, control);
   }
 
   public static async fetchArchiveList(

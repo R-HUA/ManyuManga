@@ -1,5 +1,5 @@
 import { ChipOption } from './ReaderControls';
-import uiMaterial from '@ohos.arkui.uiMaterial';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
 import { PRIMARY, ACCENT } from '../../common/Theme';
 import { ReaderOptions } from '../../data/ReaderOptions';
 
@@ -25,7 +25,7 @@ export struct ReaderSettingsPanel {
             .layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.options.coverOffset })
             .selectedColor(PRIMARY)
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
             .onChange((value: boolean) => {
               this.options.coverOffset = value;
               this.buildSpreads();
@@ -42,7 +42,7 @@ export struct ReaderSettingsPanel {
             .layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.options.cropWhite })
             .selectedColor(PRIMARY)
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
             .onChange((value: boolean) => {
               this.options.cropWhite = value;
               this.persistOptions();
@@ -57,7 +57,7 @@ export struct ReaderSettingsPanel {
             .layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.options.eyeComfort })
             .selectedColor(PRIMARY)
-            .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
             .onChange((value: boolean) => {
               this.options.eyeComfort = value;
               this.persistOptions();

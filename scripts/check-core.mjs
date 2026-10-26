@@ -1,3 +1,6 @@
+import { makeRelationalStore, makeNativeFs, makeAuthentication } from './core-platform.mjs';
+import { regressionTests, installOfflineFixture, until, finishTask } from './core-regressions.mjs';
+import { sourceContractTests } from './source-contract-regressions.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,49 +17,49 @@ const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const ets = path.join(project, 'entry/src/main/ets');
 const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'manyu-core-'));
 let checks = 0;
+const failures = [];
+const environments = [];
 
 function environment() {
   const directory = fs.mkdtempSync(path.join(fixture, 'case-'));
   const disk = new Map();
   const secrets = new Map();
-  const state = { selected: [], saved: [], calls: [], failFlush: false, unzip: async () => {}, handler: async () => ({}) };
+  const state = { selected: [], saved: [], calls: [], decoded: [], packed: [], failFlush: false, unzip: async () => {}, handler: async () => ({}) };
+  const timers = new Set();
+  const later = (callback, delay) => {
+    const timer = setTimeout(() => { timers.delete(timer); callback(); }, delay);
+    timers.add(timer); return timer;
+  };
+  const cancelLater = timer => { timers.delete(timer); clearTimeout(timer); };
   const memory = { getSync: (key, fallback) => disk.has(key) ? disk.get(key) : fallback,
     put: async (key, value) => { disk.set(key, value); },
+    delete: async key => { disk.delete(key); },
     flush: async () => { await new Promise(resolve => setImmediate(resolve)); if (state.failFlush) { state.failFlush = false; throw new Error('磁盘写入失败'); } } };
-  const nativeFs = {
-    OpenMode: { READ_ONLY: fs.constants.O_RDONLY, READ_WRITE: fs.constants.O_RDWR, CREATE: fs.constants.O_CREAT, TRUNC: fs.constants.O_TRUNC },
-    openSync: (file, mode) => ({ fd: fs.openSync(file.startsWith('file://') ? fileURLToPath(file) : file, mode) }),
-    closeSync: file => fs.closeSync(typeof file === 'number' ? file : file.fd),
-    statSync: file => typeof file === 'number' ? fs.fstatSync(file) : fs.statSync(file),
-    readSync: (fd, buffer) => fs.readSync(fd, new Uint8Array(buffer), 0, buffer.byteLength, 0),
-    writeSync: (fd, value) => typeof value === 'string' ? fs.writeSync(fd, value) : fs.writeSync(fd, new Uint8Array(value)),
-    readTextSync: file => fs.readFileSync(file, 'utf8'),
-    mkdirSync: (file, recursive) => fs.mkdirSync(file, { recursive: !!recursive }),
-    unlinkSync: file => fs.unlinkSync(file), accessSync: file => fs.existsSync(file),
-    rmdirSync: file => { assert.ok(path.resolve(file).startsWith(directory + path.sep)); fs.rmSync(file, { recursive: true }); },
-    copyFileSync: (source, target) => {
-      const bytes = typeof source === 'number' ? fs.readFileSync(source) : fs.readFileSync(source);
-      fs.writeFileSync(target, bytes);
-    },
-    listFileSync: (root, options = {}) => {
-      const result = [];
-      const visit = (folder, prefix) => {
-        for (const item of fs.readdirSync(folder, { withFileTypes: true })) {
-          const name = prefix + item.name;
-          if (item.isDirectory() && options.recursion) visit(path.join(folder, item.name), name + '/');
-          else result.push(name);
-        }
-      };
-      visit(root, ''); return result;
-    }
-  };
+  const nativeFs = makeNativeFs(directory, state);
+  const authentication = makeAuthentication(state);
   const asset = { Tag: { ALIAS: 1, SECRET: 2, ACCESSIBILITY: 3, CONFLICT_RESOLUTION: 4, RETURN_TYPE: 5 },
     Accessibility: { DEVICE_FIRST_UNLOCKED: 1 }, ConflictResolution: { OVERWRITE: 0 }, ReturnType: { ALL: 0 },
     add: async values => { secrets.set(Buffer.from(values.get(1)).toString(), new Map(values)); },
     query: async query => { const value = secrets.get(Buffer.from(query.get(1)).toString()); return value ? [value] : []; },
     remove: async query => { secrets.delete(Buffer.from(query.get(1)).toString()); } };
   const jm = { utf8Encode: value => new Uint8Array(Buffer.from(value)), utf8Decode: value => Buffer.from(value).toString(),
-    md5Hex: value => crypto.createHash('md5').update(value).digest('hex'), jmApi: { init: async () => {} } };
+    md5Hex: value => crypto.createHash('md5').update(value).digest('hex'),
+    jmApi: { init: async () => {}, albumCoverUrl: id => `https://cover.invalid/${id}.jpg`, albumThumbUrl: id => `https://cover.invalid/${id}-thumb.jpg` } };
+  const httpUtil = { getBytes: async () => new ArrayBuffer(8),
+    getText: async (...args) => { state.textCalls ??= []; state.textCalls.push(args); return state.textHandler(...args); } };
+  const imageDecode = {
+    cachedRawFilePath: () => null,
+    async descrambleFromBytes(bytes, photoId, filename, scrambleId) {
+      state.decoded.push({ photoId, filename, scrambleId });
+      if (state.decodeFailure) throw new Error('图片解码失败');
+      return { bytes, release: async () => { state.released = (state.released ?? 0) + 1; } };
+    },
+    async packImage(pm, format, quality) {
+      state.packed.push({ format, quality });
+      if (state.packFailure) throw new Error('图片编码失败');
+      return pm.bytes.slice(0);
+    }
+  };
   const http = { RequestMethod: { POST: 'POST' }, HttpDataType: { STRING: 'string' }, createHttp: () => ({
     request: async (url, options) => {
       const request = { url, ...options, body: JSON.parse(options.extraData) }; state.calls.push(request);
@@ -66,33 +69,47 @@ function environment() {
   const context = { filesDir: path.join(directory, 'files'), cacheDir: path.join(directory, 'cache') };
   fs.mkdirSync(context.filesDir); fs.mkdirSync(context.cacheDir);
   globalThis.AppStorage = { setOrCreate: () => {}, get: () => undefined };
+  const relational = makeRelationalStore(state);
   function load(file) {
     file = path.resolve(file);
     if (file.endsWith(path.normalize('/data/JmApi.ets'))) return jm;
-    if (file.endsWith(path.normalize('/data/ImageDecode.ets'))) return { cachedRawFilePath: () => null };
-    if (file.endsWith(path.normalize('/util/Http.ets'))) return { httpUtil: { getBytes: async () => new ArrayBuffer(8) } };
+    if (file.endsWith(path.normalize('/data/ImageDecode.ets'))) return imageDecode;
+    if (file.endsWith(path.normalize('/util/Http.ets'))) return { httpUtil };
     if (modules.has(file)) return modules.get(file).exports;
     const module = { exports: {} }; modules.set(file, module);
     const output = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
     const native = {
+      "@ohos.security.cryptoFramework": authentication.cryptoFramework, "@ohos.userIAM.userAuth": authentication.userAuth,
       '@ohos.data.preferences': { getPreferencesSync: () => memory }, '@ohos.security.asset': asset,
       '@ohos.file.fs': nativeFs, '@ohos.file.picker': { DocumentViewPicker: class { async select() { return state.selected; } async save() { return state.saved; } } },
       '@ohos.zlib': { decompressFile: (...args) => state.unzip(...args) }, '@ohos.net.http': http,
-      '@ohos.util': { Base64Helper: class { encodeToStringSync(bytes) { return Buffer.from(bytes).toString('base64'); } } },
+      '@ohos.util': { Base64Helper: class {
+        encodeToStringSync(bytes) { return Buffer.from(bytes).toString('base64'); }
+        decodeSync(value) { return new Uint8Array(Buffer.from(value, 'base64')); }
+      }, TextDecoder: { create: () => ({ decodeToString: bytes => Buffer.from(bytes).toString('utf8') }) } },
       '@ohos.app.ability.common': {}, '@ohos.multimedia.image': {},
+      '@kit.AbilityKit': {},
       '@ohos.net.connection': {},
       '@ohos.url': require('node:url'),
       '@ohos.web.webview': { WebviewController: class {}, WebCookieManager: { fetchCookieSync: () => '', configCookieSync: () => {}, saveCookieSync: () => {} } },
-      '@kit.PerformanceAnalysisKit': { hilog: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } }
+      '@kit.PerformanceAnalysisKit': { hilog: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } },
+      '@kit.ArkData': { relationalStore: relational.platform }
     };
     const localRequire = name => name.startsWith('.') ? load(path.resolve(path.dirname(file), name + '.ets')) : native[name] ?? (() => { throw new Error(`未模拟的平台边界：${name}`); })();
-    vm.runInThisContext(`(function(exports, require, module) { ${output}\n})`, { filename: file })(module.exports, localRequire, module);
+    vm.runInThisContext(`(function(exports, require, module, setTimeout, clearTimeout) { ${output}\n})`, { filename: file })(module.exports, localRequire, module, later, cancelLater);
     return module.exports;
   }
   load(path.join(ets, 'util/Prefs.ets')).setAppContext(context);
-  return { load: name => load(path.join(ets, name + '.ets')), state, disk, secrets, directory, context };
+  const env = { load: name => load(path.join(ets, name + '.ets')), state, disk, secrets, directory, context,
+    close: () => { for (const timer of timers) clearTimeout(timer); timers.clear(); relational.close(); } };
+  environments.push(env);
+  return env;
 }
-async function test(name, run) { await run(environment()); checks++; console.log(`通过：${name}`); }
+async function test(name, run) {
+  const env = environment();
+  try { await run(env); checks++; console.log(`通过：${name}`); }
+  catch (error) { failures.push({ name, error }); console.error(`失败：${name}\n${error.stack}`); }
+}
 function book(models, id, title = '作品', author = '作者') { const a = new models.Album(id, title); a.author = author ? [author] : []; return a; }
 
 try {
@@ -110,10 +127,10 @@ try {
   await test('拆分后的 CBZ 打包器保留文件内容、目录偏移及失败清理', async env => {
     const { writeZipFile, ZipEntry } = env.load('data/CbzPacker');
     const file = path.join(env.directory, 'pages.cbz'), payload = new Uint8Array([1, 2, 3]);
-    await writeZipFile(file, 1, async () => new ZipEntry('章节/001.jpg', payload.buffer));
+    await writeZipFile(file, 1, async () => new ZipEntry('001.jpg', payload.buffer));
     const data = fs.readFileSync(file), nameLength = data.readUInt16LE(26), end = data.length - 22;
     assert.equal(data.readUInt32LE(0), 0x04034b50);
-    assert.equal(data.subarray(30, 30 + nameLength).toString(), '章节/001.jpg');
+    assert.equal(data.subarray(30, 30 + nameLength).toString(), '001.jpg');
     assert.deepEqual([...data.subarray(30 + nameLength, 33 + nameLength)], [...payload]);
     assert.equal(data.readUInt32LE(end), 0x06054b50); assert.equal(data.readUInt16LE(end + 10), 1);
     assert.equal(data.readUInt32LE(data.readUInt32LE(end + 16)), 0x02014b50);
@@ -208,10 +225,11 @@ try {
     const album = await suwayomi.album(source, '5'); assert.deepEqual(album.tags, ['冒险']); assert.equal(album.episodes[0].number, '1');
     assert.equal((await suwayomi.pages(source, '8'))[0], 'http://server:4567/api/v1/manga/5/chapter/0/page/0');
     assert.ok(!JSON.stringify([...env.disk]).includes('密码')); assert.equal(env.secrets.size, 1);
-    const before = JSON.stringify([...env.secrets.get('manyu.source.server')]);
+    const secretAlias = `manyu.source.${source.instanceId}`;
+    const before = JSON.stringify([...env.secrets.get(secretAlias)]);
     env.state.handler = async () => { throw new Error('服务不可用'); };
     await assert.rejects(suwayomi.connect('http://server:4567', '服务', 'basic', '账号', '新密码', 'server'));
-    assert.equal(JSON.stringify([...env.secrets.get('manyu.source.server')]), before);
+    assert.equal(JSON.stringify([...env.secrets.get(secretAlias)]), before);
   });
   await test('搜索响应返回前停用书源，旧响应被拒绝', async env => {
     const s = env.load('data/Sources'), { sourceApi } = env.load('data/SourceApi');
@@ -255,9 +273,9 @@ try {
     const album = book(m, 'jm~1'), page = new m.ChapterPage('jm~c', '1.jpg', 220980);
     const file = path.join(env.directory, 'page.bin'); fs.writeFileSync(file, 'offline-bytes');
     let checks = 0;
-    await assert.rejects(offlineStore.install(album, [page], [file], () => { if (++checks === 3) throw new Error('已取消'); }), /取消/);
+    await assert.rejects(installOfflineFixture(env, album, [page], [file], () => { if (++checks === 3) throw new Error('已取消'); }), /取消/);
     assert.equal(await offlineStore.album(album.id), null);
-    await offlineStore.install(album, [page], [file]);
+    await installOfflineFixture(env, album, [page], [file]);
     const { sourceStore } = env.load('data/Sources'), { sourceApi } = env.load('data/SourceApi');
     const source = await sourceStore.get('jm'); source.enabled = false; await sourceStore.save(source);
     assert.equal((await sourceApi.album(album.id)).name, '作品'); assert.ok((await sourceApi.fetchPage(page.photoId, page.filename)).byteLength > 0);
@@ -275,40 +293,58 @@ try {
   });
   await test('下载缺页时失败，不发布离线漫画或导出文件', async env => {
     const m = env.load('models/Models'), { sourceApi } = env.load('data/SourceApi');
-    const { DownloadManager, DownloadTask } = env.load('data/DownloadManager');
+    const { DownloadManager } = env.load('data/DownloadManager');
     const album = book(m, 'jm~1'); album.episodes = [new m.Chapter('jm~c', '第1话')];
     sourceApi.album = async () => album; sourceApi.chapterImages = async () => ['1.jpg']; sourceApi.scrambleId = async () => 0;
     sourceApi.fetchPage = async () => { throw new Error('页面不存在'); };
-    const manager = new DownloadManager(), task = new DownloadTask(); task.id = 1; task.albumId = album.id;
-    manager.tasks.push(task); await manager.runTask(task);
+    const manager = new DownloadManager(); await manager.enqueue(album);
+    const task = await finishTask(manager, 'failed');
     assert.equal(task.state, 'failed'); assert.match(task.error, /1 页下载失败.*页面不存在/); assert.equal(task.savedTo, '');
     assert.equal(await env.load('data/OfflineStore').offlineStore.album(album.id), null);
-    assert.equal(fs.existsSync(path.join(env.context.cacheDir, 'dl_1')), false);
+    assert.equal(fs.existsSync(path.join(env.context.cacheDir, `dl_${task.id}`)), false);
   });
   await test('删除下载等待并发请求结束，迟到页面不再写入', async env => {
     const m = env.load('models/Models'), { sourceApi } = env.load('data/SourceApi');
-    const { DownloadManager, DownloadTask } = env.load('data/DownloadManager');
+    const { DownloadManager } = env.load('data/DownloadManager');
     const album = book(m, 'jm~1'); album.episodes = [new m.Chapter('jm~c', '第1话')];
     sourceApi.album = async () => album; sourceApi.chapterImages = async () => ['1.jpg', '2.jpg', '3.jpg', '4.jpg']; sourceApi.scrambleId = async () => 0;
     const replies = []; sourceApi.fetchPage = () => new Promise(resolve => replies.push(resolve));
-    const manager = new DownloadManager(), task = new DownloadTask(); task.id = 2; task.albumId = album.id; manager.tasks.push(task);
-    let finished = false; const pending = manager.runTask(task).then(() => { finished = true; });
-    while (replies.length < 3) await new Promise(resolve => setImmediate(resolve));
-    await manager.removeTask(2, true); await new Promise(resolve => setImmediate(resolve)); assert.equal(finished, false);
-    for (const reply of replies) reply(new ArrayBuffer(32)); await pending;
-    assert.equal(fs.existsSync(path.join(env.context.cacheDir, 'dl_2')), false); assert.equal(manager.tasks.length, 0);
+    const manager = new DownloadManager(); await manager.enqueue(album);
+    const task = manager.tasks[0];
+    await until(() => replies.length >= 3, '并发下载开始');
+    let removed = false;
+    const removing = manager.removeTask(task.id, true).then(() => { removed = true; });
+    await new Promise(resolve => setImmediate(resolve)); assert.equal(removed, false);
+    for (const reply of replies) reply(new ArrayBuffer(32)); await removing;
+    assert.equal(fs.existsSync(path.join(env.context.cacheDir, `dl_${task.id}`)), false); assert.equal(manager.tasks.length, 0);
     assert.equal(await env.load('data/OfflineStore').offlineStore.album(album.id), null);
   });
   await test('备份默认值有效、取消不写入、失败整批回滚', async env => {
-    const backup = env.load('data/Backup'); const file = path.join(env.directory, 'backup.json'); env.state.saved = [file];
-    assert.ok(await backup.exportBackup()); const document = JSON.parse(fs.readFileSync(file, 'utf8'));
-    assert.equal(JSON.parse(document.values.sources_v1).length, 3); assert.deepEqual(JSON.parse(document.values.library_v1), []);
-    env.state.selected = []; assert.equal(await backup.importBackup(), false);
-    const prefs = await env.load('util/Prefs').Prefs.getInstance(); await prefs.putString('library_v1', '["original"]');
-    env.state.selected = [file]; env.state.failFlush = true; await assert.rejects(backup.importBackup(), /磁盘/);
-    assert.equal(await prefs.getString('library_v1', ''), '["original"]');
-    assert.ok(await backup.importBackup()); assert.equal(await prefs.getString('library_v1', ''), '[]');
-    document.version = 99; fs.writeFileSync(file, JSON.stringify(document)); await assert.rejects(backup.importBackup(), /有效/);
+    const backup = env.load('data/Backup');
+    const { library } = env.load('data/Library');
+    const models = env.load('models/Models');
+    const file = path.join(env.directory, 'backup.json');
+    env.state.saved = [file];
+    assert.ok(await backup.exportBackup());
+    const document = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.equal(document.magic, 'manyu-backup');
+    assert.equal(document.version, 3);
+    assert.equal(document.tables.source_entry.length, 3);
+    assert.deepEqual(document.tables.library_work, []);
+    env.state.selected = [];
+    assert.equal(await backup.importBackup(), false);
+    await library.add(book(models, 'jm~1'));
+    env.state.selected = [file];
+    env.state.failFlush = true;
+    await assert.rejects(backup.importBackup(), /磁盘/);
+    assert.equal((await library.list()).length, 1);
+    assert.ok(await backup.importBackup());
+    assert.equal((await library.list()).length, 0);
+    await library.add(book(models, 'jm~2'));
+    document.version = 99;
+    fs.writeFileSync(file, JSON.stringify(document));
+    await assert.rejects(backup.importBackup(), /有效/);
+    assert.equal((await library.list()).length, 1);
   });
   await test('E-Hentai 复合键解析与默认注册重启语义', async env => {
     const eh = env.load('data/EhSource');
@@ -327,24 +363,16 @@ try {
     assert.equal(secondPage.total, 0);
     const fresh = await env.load('data/Sources').sourceStore.list();
     assert.ok(fresh.some(x => x.id === 'eh' && x.kind === 'eh' && x.enabled));
-    // 重启语义：预置 prefs 磁盘后重新 load —— 已置补种标记的旧库不复活 EH；未置标记的旧库补种一次
-    const seededSources = JSON.stringify([
-      { id: 'jm', instanceId: 'jm', name: '禁漫', kind: 'jm', endpoint: '', remoteId: '', language: '', auth: 'none', enabled: true, latency: 0 },
-      { id: 'local', instanceId: 'local', name: '本地漫画', kind: 'local', endpoint: '', remoteId: '', language: '', auth: 'none', enabled: true, latency: 0 }
-    ]);
-    const removed = environment();
-    removed.disk.set('sources_v1', seededSources);
-    removed.disk.set('eh_seeded_v1', true);
-    const afterRestart = await removed.load('data/Sources').sourceStore.list();
-    assert.equal(afterRestart.some(x => x.id === 'eh'), false, '用户删除 EH 后重启不应复活');
-    const legacy = environment();
-    legacy.disk.set('sources_v1', seededSources);
-    const upgraded = await legacy.load('data/Sources').sourceStore.list();
-    assert.equal(upgraded.filter(x => x.id === 'eh').length, 1, '旧版本升级应恰好补种一次');
-    assert.equal(legacy.disk.get('eh_seeded_v1'), true);
+    const sources = env.load('data/Sources').sourceStore;
+    await sources.remove('eh'); sources.invalidate();
+    assert.equal((await sources.list()).some(entry => entry.id === 'eh'), false);
   });
-  console.log(`共 ${checks} 项核心逻辑验证通过（平台接口使用本地替身）。`);
+  await regressionTests(test);
+  await sourceContractTests(test);
+  console.log(`共 ${checks} 项通过，${failures.length} 项失败（真实内存 SQLite，其余平台边界使用本地替身）。`);
+  if (failures.length) process.exitCode = 1;
 } finally {
+  for (const env of environments) env.close();
   assert.ok(path.resolve(fixture).startsWith(path.resolve(os.tmpdir()) + path.sep + 'manyu-core-'));
   fs.rmSync(fixture, { recursive: true, force: true });
 }
