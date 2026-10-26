@@ -264,7 +264,7 @@ export async function writeZipFile(path: string, entryCount: number,
       lv.setUint16(26, nameBytes.length, true);
       lv.setUint16(28, 0, true); // extra len
       await writeAll(fd, local, validate);
-      await writeAll(fd, nameBytes.buffer, validate);
+      await writeAll(fd, nameBytes.buffer as ArrayBuffer, validate);
       await writeAll(fd, entry.data, validate);
       offset += 30 + nameBytes.length + size;
 

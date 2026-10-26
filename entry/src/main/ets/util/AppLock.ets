@@ -46,14 +46,15 @@ class AuthCallback implements userAuth.IAuthCallback {
     this.finish = finish;
   }
 
-  onResult(result: userAuth.UserAuthResult): void {
+  // 原生桥不会保留调用接收者，使用箭头函数绑定认证实例。
+  onResult = (result: userAuth.UserAuthResult): void => {
     const outcome: AuthOutcome = new AuthOutcome();
     outcome.ok = result.result === AUTH_SUCCESS;
     if (!outcome.ok) {
       outcome.message = result.result === AUTH_CANCELED ? '已取消验证' : '验证未通过，请重试';
     }
     this.complete(outcome);
-  }
+  };
 
   fail(): void {
     const outcome: AuthOutcome = new AuthOutcome();

@@ -505,7 +505,7 @@ export class DownloadManager {
         return await fn();
       } catch (e) {
         if (e instanceof DownloadAbortError || isRequestCancelled(e as Error)) {
-          throw e;
+          throw e as Error;
         }
         failure = e as Error;
         if (/登录|认证|401|403/.test(failure.message)) { throw failure; }
@@ -652,7 +652,7 @@ export class DownloadManager {
                   (): void => this.checkAbort(taskId));
               } catch (e) {
                 if (e instanceof DownloadAbortError || isRequestCancelled(e as Error)) {
-                  throw e;
+                  throw e as Error;
                 }
                 ok = false;
                 pageErrors.push(e as Error);

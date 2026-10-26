@@ -229,7 +229,13 @@ export function makeAuthentication(state) {
       return {
         on(event, value) { assert.equal(event, 'result'); callback = value; },
         off(event) { assert.equal(event, 'result'); callback = undefined; },
-        start() { queueMicrotask(() => callback?.onResult({ result: state.authResult ?? 12500000 })); },
+        start() {
+          queueMicrotask(() => {
+            // 原生桥提取函数后调用，不保留回调对象作为 this。
+            const onResult = callback?.onResult;
+            onResult?.({ result: state.authResult ?? 12500000 });
+          });
+        },
         cancel() {}
       };
     }

@@ -1,4 +1,5 @@
 import http from '@ohos.net.http';
+import type { NativeRequestControl } from '../data/eh/EhNative';
 
 /** 取消是独立结果，不计入失败，也不触发换源。 */
 export class RequestCancelled extends Error {
@@ -11,11 +12,8 @@ export function isRequestCancelled(error: Error): boolean {
   return error instanceof RequestCancelled || error.message === '请求已取消';
 }
 
-/** 与 EhNative.NativeRequestControl 同形，避免再做一套取消接口。 */
-export interface AbortControl {
-  onStart: (request: http.HttpRequest) => void;
-  onFinish: (request: http.HttpRequest) => void;
-  isCancelled: () => boolean;
+/** 显式继承原生图源取消契约，避免依赖 ArkTS 不支持的结构类型兼容。 */
+export interface AbortControl extends NativeRequestControl {
   cancelled: Promise<void>;
 }
 

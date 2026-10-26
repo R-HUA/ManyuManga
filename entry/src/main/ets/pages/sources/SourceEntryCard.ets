@@ -37,7 +37,7 @@ export struct SourceEntryCard {
     return presentationFor(this.source.kind);
   }
 
-  private enabled(action: SourceAction): boolean {
+  private isActionEnabled(action: SourceAction): boolean {
     if (action.requiresEnabled && (!this.source.enabled || this.busy)) {
       return false;
     }
@@ -45,7 +45,7 @@ export struct SourceEntryCard {
   }
 
   private run(action: SourceAction): void {
-    if (!this.enabled(action)) {
+    if (!this.isActionEnabled(action)) {
       return;
     }
     if (action.kind === 'import') {
@@ -108,14 +108,14 @@ export struct SourceEntryCard {
     Text(action.label)
       .fontSize(13)
       .fontWeight(FontWeight.Bold)
-      .fontColor(!this.enabled(action) ? TEXT_SUB : (action.primary ? PRIMARY : (action.danger ? DANGER : TEXT_MAIN)))
+      .fontColor(!this.isActionEnabled(action) ? TEXT_SUB : (action.primary ? PRIMARY : (action.danger ? DANGER : TEXT_MAIN)))
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 9, bottom: 9 })
       .borderRadius(16)
       .backgroundColor(action.primary ? PRIMARY_SOFT : (action.danger ? DANGER_SOFT : SUB_CARD))
       .border({ width: 0.5, color: action.primary ? PRIMARY : DIVIDER })
-      .opacity(this.enabled(action) ? 1.0 : 0.45)
+      .opacity(this.isActionEnabled(action) ? 1.0 : 0.45)
       .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
       .onClick((): void => {
         this.run(action);

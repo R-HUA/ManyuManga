@@ -121,7 +121,7 @@ export class Http {
   /** 模拟 OkHttp callTimeout：整体超时即 destroy 请求并 reject */
   private withTimeout<T>(p: Promise<T>, timeoutMs: number, req: http.HttpRequest,
     signal: RequestAbortGroup | null): Promise<T> {
-    return new Promise<T>((resolve: (value: T) => void, reject: (reason: Error) => void) => {
+    return new Promise<T>((resolve: (value: T) => void, reject: (reason: Object) => void) => {
       let settled: boolean = false;
       const timer: number = setTimeout(() => {
         if (settled) { return; }
