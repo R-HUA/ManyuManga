@@ -8,7 +8,7 @@
  *  3. 两阶段图片解析 —— 详情页缩略图提供每页 /s/{pageToken} 地址，单页请求才得到带时效签名的
  *     图片直链；attempt>0 时附带 nl 参数强制服务端切换 H@H 节点重试。
  */
-import { Album, AlbumLite, Chapter, CommentItem, CommentsResult, SearchResult } from '../models/Models';
+import { Album, AlbumLite, Chapter, CommentItem, CommentsResult, SearchResult, MetadataTerm } from '../models/Models';
 import { sourceKey } from './Sources';
 import { EhSettings } from './eh/EhSettings';
 import {
@@ -322,19 +322,20 @@ export class EhSource {
     album.views = `${detail.pages} 页`;
     album.originalUrl = detail.detailUrl;
 
-    const authors: Array<string> = [];
-    const tags: Array<string> = [];
+    const authors: Array<MetadataTerm> = [];
+    const tags: Array<MetadataTerm> = [];
     for (const group of detail.tagGroups) {
       const nsLabel: string = EhTagTranslator.translateNamespace(group.name);
       for (const tag of group.tags) {
         const translated: string = `${nsLabel}:${EhTagTranslator.translateTag(group.name, tag)}`;
         if (group.name === 'artist' || group.name === 'group') {
-          authors.push(translated);
+          authors.push(new MetadataTerm(tag, translated, group.name));
         }
-        tags.push(translated);
+        tags.push(new MetadataTerm(tag, translated, group.name));
       }
     }
-    album.author = authors.length > 0 ? authors : (detail.uploader !== '' ? [detail.uploader] : []);
+    album.author = authors.length > 0 ? authors :
+      (detail.uploader !== '' ? [new MetadataTerm(detail.uploader, detail.uploader, 'uploader')] : []);
     album.tags = tags;
     album.episodes = [new Chapter(key, `全一册 · 共 ${detail.pages} 页 (${detail.categoryLabel})`, '1')];
     return album;

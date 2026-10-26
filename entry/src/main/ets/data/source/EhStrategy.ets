@@ -1,5 +1,5 @@
 import { ehSource } from '../EhSource';
-import { EhTagTranslator } from '../eh/EhNative';
+import { ehTermQuery } from '../eh/EhQuery';
 import { Album, AlbumLite, CategoryItem, CommentsResult, DomainSpeed, SearchResult } from '../../models/Models';
 import { SourceEntry, SourceKind } from '../Sources';
 import { SourceRequestContext, SourceStrategy } from './SourceContracts';
@@ -68,17 +68,8 @@ export class EhStrategy implements SourceStrategy {
     return Promise.resolve(0);
   }
 
-  searchExpression(namespace: string, value: string): string {
-    const name: string = value.trim();
-    const ns: string = namespace.trim();
-    if (ns === '') {
-      return name;
-    }
-    const prefix: string | undefined = EhTagTranslator.namespaceToPrefix(ns);
-    if (prefix !== undefined) {
-      return `${prefix}${name}`;
-    }
-    return `${ns}:${name}`;
+  searchExpression(namespace: string, value: string, field: string = 'tag'): string {
+    return ehTermQuery(namespace, value, field);
   }
 
   resolveDirectKey(_source: SourceEntry, input: string): string {

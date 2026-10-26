@@ -2,7 +2,7 @@ import { ComicCard } from '../../common/ComicCard';
 import promptAction from '@ohos.promptAction';
 import { EmptyView } from '../../common/Components';
 import { BG, CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
-import { Album, errorMessage } from '../../models/Models';
+import { Album, MetadataTerm, errorMessage } from '../../models/Models';
 import { downloadManager, DownloadTask } from '../../data/DownloadManager';
 import { offlineStore } from '../../data/OfflineStore';
 import {
@@ -78,7 +78,7 @@ export struct DownloadedPane {
       const item: OfflineItem = new OfflineItem();
       item.albumId = album.id;
       item.title = album.name;
-      item.author = album.author.join(' / ');
+      item.author = album.author.map((term: MetadataTerm): string => term.label).join(' / ');
       item.cover = album.coverUrl;
       for (const task of downloadManager.tasks) {
         if (task.albumId === album.id && task.state === 'done' && task.savedTo !== '') {

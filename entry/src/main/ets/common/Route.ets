@@ -3,6 +3,34 @@
  * MainShell 预注册以下全部路由；页面用 @Consume('navPathStack') 获取栈后
  * pushPathByName(name, param) 跳转，NavDestination.onReady 中 ctx.pathInfo.param 取参。
  */
+import { MetadataTerm, asRecord, asString, metadataTermFromObject } from '../models/Models';
+
+export type SearchScope = 'source' | 'library' | 'all';
+export type SearchField = 'author' | 'tag';
+
+/** 来源身份与原词一起传递，避免译名进入图源协议。 */
+export class SearchSelection {
+  sourceId: string;
+  field: SearchField;
+  term: MetadataTerm;
+  constructor(sourceId: string, field: SearchField, term: MetadataTerm) {
+    this.sourceId = sourceId;
+    this.field = field;
+    this.term = term;
+  }
+}
+
+export function searchSelectionFromObject(value: Object | undefined): SearchSelection | null {
+  if (value === undefined) { return null; }
+  const row: Record<string, Object> | null = asRecord(value);
+  if (row === null || typeof row['sourceId'] !== 'string' ||
+    (row['field'] !== 'author' && row['field'] !== 'tag')) {
+    throw new Error('搜索条件格式无效');
+  }
+  return new SearchSelection(asString(row['sourceId']), asString(row['field']) as SearchField,
+    metadataTermFromObject(row['term']));
+}
+
 export const ROUTE_SEARCH: string = 'search';
 export const ROUTE_ALBUM: string = 'albumDetail';
 export const ROUTE_READER: string = 'reader';
@@ -22,6 +50,8 @@ export interface MangaRouteParams {
   sourceId?: string;
   matchAid?: string;
   query?: string;
+  scope?: SearchScope;
+  selection?: SearchSelection;
   match?: boolean;
 }
 

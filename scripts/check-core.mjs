@@ -1,6 +1,7 @@
 import { makeRelationalStore, makeNativeFs, makeAuthentication } from './core-platform.mjs';
 import { regressionTests, installOfflineFixture, until, finishTask } from './core-regressions.mjs';
 import { sourceContractTests } from './source-contract-regressions.mjs';
+import { searchTests } from './search-regressions.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -77,7 +78,16 @@ function environment() {
     if (file.endsWith(path.normalize('/util/Http.ets'))) return { httpUtil };
     if (modules.has(file)) return modules.get(file).exports;
     const module = { exports: {} }; modules.set(file, module);
-    const output = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+    let source = fs.readFileSync(file, 'utf8');
+    // 保留真实页面方法，只移除本地 Node 无法执行的 ArkUI 声明式布局。
+    if (/[/\\]pages[/\\](SearchAllPage|search[/\\](SearchSuggestField|MetadataSearchChip))\.ets$/.test(file)) {
+      const end = source.indexOf(file.endsWith('MetadataSearchChip.ets') ? '  @Builder' : '  build()');
+      assert.ok(end > 0);
+      source = (source.slice(0, end) + '\n}').replace(/@Component\s+export struct /g, 'export class ')
+        .replace(/@(Consume|StorageProp|Watch|Prop|Link)\([^)]*\)\s*/g, '')
+        .replace(/@(State|Prop|Link)\s+/g, '');
+    }
+    const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
     const native = {
       "@ohos.security.cryptoFramework": authentication.cryptoFramework, "@ohos.userIAM.userAuth": authentication.userAuth,
       '@ohos.data.preferences': { getPreferencesSync: () => memory }, '@ohos.security.asset': asset,
@@ -96,7 +106,7 @@ function environment() {
       '@kit.ArkData': { relationalStore: relational.platform }
     };
     const localRequire = name => name.startsWith('.') ? load(path.resolve(path.dirname(file), name + '.ets')) : native[name] ?? (() => { throw new Error(`未模拟的平台边界：${name}`); })();
-    vm.runInThisContext(`(function(exports, require, module, setTimeout, clearTimeout) { ${output}\n})`, { filename: file })(module.exports, localRequire, module, later, cancelLater);
+    vm.runInThisContext(`(function(exports, require, module, setTimeout, clearTimeout, $r) { ${output}\n})`, { filename: file })(module.exports, localRequire, module, later, cancelLater, value => value);
     return module.exports;
   }
   load(path.join(ets, 'util/Prefs.ets')).setAppContext(context);
@@ -110,7 +120,7 @@ async function test(name, run) {
   try { await run(env); checks++; console.log(`通过：${name}`); }
   catch (error) { failures.push({ name, error }); console.error(`失败：${name}\n${error.stack}`); }
 }
-function book(models, id, title = '作品', author = '作者') { const a = new models.Album(id, title); a.author = author ? [author] : []; return a; }
+function book(models, id, title = '作品', author = '作者') { const a = new models.Album(id, title); a.author = author ? [new models.MetadataTerm(author)] : []; return a; }
 
 try {
   await test('共享列表数据源保留重载、逐项追加和监听器注销语义', async env => {
@@ -150,7 +160,7 @@ try {
     const m = env.load('models/Models'), match = env.load('data/Matching');
     const a = book(m, 'jm~1', '作品：甲'), b = book(m, 's~1', '作品 甲');
     assert.ok(match.highConfidence(a, b)); b.author = []; assert.equal(match.highConfidence(a, b), false);
-    b.author = ['作者']; a.language = 'zh'; b.language = 'ja'; assert.equal(match.highConfidence(a, b), false);
+    b.author = [new m.MetadataTerm('作者')]; a.language = 'zh'; b.language = 'ja'; assert.equal(match.highConfidence(a, b), false);
     b.language = 'zh'; b.name = '作品甲 全彩'; assert.equal(match.highConfidence(a, b), false);
   });
   await test('章节匹配拒绝卷章混用、重复编号和排列序号猜测', async env => {
@@ -222,7 +232,9 @@ try {
       if (request.body.query.includes('fetchMangaAndChapters')) return { fetchMangaAndChapters: { manga: { id: 5, title: '作品', author: '作者', genre: ['冒险'] }, chapters: [{ id: 9, name: '第1话', chapterNumber: 1, sourceOrder: 1 }] } };
       return { fetchChapterPages: { pages: ['/api/v1/manga/5/chapter/0/page/0'] } };
     };
-    const album = await suwayomi.album(source, '5'); assert.deepEqual(album.tags, ['冒险']); assert.equal(album.episodes[0].number, '1');
+    const album = await suwayomi.album(source, '5');
+    assert.deepEqual(album.tags.map(term => ({ value: term.value, label: term.label })), [{ value: '冒险', label: '冒险' }]);
+    assert.equal(album.episodes[0].number, '1');
     assert.equal((await suwayomi.pages(source, '8'))[0], 'http://server:4567/api/v1/manga/5/chapter/0/page/0');
     assert.ok(!JSON.stringify([...env.disk]).includes('密码')); assert.equal(env.secrets.size, 1);
     const secretAlias = `manyu.source.${source.instanceId}`;
@@ -369,6 +381,7 @@ try {
   });
   await regressionTests(test);
   await sourceContractTests(test);
+  await searchTests(test);
   console.log(`共 ${checks} 项通过，${failures.length} 项失败（真实内存 SQLite，其余平台边界使用本地替身）。`);
   if (failures.length) process.exitCode = 1;
 } finally {

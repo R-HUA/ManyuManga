@@ -1,5 +1,5 @@
 import { relationalStore } from '@kit.ArkData';
-import { Album, Chapter, asArray, asRecord, asString } from '../../models/Models';
+import { Album, Chapter, MetadataTerm, metadataTermFromObject, asArray, asRecord, asString } from '../../models/Models';
 import { txExecute, txQuery } from './AppDatabase';
 
 /** 表名和列名仅由 DAO 常量提供，业务数据始终使用绑定参数。 */
@@ -63,18 +63,17 @@ export class AlbumTagRow {
   albumId: string = '';
   namespace: string = '';
   value: string = '';
+  label: string = '';
   position: number = 0;
 }
 
-export function albumTag(albumId: string, raw: string, position: number): AlbumTagRow {
+export function albumTag(albumId: string, raw: MetadataTerm, position: number): AlbumTagRow {
   const tag: AlbumTagRow = new AlbumTagRow();
   tag.albumId = albumId;
   tag.position = position;
-  const cut: number = raw.indexOf(':');
-  if (cut > 0 && cut < raw.length - 1) {
-    tag.namespace = raw.substring(0, cut).trim();
-    tag.value = raw.substring(cut + 1).trim();
-  } else { tag.value = raw.trim(); }
+  tag.namespace = raw.namespace;
+  tag.value = raw.value;
+  tag.label = raw.label;
   return tag;
 }
 
@@ -104,6 +103,7 @@ export async function syncAlbumRelations(tx: relationalStore.Transaction, album:
       const tag: AlbumTagRow = new AlbumTagRow();
       tag.namespace = cellString(row, 'namespace');
       tag.value = cellString(row, 'value');
+      tag.label = cellString(row, 'label');
       tag.position = cellLong(row, 'position');
       tags.set(JSON.stringify([tag.namespace, tag.value]), tag);
     });
@@ -114,9 +114,9 @@ export async function syncAlbumRelations(tx: relationalStore.Transaction, album:
     if (tag.value === '' || seen.has(key)) { continue; }
     seen.add(key);
     const old: AlbumTagRow | undefined = tags.get(key);
-    if (old === undefined || old.position !== index) {
+    if (old === undefined || old.position !== index || old.label !== tag.label) {
       await txUpsert(tx, 'album_tag', ['album_id', 'namespace', 'value'],
-        ['album_id', 'namespace', 'value', 'position'], [album.id, tag.namespace, tag.value, index]);
+        ['album_id', 'namespace', 'value', 'label', 'position'], [album.id, tag.namespace, tag.value, tag.label, index]);
     }
     tags.delete(key);
   }
@@ -147,14 +147,12 @@ export function albumFromJson(text: string): Album {
   const authors: Array<Object> | null = asArray(rec['author']);
   if (authors === null) { throw new Error('漫画作者资料格式无效'); }
   for (const item of authors) {
-    if (typeof item !== 'string') { throw new Error('漫画作者资料格式无效'); }
-    album.author.push(asString(item));
+    album.author.push(metadataTermFromObject(item));
   }
   const tags: Array<Object> | null = asArray(rec['tags']);
   if (tags === null) { throw new Error('漫画标签资料格式无效'); }
   for (const item of tags) {
-    if (typeof item !== 'string') { throw new Error('漫画标签资料格式无效'); }
-    album.tags.push(asString(item));
+    album.tags.push(metadataTermFromObject(item));
   }
   const episodes: Array<Object> | null = asArray(rec['episodes']);
   if (episodes === null) { throw new Error('漫画章节资料格式无效'); }

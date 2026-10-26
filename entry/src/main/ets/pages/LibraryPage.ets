@@ -6,6 +6,7 @@ import promptAction from '@ohos.promptAction';
 import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
 import { library, LibraryWork } from '../data/Library';
+import { albumMatchesText } from '../data/SearchQuery';
 import { offlineStore } from '../data/OfflineStore';
 import { downloadManager } from '../data/DownloadManager';
 import { sourceApi } from '../data/SourceApi';
@@ -77,7 +78,8 @@ export struct LibraryPage {
 
   private filtered(): Array<LibraryWork> {
     return this.works.filter((w: LibraryWork) =>
-      `${w.title} ${w.author}`.toLowerCase().includes(this.query.toLowerCase()) &&
+      (`${w.title} ${w.author}`.toLowerCase().includes(this.query.toLowerCase()) ||
+        w.albums.some((album: Album): boolean => albumMatchesText(album, this.query))) &&
       (this.category === '' || w.categories.includes(this.category)) &&
       (this.readFilter === 0 || (this.readFilter === 1 ? w.read : !w.read)) &&
       (this.downloadFilter === 0 || (this.downloadFilter === 1 ? this.downloaded.includes(w.activeKey) : !this.downloaded.includes(w.activeKey))))

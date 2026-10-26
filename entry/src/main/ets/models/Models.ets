@@ -63,6 +63,29 @@ export class Chapter {
   }
 }
 
+/** 显示译名不能替代图源搜索所需的原始身份。 */
+export class MetadataTerm {
+  namespace: string;
+  value: string;
+  label: string;
+
+  constructor(value: string = '', label: string = value, namespace: string = '') {
+    this.namespace = namespace;
+    this.value = value;
+    this.label = label;
+  }
+}
+
+/** 持久化边界只接收完整元数据，不从译名反推原值。 */
+export function metadataTermFromObject(value: Object): MetadataTerm {
+  const row: Record<string, Object> | null = asRecord(value);
+  if (row === null || typeof row['namespace'] !== 'string' || typeof row['value'] !== 'string' ||
+    typeof row['label'] !== 'string') {
+    throw new Error('漫画标签或作者资料格式无效，请重新获取');
+  }
+  return new MetadataTerm(asString(row['value']), asString(row['label']), asString(row['namespace']));
+}
+
 /** 本子详情（对应 Kotlin JmAlbum，Models.kt:22-32；可持久化到本地缓存） */
 export class Album {
   coverUrl: string = '';
@@ -71,8 +94,8 @@ export class Album {
   originalUrl: string = '';
   id: string;
   name: string;
-  author: Array<string>;
-  tags: Array<string>;
+  author: Array<MetadataTerm>;
+  tags: Array<MetadataTerm>;
   likes: string;
   views: string;
   episodes: Array<Chapter>;

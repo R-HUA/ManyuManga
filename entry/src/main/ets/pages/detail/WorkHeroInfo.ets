@@ -1,5 +1,5 @@
-import { MangaRouteParams, ROUTE_SEARCH } from '../../common/Route';
-import { Album, Chapter, ReadingProgress } from '../../models/Models';
+import { MetadataSearchChip } from '../search/MetadataSearchChip';
+import { Album, Chapter, ReadingProgress, MetadataTerm } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
@@ -81,19 +81,10 @@ export struct WorkHeroInfo {
 
             if (this.album.author.length > 0) {
               Flex({ wrap: FlexWrap.Wrap }) {
-                ForEach(this.album.author, (author: string) => {
-                  Text(author)
-                    .fontSize(12)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor(PRIMARY)
-                    .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-                    .margin({ right: 6, bottom: 6 })
-                    .borderRadius(12)
-                    .backgroundColor(PRIMARY_SOFT)
-                    .onClick(() => {
-                      this.stack.pushPathByName(ROUTE_SEARCH, { query: author } as MangaRouteParams);
-                    })
-                }, (author: string) => author)
+                ForEach(this.album.author, (author: MetadataTerm) => {
+                  MetadataSearchChip({ term: author, field: 'author', sourceId: sourceId(this.aid),
+                    sourceName: this.sourceName })
+                }, (author: MetadataTerm) => JSON.stringify([author.namespace, author.value]))
               }
             }
 
@@ -257,20 +248,9 @@ export struct WorkHeroInfo {
         // Clickable Tags
         if (this.album.tags.length > 0) {
           Flex({ wrap: FlexWrap.Wrap }) {
-            ForEach(this.album.tags, (tag: string) => {
-              Text(tag)
-                .fontColor(TEXT_MAIN)
-                .fontSize(12)
-                .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                .margin({ right: 8, bottom: 8 })
-                .backgroundColor(CARD)
-                .borderRadius(14)
-                .border({ width: 0.5, color: DIVIDER })
-                .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
-                .onClick(() => {
-                  this.stack.pushPathByName(ROUTE_SEARCH, { query: tag } as MangaRouteParams);
-                })
-            }, (tag: string) => tag)
+            ForEach(this.album.tags, (tag: MetadataTerm) => {
+              MetadataSearchChip({ term: tag, sourceId: sourceId(this.aid), sourceName: this.sourceName })
+            }, (tag: MetadataTerm) => JSON.stringify([tag.namespace, tag.value]))
           }
           .width('100%')
         }

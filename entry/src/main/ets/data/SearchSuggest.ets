@@ -1,4 +1,4 @@
-import { Album } from '../models/Models';
+import { Album, MetadataTerm } from '../models/Models';
 import { sourceId } from './Sources';
 import { searchAlbumTags } from './db/LibraryDao';
 import { AlbumTagRow } from './db/RowCodec';
@@ -55,7 +55,7 @@ export async function suggestLocal(text: string, onlySource: string): Promise<Ar
     }
     for (const tag of album.tags) {
       const suggestion: SearchSuggestion = tagSuggestion(owner, tag);
-      if (suggestion.label.toLowerCase().indexOf(needle) < 0) {
+      if (`${suggestion.label} ${suggestion.namespace}:${suggestion.value}`.toLowerCase().indexOf(needle) < 0) {
         continue;
       }
       pushSuggestion(items, seen, suggestion, onlySource);
@@ -66,13 +66,13 @@ export async function suggestLocal(text: string, onlySource: string): Promise<Ar
   }
   const tags: Array<AlbumTagRow> = await searchAlbumTags(needle, onlySource, SUGGEST_LIMIT * 3);
   for (const tag of tags) {
-    const label: string = tag.namespace === '' ? tag.value : `${tag.namespace}:${tag.value}`;
-    pushSuggestion(items, seen, tagSuggestion(sourceId(tag.albumId), label), onlySource);
+    pushSuggestion(items, seen, tagSuggestion(sourceId(tag.albumId),
+      new MetadataTerm(tag.value, tag.label, tag.namespace)), onlySource);
     if (items.length >= SUGGEST_LIMIT) { return items; }
   }
   const favorites: Array<string> = await favStore.searchTags(needle, SUGGEST_LIMIT);
   for (const tag of favorites) {
-    const suggestion: SearchSuggestion = tagSuggestion('', tag);
+    const suggestion: SearchSuggestion = tagSuggestion('', new MetadataTerm(tag));
     if (suggestion.label.toLowerCase().indexOf(needle) < 0) {
       continue;
     }
@@ -92,18 +92,13 @@ function historySuggestion(query: string): SearchSuggestion {
   return item;
 }
 
-function tagSuggestion(owner: string, raw: string): SearchSuggestion {
+function tagSuggestion(owner: string, raw: MetadataTerm): SearchSuggestion {
   const item: SearchSuggestion = new SearchSuggestion();
   item.kind = 'tag';
   item.sourceId = owner;
-  const cut: number = raw.indexOf(':');
-  if (cut > 0 && cut < raw.length - 1) {
-    item.namespace = raw.substring(0, cut).trim();
-    item.value = raw.substring(cut + 1).trim();
-  } else {
-    item.value = raw.trim();
-  }
-  item.label = item.namespace === '' ? item.value : `${item.namespace}:${item.value}`;
+  item.namespace = raw.namespace;
+  item.value = raw.value;
+  item.label = raw.label;
   return item;
 }
 

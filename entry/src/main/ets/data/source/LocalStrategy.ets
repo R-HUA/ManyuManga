@@ -77,9 +77,8 @@ export class LocalStrategy implements SourceStrategy {
     return Promise.resolve(0);
   }
 
-  searchExpression(namespace: string, value: string): string {
-    const name: string = value.trim();
-    return namespace.trim() === '' ? name : `${namespace.trim()}:${name}`;
+  searchExpression(_namespace: string, value: string, _field: string = 'tag'): string {
+    return value.trim();
   }
 
   resolveDirectKey(_source: SourceEntry, _input: string): string {

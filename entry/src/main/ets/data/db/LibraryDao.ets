@@ -205,9 +205,10 @@ export function activateLibraryAlbum(key: string): Promise<void> {
 }
 
 export async function searchAlbumTags(needle: string, onlySource: string, limit: number): Promise<Array<AlbumTagRow>> {
-  const args: Array<relationalStore.ValueType> = ['%' + escapeLike(needle.toLowerCase()) + '%'];
-  let sql: string = "SELECT MIN(album_id) AS album_id, namespace, value, MIN(position) AS position FROM album_tag " +
-    "WHERE LOWER(namespace || ':' || value) LIKE ? ESCAPE '\\'";
+  const pattern: string = '%' + escapeLike(needle.toLowerCase()) + '%';
+  const args: Array<relationalStore.ValueType> = [pattern, pattern];
+  let sql: string = "SELECT MIN(album_id) AS album_id, namespace, value, MIN(label) AS label, MIN(position) AS position FROM album_tag " +
+    "WHERE (LOWER(namespace || ':' || value) LIKE ? ESCAPE '\\' OR LOWER(label) LIKE ? ESCAPE '\\')";
   if (onlySource !== '') {
     sql += " AND album_id LIKE ? ESCAPE '\\'";
     args.push(escapeLike(onlySource) + '~%');
@@ -221,6 +222,7 @@ export async function searchAlbumTags(needle: string, onlySource: string, limit:
     tag.albumId = cellString(row, 'album_id');
     tag.namespace = cellString(row, 'namespace');
     tag.value = cellString(row, 'value');
+    tag.label = cellString(row, 'label');
     tag.position = cellLong(row, 'position');
     items.push(tag);
   });

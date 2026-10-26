@@ -1,4 +1,4 @@
-import { Album, Chapter } from '../models/Models';
+import { Album, Chapter, MetadataTerm } from '../models/Models';
 
 /** 标题标点与空白不影响同一作品的识别，版本和语言仍需独立核对。 */
 export function normalizedTitle(value: string): string {
@@ -12,8 +12,10 @@ export function highConfidence(a: Album, b: Album): boolean {
   if (av !== bv) { return false; }
   if (a.originalUrl !== '' && a.originalUrl === b.originalUrl) { return true; }
   if (normalizedTitle(a.name) !== normalizedTitle(b.name)) { return false; }
-  const authors: Array<string> = a.author.map(normalizedTitle).filter((s: string) => s !== '');
-  return authors.some((author: string) => b.author.map(normalizedTitle).includes(author));
+  const authors: Array<string> = a.author.filter((term: MetadataTerm) => term.namespace !== 'uploader')
+    .map((term: MetadataTerm) => normalizedTitle(term.value)).filter((s: string) => s !== '');
+  return authors.some((author: string) => b.author.filter((term: MetadataTerm) => term.namespace !== 'uploader')
+    .map((term: MetadataTerm) => normalizedTitle(term.value)).includes(author));
 }
 /** 只匹配唯一同类型编号，不把卷、番外和正文当作同一章。 */
 export function matchingChapter(chapter: Chapter, candidates: Array<Chapter>): Chapter | null {

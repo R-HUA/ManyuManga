@@ -1,4 +1,4 @@
-import { Album, Chapter, ReadingProgress } from '../models/Models';
+import { Album, Chapter, MetadataTerm, ReadingProgress } from '../models/Models';
 import { sourceApi } from './SourceApi';
 import { sourceId, sourceStore, SourceEntry } from './Sources';
 import { library, LibraryWork } from './Library';
@@ -92,5 +92,5 @@ export async function fallbackSource(current: Album, chapter: Chapter, page: num
 export function switchedProgress(result: SourceSwitchResult): ReadingProgress {
   return new ReadingProgress(result.album.id, result.chapter.id,
     result.album.episodes.findIndex((c: Chapter) => c.id === result.chapter.id), result.page, result.pages.length,
-    Date.now(), result.album.name, result.album.author.join(' · '), result.album.coverUrl);
+    Date.now(), result.album.name, result.album.author.map((term: MetadataTerm): string => term.label).join(' · '), result.album.coverUrl);
 }

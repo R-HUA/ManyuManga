@@ -6,7 +6,7 @@ import { ROUTE_SEARCH } from '../../common/Route';
 import { CategoryItem } from '../../models/Models';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
-class SearchRouteParam { query: string = ''; }
+class SearchRouteParam { query: string = ''; sourceId: string = ''; }
 export class ChipOption {
   code: string;
   label: string;
@@ -29,6 +29,7 @@ const ORDER_OPTIONS: Array<ChipOption> = [
 
 @Component
 export struct CategoryFilterBar {
+  @Prop sourceIdValue: string = '';
   @Link selectedCatId: string;
   selectAll: () => void = (): void => {};
   @Link categories: Array<CategoryItem>;
@@ -75,6 +76,7 @@ export struct CategoryFilterBar {
                 onChipClick: (): void => {
                   const param: SearchRouteParam = new SearchRouteParam();
                   param.query = term;
+                  param.sourceId = this.sourceIdValue;
                   this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
                 }
               })
@@ -225,6 +227,7 @@ export struct CategoryFilterBar {
                 this.catDrawerVisible = false;
                 const param: SearchRouteParam = new SearchRouteParam();
                 param.query = term;
+                param.sourceId = this.sourceIdValue;
                 this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
               })
             }, (term: string) => 'drawer_ccat_' + term)

@@ -1,4 +1,4 @@
-import { Album, FavItem } from '../../models/Models';
+import { Album, FavItem, MetadataTerm } from '../../models/Models';
 import {
   loadFavorites, loadFavoritePage, loadFavoriteTags, hasFavorite, addFavorite, removeFavorite,
   importFavorites, addFavoriteTags, removeFavoriteTag, searchFavoriteTags
@@ -31,7 +31,8 @@ export class FavStore {
   }
 
   add(album: Album, coverUrl: string): Promise<void> {
-    const item: FavItem = new FavItem(album.id, album.name, album.author.join(', '), coverUrl, Date.now());
+    const item: FavItem = new FavItem(album.id, album.name,
+      album.author.map((term: MetadataTerm): string => term.label).join(', '), coverUrl, Date.now());
     return this.queue.run(async (): Promise<void> => {
       await addFavorite(item);
       bumpBookshelfVersion();
@@ -46,7 +47,8 @@ export class FavStore {
   }
 
   toggle(album: Album, coverUrl: string): Promise<boolean> {
-    const item: FavItem = new FavItem(album.id, album.name, album.author.join(', '), coverUrl, Date.now());
+    const item: FavItem = new FavItem(album.id, album.name,
+      album.author.map((term: MetadataTerm): string => term.label).join(', '), coverUrl, Date.now());
     return this.queue.run(async (generation: number): Promise<boolean> => {
       const exists: boolean = await hasFavorite(item.id);
       assertDatabaseGeneration(generation);

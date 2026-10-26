@@ -1,7 +1,7 @@
 import http from '@ohos.net.http';
 import util from '@ohos.util';
 import { SourceEntry, SourceAuth, SourceInstance, sourceKey, sourceStore, readSourceSecret, saveSourceSecret } from './Sources';
-import { Album, AlbumLite, Chapter, SearchResult, asRecord, asArray, asString, asNumber } from '../models/Models';
+import { Album, AlbumLite, Chapter, MetadataTerm, SearchResult, asRecord, asArray, asString, asNumber } from '../models/Models';
 import { utf8Encode } from './JmApi';
 import { isRequestCancelled, RequestAbortGroup, RequestCancelled } from '../util/RequestAbort';
 import { assertDatabaseGeneration, databaseGeneration } from './db/AppDatabase';
@@ -173,8 +173,9 @@ export class SuwayomiClient {
     const payload: Record<string, Object> = record(data['fetchMangaAndChapters']);
     const node: Record<string, Object> = record(payload['manga']);
     const album: Album = new Album(sourceKey(source.id, id), asString(node['title']));
-    album.author = [asString(node['author']), asString(node['artist'])].filter((s: string) => s !== '');
-    album.tags = (asArray(node['genre']) ?? []).map((value: Object) => asString(value));
+    album.author = [asString(node['author']), asString(node['artist'])].filter((s: string) => s !== '')
+      .map((value: string): MetadataTerm => new MetadataTerm(value));
+    album.tags = (asArray(node['genre']) ?? []).map((value: Object): MetadataTerm => new MetadataTerm(asString(value)));
     album.description = asString(node['description']);
     album.coverUrl = absolute(source, asString(node['thumbnailUrl']));
     album.language = source.language;

@@ -3,7 +3,7 @@ import { BasicDataSource } from '../../common/DataSource';
 import display from '@ohos.display';
 import image from '@ohos.multimedia.image';
 import { window } from '@kit.ArkUI';
-import { Album, Chapter, ReadingProgress, ReaderMode, errorMessage } from '../../models/Models';
+import { Album, Chapter, MetadataTerm, ReadingProgress, ReaderMode, errorMessage } from '../../models/Models';
 import { sourceApi as jmApi } from '../../data/SourceApi';
 import { library } from '../../data/Library';
 import { readerPreferences, ReaderOptions } from '../../data/ReaderOptions';
@@ -328,7 +328,7 @@ export class ReaderController {
     if (a.name !== '') {
       this.host.albumTitle = a.name;
     }
-    const authors: string = a.author.join(' · ');
+    const authors: string = a.author.map((term: MetadataTerm): string => term.label).join(' · ');
     if (authors !== '') {
       this.host.authorLine = authors;
     }

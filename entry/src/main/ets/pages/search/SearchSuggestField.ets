@@ -1,7 +1,7 @@
 import { BasicDataSource } from '../../common/DataSource';
 import { CARD, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
-import { sourceApi } from '../../data/SourceApi';
-import { sourceStore, SourceEntry } from '../../data/Sources';
+import { SearchSelection } from '../../common/Route';
+import { MetadataTerm, errorMessage } from '../../models/Models';
 import { SearchSuggestion, suggestLocal } from '../../data/SearchSuggest';
 
 class SuggestSource extends BasicDataSource<SearchSuggestion> {
@@ -15,9 +15,12 @@ export struct SearchSuggestField {
   @Link text: string;
   @Prop sourceId: string = '';
   @Prop placeholder: string = '';
+  @Prop selection: SearchSelection | null = null;
   onEdit: (text: string) => void = (_text: string): void => {};
-  onSubmit: (text: string) => void = (_text: string): void => {};
+  onSubmit: (text: string, selection: SearchSelection | null) => void =
+    (_text: string, _selection: SearchSelection | null): void => {};
   @State open: boolean = false;
+  @State error: string = '';
   private source: SuggestSource = new SuggestSource();
   private generation: number = 0;
   private timer: number = -1;
@@ -44,35 +47,29 @@ export struct SearchSuggestField {
   }
 
   private async load(value: string, ticket: number): Promise<void> {
-    const items: Array<SearchSuggestion> = await suggestLocal(value, this.sourceId);
-    if (ticket !== this.generation) {
-      return;
+    try {
+      const items: Array<SearchSuggestion> = await suggestLocal(value, this.sourceId);
+      if (ticket !== this.generation) { return; }
+      this.source.reload(items);
+      this.open = items.length > 0;
+      this.error = '';
+    } catch (e) {
+      if (ticket !== this.generation) { return; }
+      this.open = false;
+      this.error = errorMessage(e as Error);
     }
-    this.source.reload(items);
-    this.open = items.length > 0;
   }
 
-  private async choose(item: SearchSuggestion): Promise<void> {
-    const ticket: number = ++this.generation;
+  private choose(item: SearchSuggestion): void {
+    this.generation++;
     this.clearTimer();
-    let next: string = item.kind === 'tag' ? item.label : item.value;
-    if (item.kind === 'tag' && item.sourceId !== '') {
-      try {
-        const source: SourceEntry = await sourceStore.get(item.sourceId);
-        if (ticket !== this.generation) {
-          return;
-        }
-        next = sourceApi.searchExpression(source, item.namespace, item.value);
-      } catch (_e) {
-        if (ticket !== this.generation) {
-          return;
-        }
-      }
-    }
+    const next: string = item.value;
+    const selection: SearchSelection | null = item.kind === 'tag' ?
+      new SearchSelection(item.sourceId, 'tag', new MetadataTerm(item.value, item.label, item.namespace)) : null;
     this.text = next;
     this.open = false;
     this.source.reload([]);
-    this.onSubmit(next);
+    this.onSubmit(next, selection);
   }
 
   build() {
@@ -83,6 +80,7 @@ export struct SearchSuggestField {
         .backgroundColor(CARD)
         .onChange((value: string) => {
           this.text = value;
+          this.selection = null;
           this.onEdit(value);
           this.schedule(value);
         })
@@ -90,8 +88,11 @@ export struct SearchSuggestField {
           this.generation++;
           this.clearTimer();
           this.open = false;
-          this.onSubmit(value);
+          this.onSubmit(value, this.selection);
         })
+      if (this.error !== '') {
+        Text(this.error).fontSize(12).fontColor(TEXT_SUB)
+      }
       if (this.open) {
         List({ space: 6 }) {
           LazyForEach(this.source, (item: SearchSuggestion) => {

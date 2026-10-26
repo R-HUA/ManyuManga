@@ -1,4 +1,4 @@
-import { Album } from '../models/Models';
+import { Album, MetadataTerm } from '../models/Models';
 import { highConfidence } from './Matching';
 import {
   loadLibrary, loadLibraryPage, loadLibraryWorkForAlbum, loadLibraryCandidates, changeLibraryWorks,
@@ -28,7 +28,7 @@ function newWork(album: Album): LibraryWork {
   const work: LibraryWork = new LibraryWork();
   work.id = `w${Date.now()}_${album.id}`;
   work.title = album.name;
-  work.author = album.author.join(' · ');
+  work.author = album.author.map((term: MetadataTerm): string => term.label).join(' · ');
   work.cover = album.coverUrl;
   work.activeKey = album.id;
   work.albums = [album];

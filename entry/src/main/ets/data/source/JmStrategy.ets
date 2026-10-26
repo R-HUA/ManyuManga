@@ -84,9 +84,8 @@ export class JmStrategy implements SourceStrategy {
     return jmApi.scrambleId(nativeId(ctx.key), ctx.signal);
   }
 
-  searchExpression(namespace: string, value: string): string {
-    const name: string = value.trim();
-    return namespace.trim() === '' ? name : `${namespace.trim()}:${name}`;
+  searchExpression(_namespace: string, value: string, _field: string = 'tag'): string {
+    return value.trim();
   }
 
   resolveDirectKey(source: SourceEntry, input: string): string {

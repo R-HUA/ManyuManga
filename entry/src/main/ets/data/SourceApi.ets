@@ -148,12 +148,12 @@ class SourceApi {
     return strategyFor(entry.kind).resolveDirectKey(entry, input);
   }
 
-  searchExpression(source: SourceEntry, namespace: string, value: string): string {
+  searchExpression(source: SourceEntry, namespace: string, value: string, field: string = 'tag'): string {
     const entry: SourceEntry | null = sourceStore.peek(source.id);
     if (entry === null) {
       throw new Error('书源尚未初始化或已移除');
     }
-    return strategyFor(entry.kind).searchExpression(namespace, value);
+    return strategyFor(entry.kind).searchExpression(namespace, value, field);
   }
 
   private async visibleAlbums(list: Array<AlbumLite>): Promise<Array<AlbumLite>> {

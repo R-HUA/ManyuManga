@@ -61,7 +61,7 @@ export interface SourceStrategy {
   pageRestoreKey(ctx: SourceRequestContext): Promise<number>;
   resolveDirectKey(source: SourceEntry, input: string): string;
   /** 把已缓存标签变成该图源自己的搜索串。空命名空间允许。 */
-  searchExpression(namespace: string, value: string): string;
+  searchExpression(namespace: string, value: string, field: string): string;
 }
 
 export function emptyComments(): CommentsResult {

@@ -1,7 +1,7 @@
 import { JmDomainPool } from './JmDomainPool';
 import common from '@ohos.app.ability.common';
 import { RequestAbortGroup } from '../util/RequestAbort';
-import { Album, AlbumLite, CategoryItem, Chapter, CommentItem, CommentsResult, DomainSpeed, SearchOptions, SearchResult, asArray, asBool, asNumber, asRecord, asString } from '../models/Models';
+import { Album, AlbumLite, CategoryItem, Chapter, CommentItem, CommentsResult, DomainSpeed, MetadataTerm, SearchOptions, SearchResult, asArray, asBool, asNumber, asRecord, asString } from '../models/Models';
 export { utf8Encode, utf8Decode, md5Hex, javaStringHashCode } from '../util/JmCrypto';
 export class JmApi {
   private domainPool: JmDomainPool = new JmDomainPool();
@@ -154,7 +154,7 @@ export class JmApi {
       for (const a of authors) {
         const v: string = asString(a);
         if (v !== '') {
-          result.author.push(v);
+          result.author.push(new MetadataTerm(v));
         }
       }
     }
@@ -163,7 +163,7 @@ export class JmApi {
       for (const t of tags) {
         const v: string = asString(t);
         if (v !== '') {
-          result.tags.push(v);
+          result.tags.push(new MetadataTerm(v));
         }
       }
     }

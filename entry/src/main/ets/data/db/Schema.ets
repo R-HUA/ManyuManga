@@ -23,7 +23,7 @@ export const SCHEMA_V1: Array<string> = [
   'CREATE INDEX IF NOT EXISTS idx_library_album_updated ON library_album(updated_at)',
   'CREATE TABLE IF NOT EXISTS album_chapter (album_id TEXT NOT NULL, chapter_id TEXT NOT NULL, title TEXT NOT NULL, sort TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (album_id, chapter_id))',
   'CREATE INDEX IF NOT EXISTS idx_album_chapter_album ON album_chapter(album_id, position)',
-  'CREATE TABLE IF NOT EXISTS album_tag (album_id TEXT NOT NULL, namespace TEXT NOT NULL, value TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (album_id, namespace, value))',
+  'CREATE TABLE IF NOT EXISTS album_tag (album_id TEXT NOT NULL, namespace TEXT NOT NULL, value TEXT NOT NULL, label TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (album_id, namespace, value))',
   'CREATE INDEX IF NOT EXISTS idx_album_tag_album ON album_tag(album_id, position)',
   'CREATE INDEX IF NOT EXISTS idx_album_tag_value ON album_tag(namespace, value)',
   'CREATE TABLE IF NOT EXISTS library_category (work_id TEXT NOT NULL, name TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (work_id, name))',

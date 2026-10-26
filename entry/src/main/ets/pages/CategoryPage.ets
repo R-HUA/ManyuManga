@@ -395,6 +395,7 @@ export struct CategoryPage {
   @Builder
   private FilterHeader() {
     CategoryFilterBar({
+      sourceIdValue: this.sourceIdValue,
       selectedCatId: this.$selectedCatId,
       selectAll: (): void => this.selectAll(),
       categories: this.$categories,

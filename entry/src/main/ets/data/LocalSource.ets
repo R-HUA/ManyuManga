@@ -1,7 +1,8 @@
 import fs from '@ohos.file.fs';
 import picker from '@ohos.file.picker';
 import zlib from '@ohos.zlib';
-import { Album, Chapter, AlbumLite, SearchResult, asArray, asRecord, asString } from '../models/Models';
+import { Album, AlbumLite, Chapter, MetadataTerm, SearchResult, asArray, asRecord, asString } from '../models/Models';
+import { albumMatchesText } from './SearchQuery';
 import { getAppContext } from '../util/Prefs';
 import { sourceKey } from './Sources';
 import { loadLocalBooks, LocalBookRow } from './db/ContentDao';
@@ -84,9 +85,9 @@ class LocalSource {
   }
   async search(query: string): Promise<SearchResult> {
     await this.ready();
-    const list: Array<AlbumLite> = this.books.filter((b: LocalBook) =>
-      `${b.album.name} ${b.album.author.join(' ')}`.toLowerCase().includes(query.toLowerCase()))
-      .map((b: LocalBook) => new AlbumLite(b.album.id, b.album.name, b.album.author.join(' · '), b.album.coverUrl));
+    const list: Array<AlbumLite> = this.books.filter((b: LocalBook) => albumMatchesText(b.album, query))
+      .map((b: LocalBook) => new AlbumLite(b.album.id, b.album.name,
+        b.album.author.map((term: MetadataTerm): string => term.label).join(' · '), b.album.coverUrl));
     return new SearchResult(list.length, list);
   }
   async album(id: string): Promise<Album> {
@@ -151,7 +152,7 @@ class LocalSource {
         const name: RegExpMatchArray | null = xml.match(/<Title>([^<]+)<\/Title>/i);
         const author: RegExpMatchArray | null = xml.match(/<Writer>([^<]+)<\/Writer>/i);
         if (title.trim() === '' && name !== null) { book.album.name = name[1]; }
-        if (author !== null) { book.album.author = [author[1]]; }
+        if (author !== null) { book.album.author = [new MetadataTerm(author[1])]; }
       }
       assertDatabaseGeneration(generation);
       await this.queue.run(async (): Promise<void> => {

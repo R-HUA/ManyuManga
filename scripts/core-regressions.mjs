@@ -14,7 +14,7 @@ export async function until(predicate, description) {
 function albumFixture(env, id = 'jm~101') {
   const models = env.load('models/Models');
   const album = new models.Album(id, '完整作品');
-  album.author = ['作者'];
+  album.author = [new models.MetadataTerm('作者')];
   album.episodes = [new models.Chapter('jm~201', '第一话')];
   return album;
 }
@@ -74,13 +74,14 @@ export async function installOfflineFixture(env, album, pages, files, validate =
 }
 async function seedMany(env, count) {
   const db = env.load('data/db/AppDatabase');
+  const models = env.load('models/Models');
   const store = await db.openDatabase();
   await store.executeSql('WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ?) INSERT INTO favorite SELECT \'jm~\' || i, \'作品\' || i, \'作者\', \'\', \'jm\', i, i FROM n', [count - 1]);
   await store.executeSql('WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ?) INSERT INTO library_work SELECT \'w\' || i, \'作品\' || i, \'作者\', \'\', \'jm~\' || i, 0, i, 0, 0, i, i FROM n', [count - 1]);
-  const template = albumFixture(env, 'jm~seed'); template.tags = ['题材:测试'];
+  const template = albumFixture(env, 'jm~seed'); template.tags = [new models.MetadataTerm('测试', '测试', '题材')];
   await store.executeSql('INSERT INTO library_album SELECT active_key, id, \'jm\', 0, json_set(?, \'$.id\', active_key, \'$.name\', title, \'$.episodes[0].id\', \'jm~chapter\' || position), position FROM library_work', [JSON.stringify(template)]);
   await store.executeSql('INSERT INTO album_chapter SELECT active_key, \'jm~chapter\' || position, \'第一话\', \'\', 0 FROM library_work');
-  await store.executeSql('INSERT INTO album_tag SELECT active_key, \'题材\', \'测试\', 0 FROM library_work');
+  await store.executeSql('INSERT INTO album_tag (album_id, namespace, value, label, position) SELECT active_key, \'题材\', \'测试\', \'测试\', 0 FROM library_work');
   await store.executeSql('WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ?) INSERT INTO history SELECT \'jm~\' || i, \'作品\' || i, \'作者\', \'\', \'jm\', i, i FROM n', [count - 1]);
   await store.executeSql('WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ?) INSERT INTO reading_progress SELECT \'jm~\' || i, \'jm~chapter\' || i, 0, 2, 10, i, \'作品\' || i, \'作者\', \'\', \'jm\' FROM n', [count - 1]);
 }
@@ -253,7 +254,9 @@ export async function regressionTests(test) {
     assert.ok(document.tables.source_instance.some(row => row.id === instance.id));
     assert.ok(document.tables.source_setting.some(row => row.source_id === 'eh' && row.key === 'site' && row.value === 'ex'));
     assert.ok(!JSON.stringify(document).includes('credential-remains-local'));
-    const additional = albumFixture(env, 'jm~additional'); additional.name = '后来作品'; additional.author = ['另一作者'];
+    const models = env.load('models/Models');
+    const additional = albumFixture(env, 'jm~additional'); additional.name = '后来作品';
+    additional.author = [new models.MetadataTerm('另一作者')];
     await library.add(additional);
     source.name = '当前源'; await sourceStore.save(source); await EhSettings.setSite('e');
     env.state.selected = [file];

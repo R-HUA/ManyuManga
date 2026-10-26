@@ -4,7 +4,8 @@
  *  f_cats 传「未选分类」的补码掩码；f_sr/f_srdd 评分下限；f_sp/f_spf/f_spt 页数区间；
  *  标签模式把关键词规范成 `f:"tag"$` 形式的精确标签；上传者模式走 /uploader/{name}。
  */
-import { EhUrl, EhTagTranslator } from './EhNative';
+import { EhUrl } from './EhNative';
+import { ehTagQuery } from './EhQuery';
 import { EhSettings } from './EhSettings';
 import { Prefs } from '../../util/Prefs';
 import { asRecord, asNumber, asBool, asString } from '../../models/Models';
@@ -111,26 +112,6 @@ export class EhSearchFilter {
     return `${Math.floor(n)}`;
   }
 
-  /** 标签模式关键词规范化：`ns:tag` → `f:"tag"$`；普通词 → `"词$"` 精确匹配。 */
-  private tagQuery(raw: string): string {
-    const trimmed: string = raw.trim();
-    if (trimmed === '') {
-      return '';
-    }
-    const sep: number = trimmed.indexOf(':');
-    if (sep > 0 && trimmed.indexOf('"') < 0 && trimmed.indexOf('$') < 0) {
-      const namespace: string = trimmed.substring(0, sep);
-      const tag: string = trimmed.substring(sep + 1).trim();
-      const prefix: string | undefined = EhTagTranslator.namespaceToPrefix(namespace);
-      if (tag !== '' && prefix !== undefined) {
-        return `${prefix}"${tag}$"`;
-      }
-    }
-    if (trimmed.indexOf('"') >= 0 || trimmed.indexOf('$') >= 0) {
-      return trimmed;
-    }
-    return `"${trimmed}$"`;
-  }
 
   /**
    * 构建搜索/列表 URL：mode 决定基址（关注=watched，上传者=/uploader/，其余=站点根），
@@ -147,7 +128,7 @@ export class EhSearchFilter {
     if (this.categoryMask !== EH_CATEGORY_ALL) {
       params.push(`f_cats=${(~this.categoryMask) & EH_CATEGORY_ALL}`);
     }
-    const keyword: string = this.mode === 'tag' ? this.tagQuery(trimmed) : trimmed;
+    const keyword: string = this.mode === 'tag' ? ehTagQuery(trimmed) : trimmed;
     if (keyword !== '') {
       params.push(`f_search=${encodeURIComponent(keyword)}`);
     }

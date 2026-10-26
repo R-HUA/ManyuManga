@@ -3,7 +3,8 @@
  * 复用 HarmonyOS-EhViewer 的瀑布流卡片设计（按页数动态高度、10 大分类色标、星级），
  * 交互与视觉对齐漫语沉浸光感主题；列表数据全部经 EhSource 适配器（里站未登录自动回退表站）。
  */
-import { MangaRouteParams, ROUTE_ALBUM } from '../../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, SearchSelection } from '../../common/Route';
+import { ehTermQuery } from '../../data/eh/EhQuery';
 import { ehSource, EhListPage } from '../../data/EhSource';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { EhSearchFilter } from '../../data/eh/EhSearchFilter';
@@ -380,8 +381,9 @@ export struct EhBrowsePage {
             text: this.$query,
             sourceId: 'eh',
             placeholder: '搜索画廊，支持 artist:xxx / language:chinese 语法…',
-            onSubmit: (val: string): void => {
-              this.query = val;
+            onSubmit: (val: string, selection: SearchSelection | null): void => {
+              this.query = selection === null ? val :
+                ehTermQuery(selection.term.namespace, selection.term.value, selection.field);
               if (val.trim() !== '') {
                 searchHistoryStore.record(val.trim()).catch((): void => {});
               }

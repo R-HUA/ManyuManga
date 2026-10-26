@@ -10,7 +10,7 @@ import { Album, errorMessage } from '../models/Models';
 import { presentationFor, registrablePresentation, SourcePresentation } from '../data/source/SourceCatalog';
 import { SourceEntryCard } from './sources/SourceEntryCard';
 import { IconCircleButton } from '../common/Components';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, SearchSelection } from '../common/Route';
 import { SearchSuggestField } from './search/SearchSuggestField';
 import { BG, CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
@@ -182,8 +182,9 @@ export struct SourcesPage {
         SearchSuggestField({
           text: this.$globalQuery,
           placeholder: '搜索全部已启用图源…',
-          onSubmit: (val: string): void => {
-            this.stack.pushPathByName(ROUTE_SEARCH, { query: val.trim() } as MangaRouteParams);
+          onSubmit: (val: string, selection: SearchSelection | null): void => {
+            this.stack.pushPathByName(ROUTE_SEARCH, { query: val.trim(), scope: 'all',
+              selection: selection === null ? undefined : selection } as MangaRouteParams);
           }
         })
           .layoutWeight(1)

@@ -1,5 +1,5 @@
 import { Prefs } from '../../util/Prefs';
-import { Album, HistoryItem, ReadingProgress } from '../../models/Models';
+import { Album, HistoryItem, MetadataTerm, ReadingProgress } from '../../models/Models';
 import {
   loadHistory, loadHistoryPage, recordHistory, removeHistory, clearHistory, importHistory,
   loadProgress, loadProgressPage, loadProgressFor, putProgress, removeProgress, clearProgress, copyProgress
@@ -27,7 +27,8 @@ export class HistoryStore {
   invalidate(): void {}
 
   record(album: Album, coverUrl: string): Promise<void> {
-    const item: HistoryItem = new HistoryItem(album.id, album.name, album.author.join(', '), coverUrl, Date.now());
+    const item: HistoryItem = new HistoryItem(album.id, album.name,
+      album.author.map((term: MetadataTerm): string => term.label).join(', '), coverUrl, Date.now());
     return this.queue.run(async (generation: number): Promise<void> => {
       const prefs: Prefs = await Prefs.getInstance();
       if (!await prefs.historyEnabled()) { return; }

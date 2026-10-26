@@ -1,9 +1,11 @@
 import { sourceStore, SourceEntry } from '../data/Sources';
 import { capabilitiesFor } from '../data/source/SourceContracts';
 import { presentationFor } from '../data/source/SourceCatalog';
-import { MangaRouteParams, ROUTE_ALBUM } from '../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, SearchScope, SearchSelection, searchSelectionFromObject } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
-import { library } from '../data/Library';
+import { library, LibraryWork } from '../data/Library';
+import { searchLibraryWorks } from '../data/SearchQuery';
+import { LibrarySearchResults } from './search/LibrarySearchResults';
 import { highConfidence } from '../data/Matching';
 import { Album, AlbumLite, SearchResult, asRecord, asString, errorMessage } from '../models/Models';
 import { SourceCover } from '../common/SourceCover';
@@ -32,6 +34,7 @@ class SearchGroup {
   more: boolean = false;
   loading: boolean = true;
   error: string = '';
+  query: string = '';
 }
 
 @Component
@@ -46,48 +49,97 @@ export struct SearchAllPage {
   @State error: string = '';
   @State matching: boolean = false;
   @State onlyHits: boolean = false;
+  @State scope: SearchScope = 'all';
+  @State sourceName: string = '当前图源';
+  @State libraryWorks: Array<LibraryWork> = [];
+  @State libraryLoading: boolean = false;
+  @State selection: SearchSelection | null = null;
 
   private ticket: number = 0;
   private onlySource: string = '';
   private matchAid: string = '';
   private origin: Album | null = null;
   private active: boolean = true;
+  private pending: boolean = false;
+  private resumeSearch: boolean = false;
 
   aboutToDisappear(): void {
+    this.hideSearch();
+  }
+
+  private hideSearch(): void {
+    this.resumeSearch = this.pending || this.groups.some((group: SearchGroup) => group.loading);
     this.active = false;
     this.ticket++;
+  }
+
+  private showSearch(): void {
+    this.active = true;
+    if (this.resumeSearch) {
+      this.resumeSearch = false;
+      this.search();
+    }
+  }
+
+  private editQuery(): void {
+    this.selection = null;
+    this.ticket++;
+    this.pending = false;
+    this.groups = [];
+    this.libraryWorks = [];
+    this.libraryLoading = false;
+    this.error = '';
   }
 
   private sourcesChanged(): void {
     this.ticket++;
     if (this.active) {
       this.search();
+    } else {
+      this.resumeSearch = true;
     }
   }
 
   private async search(): Promise<void> {
     const ticket: number = ++this.ticket;
     const query: string = this.query.trim();
-    if (query !== '') {
-      searchHistoryStore.record(query).catch((): void => {});
-    }
+    const selection: SearchSelection | null = this.selection;
+    this.pending = true;
     try {
-      const sources: Array<SourceEntry> = (await sourceStore.list()).filter((s: SourceEntry) =>
-        s.enabled && (this.onlySource === '' || s.id === this.onlySource));
+      this.error = '';
+      this.groups = [];
+      if (query !== '') { await searchHistoryStore.record(query); }
+      if (ticket !== this.ticket || !this.active) { return; }
+      if (this.scope === 'library') {
+        this.libraryLoading = true;
+        this.libraryWorks = [];
+        const works: Array<LibraryWork> = await library.list();
+        if (ticket === this.ticket && this.active) {
+          this.libraryWorks = searchLibraryWorks(works, query, selection);
+          this.libraryLoading = false;
+        }
+        return;
+      }
+      const sources: Array<SourceEntry> = this.scope === 'source' ?
+        [await sourceStore.get(this.onlySource)] :
+        (await sourceStore.list()).filter((s: SourceEntry) => s.enabled);
       if (ticket !== this.ticket) {
         return;
       }
       this.groups = sources.map((source: SourceEntry): SearchGroup => {
         const group: SearchGroup = new SearchGroup();
         group.source = source;
+        group.query = selection === null ? query : sourceApi.searchExpression(source,
+          selection.term.namespace, selection.term.value, selection.field);
         return group;
       });
+      this.sourceName = this.scope === 'source' ? sources[0].name : '';
       this.error = sources.length === 0 ? '没有已启用的书源，请先在「书源」页启用' : '';
       let cursor: number = 0;
       const work = async (): Promise<void> => {
         while (ticket === this.ticket && cursor < sources.length) {
           const index: number = cursor++;
-          await this.loadGroup(index, 1, ticket, query);
+          await this.loadGroup(index, 1, ticket);
         }
       };
       await Promise.all([work(), work(), work()]);
@@ -97,17 +149,20 @@ export struct SearchAllPage {
     } catch (e) {
       if (ticket === this.ticket) {
         this.error = errorMessage(e as Error);
+        this.libraryLoading = false;
       }
+    } finally {
+      if (ticket === this.ticket) { this.pending = false; }
     }
   }
 
-  private async loadGroup(index: number, page: number, ticket: number = this.ticket, query: string = this.query.trim()): Promise<void> {
+  private async loadGroup(index: number, page: number, ticket: number = this.ticket): Promise<void> {
     const group: SearchGroup = this.groups[index];
     group.loading = true;
     group.error = '';
     this.groups = this.groups.slice();
     try {
-      const result: SearchResult = await sourceApi.searchSource(group.source, query, page);
+      const result: SearchResult = await sourceApi.searchSource(group.source, group.query, page);
       if (ticket !== this.ticket || !this.active) {
         return;
       }
@@ -216,7 +271,8 @@ export struct SearchAllPage {
             }
           })
 
-          Text(this.matchAid === '' ? '全源搜索' : '跨源比对与关联')
+          Text(this.matchAid !== '' ? '跨源比对与关联' : this.scope === 'library' ? '搜索书架' :
+            this.scope === 'source' ? `搜索「${this.sourceName}」` : '搜索全部')
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor(TEXT_MAIN)
@@ -244,12 +300,14 @@ export struct SearchAllPage {
           SearchSuggestField({
             text: this.$query,
             sourceId: this.onlySource,
+            selection: this.selection,
             placeholder: this.matchAid === '' ? '输入书名、作者或标签…' : '查找同一作品的其他图源…',
             onEdit: (_text: string): void => {
-              this.ticket++;
+              this.editQuery();
             },
-            onSubmit: (text: string): void => {
+            onSubmit: (text: string, selection: SearchSelection | null): void => {
               this.query = text;
+              this.selection = selection;
               this.search();
             }
           })
@@ -290,6 +348,9 @@ export struct SearchAllPage {
 
         Scroll() {
           Column({ space: 16 }) {
+            if (this.scope === 'library') {
+              LibrarySearchResults({ works: this.libraryWorks, loading: this.libraryLoading })
+            }
             ForEach(this.visibleGroups(), (group: SearchGroup) => {
               Column({ space: 12 }) {
                 Row({ space: 8 }) {
@@ -427,26 +488,35 @@ export struct SearchAllPage {
       const params: Record<string, Object> | null = asRecord(context.pathInfo.param as Object);
       this.query = params === null ? '' : asString(params['query']);
       this.onlySource = params === null ? '' : asString(params['sourceId']);
+      const scope: string = params === null ? '' : asString(params['scope']);
+      this.scope = scope === 'library' ? 'library' : scope === 'all' ? 'all' :
+        this.onlySource !== '' ? 'source' : 'all';
+      if (this.scope !== 'source') { this.onlySource = ''; }
+      this.selection = params === null ? null : searchSelectionFromObject(params['selection']);
       this.matchAid = params === null ? '' : asString(params['matchAid']);
       this.active = true;
       if (this.matchAid !== '') {
+        this.scope = 'all';
+        this.onlySource = '';
+        this.selection = null;
+        const ticket: number = ++this.ticket;
         sourceApi.album(this.matchAid).then((album: Album) => {
+          if (ticket !== this.ticket || !this.active) { return; }
           this.origin = album;
           this.query = album.name;
           this.search();
         }).catch((e: Error) => {
-          this.error = errorMessage(e);
+          if (ticket === this.ticket && this.active) { this.error = errorMessage(e); }
         });
       } else {
         this.search();
       }
     })
     .onHidden(() => {
-      this.active = false;
-      this.ticket++;
+      this.hideSearch();
     })
     .onShown(() => {
-      this.active = true;
+      this.showSearch();
     })
   }
 }
