@@ -1,6 +1,7 @@
 import { md5Hex, aesEcbDecrypt, javaStringHashCode } from '../util/JmCrypto';
 import common from '@ohos.app.ability.common';
 import { httpUtil } from '../util/Http';
+import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { Prefs, PrefKeys, setAppContext } from '../util/Prefs';
 import { DomainSpeed, asArray, asNumber, asRecord, asString, errorMessage } from '../models/Models';
 /**
@@ -214,6 +215,7 @@ export class JmDomainPool {
         this.scheduleBootstrapRetry();
       }
     } catch (e) {
+      if (isRequestCancelled(e as Error)) { throw e as Error; }
       this.domainRefreshed = false;
       this.scheduleBootstrapRetry();
       console.info(`[JmApi] domains 刷新失败: ${errorMessage(e as Error)}`);
@@ -260,6 +262,7 @@ export class JmDomainPool {
         await prefs.putString(PrefKeys.APP_VERSION, ver);
       }
     } catch (e) {
+      if (isRequestCancelled(e as Error)) { throw e as Error; }
       this.settingFetched = false;
       this.scheduleBootstrapRetry();
       console.info(`[JmApi] setting 获取失败: ${errorMessage(e as Error)}`);
@@ -314,13 +317,15 @@ export class JmDomainPool {
     }
   }
 
-  async apiGet(pathAndQuery: string): Promise<Object> {
+  async apiGet(pathAndQuery: string, signal: RequestAbortGroup | null = null): Promise<Object> {
+    signal?.throwIfAborted();
     let lastError: Error | null = null;
     const all: Array<string> = this.orderedDomains();
     const maxTries: number = 3;
     const deadline: number = Date.now() + API_BUDGET_MS;
     const candidates: Array<string> = all.slice(0, maxTries);
     for (const domain of candidates) {
+      signal?.throwIfAborted();
       const remain: number = deadline - Date.now();
       if (remain <= API_MIN_REMAIN_MS) {
         if (lastError === null) {
@@ -339,8 +344,9 @@ export class JmDomainPool {
         headers['token'] = token;
         headers['tokenparam'] = `${ts},${this.appVersion}`;
         const raw: string = await httpUtil.getText(`https://${domain}${pathAndQuery}`, headers,
-          5000, 12000, callTimeoutMs);
-        const root: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+          5000, 12000, callTimeoutMs, signal);
+        const root: Record<string, Object> | null = asRecord(JSON.parse(raw));
+        if (root === null) { throw new Error('接口响应格式无效'); }
         const code: number = asNumber(root['code'], -1);
         if (code !== 200) {
           throw new Error(`code=${code}`);
@@ -350,11 +356,15 @@ export class JmDomainPool {
           throw new Error('data 为空');
         }
         const plain: string = await aesEcbDecrypt(data, token);
+        signal?.throwIfAborted();
         await this.rememberGoodDomain(domain);
+        signal?.throwIfAborted();
         this.domainFailures.delete(domain);
         this.quarantineUntil.delete(domain);
         return JSON.parse(plain) as Object;
       } catch (e) {
+        signal?.throwIfAborted();
+        if (isRequestCancelled(e as Error)) { throw e as Error; }
         lastError = e as Error;
         this.markDomainFailure(domain);
         console.info(`[JmApi] api 失败 [${domain}${pathAndQuery}]: ${errorMessage(e as Error)}`);
@@ -363,7 +373,8 @@ export class JmDomainPool {
     throw lastError !== null ? lastError : new Error('请求失败');
   }
 
-  async scrambleId(photoId: string): Promise<number> {
+  async scrambleId(photoId: string, signal: RequestAbortGroup | null = null): Promise<number> {
+    signal?.throwIfAborted();
     const cached: number | undefined = this.scrambleCache.get(photoId);
     if (cached !== undefined) {
       return cached;
@@ -371,6 +382,7 @@ export class JmDomainPool {
     let value: number | null = null;
     const domains: Array<string> = this.orderedDomains();
     for (const domain of domains) {
+      signal?.throwIfAborted();
       try {
         const ts: string = Math.floor(Date.now() / 1000).toString();
         const token: string = md5Hex(ts + SCRAMBLE_SECRET);
@@ -379,7 +391,7 @@ export class JmDomainPool {
         headers['tokenparam'] = `${ts},${this.appVersion}`;
         const body: string = await httpUtil.getText(
           `https://${domain}/chapter_view_template?id=${photoId}&mode=vertical&page=0&app_img_shunt=1&express=off&v=${ts}`,
-          headers, 5000, 12000, 15000);
+          headers, 5000, 12000, 15000, signal);
         const match: RegExpMatchArray | null = body.match(/var\s+scramble_id\s*=\s*(\d+)/);
         if (match !== null && match.length >= 2) {
           const n: number = Number(match[1]);
@@ -389,10 +401,13 @@ export class JmDomainPool {
           }
         }
       } catch (e) {
+        signal?.throwIfAborted();
+        if (isRequestCancelled(e as Error)) { throw e as Error; }
         this.markDomainFailure(domain);
         console.info(`[JmApi] scramble 失败 [${domain}]: ${errorMessage(e as Error)}`);
       }
     }
+    signal?.throwIfAborted();
     const result: number = value === null ? SCRAMBLE_FALLBACK : value;
     // 失败回退值不进缓存，否则同一次启动里这章会一直用错误分段数
     if (value !== null) {
@@ -480,6 +495,7 @@ export class JmDomainPool {
       await httpUtil.head(`https://${host}/media/albums/1475774_3x4.jpg`, 5000, 8000, 10000);
       return `${host}|${Date.now() - t0}`;
     } catch (e) {
+      if (isRequestCancelled(e as Error)) { throw e as Error; }
       return null;
     }
   }
@@ -505,8 +521,8 @@ export class JmDomainPool {
     return `https://${this.hostForSeed(`album/${albumId}`, retry)}/media/albums/${albumId}_3x4.jpg`;
   }
 
-  async fetchBytes(url: string): Promise<ArrayBuffer> {
-    return httpUtil.getBytes(url);
+  async fetchBytes(url: string, signal: RequestAbortGroup | null = null): Promise<ArrayBuffer> {
+    return httpUtil.getBytes(url, undefined, 5000, 12000, 15000, signal);
   }
 
   private async testHostsIfStale(): Promise<void> {
@@ -550,6 +566,7 @@ export class JmDomainPool {
         }, 15000);
       }
     } catch (e) {
+      if (isRequestCancelled(e as Error)) { throw e as Error; }
       console.info(`[JmApi] host 测速失败: ${errorMessage(e as Error)}`);
     }
   }
@@ -564,6 +581,7 @@ export class JmDomainPool {
       }
       return null;
     } catch (e) {
+      if (isRequestCancelled(e as Error)) { throw e as Error; }
       return null;
     }
   }
@@ -606,6 +624,7 @@ export class JmDomainPool {
       await this.probeSetting(domain);
       return new DomainSpeed(domain, Date.now() - t0, true);
     } catch (e) {
+      if (isRequestCancelled(e as Error)) { throw e as Error; }
       return new DomainSpeed(domain, -1, false);
     }
   }

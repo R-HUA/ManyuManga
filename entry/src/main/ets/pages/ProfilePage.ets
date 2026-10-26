@@ -1,14 +1,15 @@
 import common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import promptAction from '@ohos.promptAction';
-import userIAM_userAuth from '@ohos.userIAM.userAuth';
-import uiMaterial from '@ohos.arkui.uiMaterial';
-import { MangaRouteParams, ROUTE_DOWNLOADS } from '../common/Route';
+import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_DOWNLOADS } from '../common/Route';
 import { Prefs } from '../util/Prefs';
 import { library, LibraryWork } from '../data/Library';
 import { readingActivity, ActivityStats } from '../data/ReadingActivity';
 import { sourceStore, SourceEntry, sourceId } from '../data/Sources';
 import { exportBackup, importBackup } from '../data/Backup';
+import { cleanLegacyData } from '../data/LegacyCleanup';
+import { AuthOutcome, authenticate } from '../util/AppLock';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { clearPageCache, pageCacheSize } from '../data/ImageDecode';
 import { SettingSelectRow } from '../common/Components';
 import {
@@ -49,6 +50,7 @@ export struct ProfilePage {
   @State autoCache: boolean = true;
   @State history: boolean = true;
   @State securityLock: boolean = false;
+  @State previewOn: boolean = true;
   @State message: string = '';
   @State busy: boolean = false;
 
@@ -79,6 +81,7 @@ export struct ProfilePage {
       this.autoCache = await prefs.autoCache();
       this.history = await prefs.historyEnabled();
       this.securityLock = await prefs.securityLock();
+      this.previewOn = await prefs.previewProtection();
       this.cache = pageCacheSize();
     } catch (e) {
       this.message = errorMessage(e as Error);
@@ -116,24 +119,28 @@ export struct ProfilePage {
       } else if (key === 'history') {
         await prefs.setHistoryEnabled(value as boolean);
         this.history = value as boolean;
-      } else if (key === 'lock') {
-        if (value as boolean) {
-          try {
-            userIAM_userAuth.getAvailableStatus(
-              userIAM_userAuth.UserAuthType.FINGERPRINT,
-              userIAM_userAuth.AuthTrustLevel.ATL1
-            );
-          } catch (_e) {
-            promptAction.showToast({ message: '当前设备未录入指纹或不支持生物识别' });
-            return;
-          }
-        }
-        await prefs.setSecurityLock(value as boolean);
-        this.securityLock = value as boolean;
+      } else if (key === 'preview') {
+        await prefs.setPreviewProtection(value as boolean);
+        this.previewOn = value as boolean;
       }
     } catch (e) {
       this.message = errorMessage(e as Error);
     }
+  }
+
+  private confirmLock(enable: boolean): void {
+    authenticate(enable ? '验证身份以开启应用锁' : '验证身份以关闭应用锁').then((outcome: AuthOutcome): void => {
+      if (!outcome.ok) {
+        this.message = outcome.message === '' ? '验证未通过，应用锁未更改' : outcome.message;
+        return;
+      }
+      Prefs.getInstance().then((prefs: Prefs): Promise<void> => prefs.setSecurityLock(enable)).then((): void => {
+        this.securityLock = enable;
+        this.message = '';
+      }).catch((e: Error) => {
+        this.message = errorMessage(e);
+      });
+    });
   }
 
   private async backup(isRestore: boolean): Promise<void> {
@@ -156,6 +163,32 @@ export struct ProfilePage {
     } finally {
       this.busy = false;
     }
+  }
+
+  private cleanLegacy(): void {
+    if (this.busy) {
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '清理旧版数据',
+      message: '将删除旧版本遗留的记录、书源配置和旧离线目录。当前书架、离线漫画和已导出文件会保留。',
+      primaryButton: { value: '取消', action: (): void => {} },
+      secondaryButton: {
+        value: '清理',
+        fontColor: PRIMARY,
+        action: (): void => {
+          this.busy = true;
+          cleanLegacyData().then((): void => {
+            this.message = '';
+            promptAction.showToast({ message: '已清理旧版数据' });
+          }).catch((e: Error) => {
+            this.message = errorMessage(e);
+          }).finally((): void => {
+            this.busy = false;
+          });
+        }
+      }
+    });
   }
 
   @Builder
@@ -329,7 +362,7 @@ export struct ProfilePage {
 
               Toggle({ type: ToggleType.Switch, isOn: this.autoCache })
                 .selectedColor(PRIMARY)
-                .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+                .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
                 .onChange((v: boolean) => {
                   this.saveOption('cache', v);
                 })
@@ -354,7 +387,7 @@ export struct ProfilePage {
 
               Toggle({ type: ToggleType.Switch, isOn: this.history })
                 .selectedColor(PRIMARY)
-                .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+                .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
                 .onChange((v: boolean) => {
                   this.saveOption('history', v);
                 })
@@ -378,28 +411,67 @@ export struct ProfilePage {
 
             Row() {
               Column({ space: 2 }) {
-                Text('指纹隐私锁')
+                Text('应用锁')
                   .fontSize(15)
                   .fontWeight(FontWeight.Medium)
                   .fontColor($r('sys.color.font_primary'))
-                Text('启动或从后台切回时需验证指纹')
+                Text(this.securityLock ? '已开启，关闭前需要再次验证' : '关闭。开启后冷启动和回到前台需要验证')
                   .fontSize(11)
                   .fontColor($r('sys.color.font_secondary'))
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
 
-              Toggle({ type: ToggleType.Switch, isOn: this.securityLock })
-                .selectedColor(PRIMARY)
-                .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
-                .onChange((v: boolean) => {
-                  this.saveOption('lock', v);
+              Button(this.securityLock ? '关闭' : '开启', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+                .fontSize(13)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(PRIMARY)
+                .backgroundColor(PRIMARY_SOFT)
+                .height(36)
+                .onClick((): void => {
+                  this.confirmLock(!this.securityLock);
                 })
             }
             .width('100%')
             .constraintSize({ minHeight: 48 })
 
             Divider().color(DIVIDER)
+
+            Row() {
+              Column({ space: 2 }) {
+                Text('后台预览保护')
+                  .fontSize(15)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('sys.color.font_primary'))
+                Text('切到多任务时遮住画面，与应用锁分开')
+                  .fontSize(11)
+                  .fontColor($r('sys.color.font_secondary'))
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+
+              Toggle({ type: ToggleType.Switch, isOn: this.previewOn })
+                .selectedColor(PRIMARY)
+                .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+                .onChange((on: boolean) => {
+                  this.saveOption('preview', on);
+                })
+            }
+            .width('100%')
+            .constraintSize({ minHeight: 48 })
+
+            Divider().color(DIVIDER)
+
+            Button('全局屏蔽规则', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(PRIMARY)
+              .backgroundColor(PRIMARY_SOFT)
+              .width('100%')
+              .height(40)
+              .onClick(() => {
+                this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: '' } as MangaRouteParams);
+              })
 
             Row({ space: 10 }) {
               Button('离线下载管理', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
@@ -470,6 +542,17 @@ export struct ProfilePage {
                 })
             }
             .width('100%')
+
+            Button('清理旧版数据', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(TEXT_MAIN)
+              .backgroundColor(SUB_CARD)
+              .width('100%')
+              .height(40)
+              .onClick((): void => {
+                this.cleanLegacy();
+              })
           }
           .padding(18)
           .width('100%')

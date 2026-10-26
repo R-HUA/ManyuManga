@@ -1,6 +1,7 @@
 import asset from '@ohos.security.asset';
-import { Prefs } from '../util/Prefs';
 import { utf8Encode, utf8Decode } from './JmApi';
+import { loadSourceConfiguration, saveSourceConfiguration } from './db/SourceConfigDao';
+import { assertDatabaseGeneration, databaseGeneration } from './db/AppDatabase';
 
 export type SourceKind = 'jm' | 'suwayomi' | 'local' | 'eh';
 export type SourceAuth = 'none' | 'basic' | 'login';
@@ -25,6 +26,31 @@ export class SourceEntry {
   }
 }
 
+export class SourceInstance {
+  id: string = '';
+  endpoint: string = '';
+  auth: SourceAuth = 'none';
+  name: string = '';
+}
+
+export class SourceConfiguration {
+  entries: Array<SourceEntry> = [];
+  instances: Array<SourceInstance> = [];
+  activeInstance: string = '';
+}
+
+export function copySource(entry: SourceEntry): SourceEntry {
+  const copy: SourceEntry = new SourceEntry(entry.id, entry.name, entry.kind);
+  copy.instanceId = entry.instanceId;
+  copy.endpoint = entry.endpoint;
+  copy.remoteId = entry.remoteId;
+  copy.language = entry.language;
+  copy.auth = entry.auth;
+  copy.enabled = entry.enabled;
+  copy.latency = entry.latency;
+  return copy;
+}
+
 /** 来源身份必须进入所有持久化主键，服务端编号只在适配边界解包。 */
 export function sourceKey(sourceId: string, nativeId: string): string {
   return `${sourceId}~${encodeURIComponent(nativeId)}`;
@@ -42,34 +68,49 @@ export function nativeId(key: string): string {
 }
 
 class SourceStore {
-  private entries: Array<SourceEntry> = [];
+  private configuration: SourceConfiguration = new SourceConfiguration();
+  private initialized: boolean = false;
   private loading: Promise<void> | null = null;
   private queue: Promise<void> = Promise.resolve();
-  private async load(): Promise<void> {
-    const p: Prefs = await Prefs.getInstance();
-    const saved: string = await p.getString('sources_v1', '');
-    if (saved === '') {
-      this.entries = [new SourceEntry('jm', '禁漫', 'jm'),
-        new SourceEntry('eh', 'E-Hentai / ExHentai', 'eh'),
-        new SourceEntry('local', '本地漫画', 'local')];
-      await p.putBool('eh_seeded_v1', true);
-      return;
-    }
-    this.entries = JSON.parse(saved) as Array<SourceEntry>;
-    // 旧版本升级补种内置 EH 图源；用户删除后（eh_seeded_v1 已置位）不再复活
-    if (!this.entries.some((s: SourceEntry): boolean => s.id === 'eh') &&
-      await p.getBool('eh_seeded_v1', false) === false) {
-      this.entries.push(new SourceEntry('eh', 'E-Hentai / ExHentai', 'eh'));
-      await p.putBool('eh_seeded_v1', true);
-      await this.persist(this.entries);
+  private generation: number = 0;
+
+  invalidate(): void {
+    this.generation++;
+    this.initialized = false;
+    this.loading = null;
+    this.configuration = new SourceConfiguration();
+    AppStorage.setOrCreate('sourceVersion', Date.now());
+  }
+
+  private async load(ticket: number): Promise<void> {
+    const configuration: SourceConfiguration = await loadSourceConfiguration();
+    if (ticket === this.generation) {
+      this.configuration = configuration;
+      this.initialized = true;
     }
   }
   async list(): Promise<Array<SourceEntry>> {
-    if (this.loading === null) {
-      this.loading = this.load();
+    while (!this.initialized) {
+      if (this.loading === null) {
+        const ticket: number = this.generation;
+        this.loading = this.load(ticket).catch((e: Error): void => {
+          if (ticket === this.generation) {
+            this.loading = null;
+          }
+          throw e;
+        });
+      }
+      await this.loading;
     }
-    await this.loading;
-    return this.entries.slice();
+    return this.configuration.entries.map((entry: SourceEntry): SourceEntry => copySource(entry));
+  }
+  /** 同步渲染只读已提交快照；缺少初始化或身份时明确返回空。 */
+  peek(id: string): SourceEntry | null {
+    if (!this.initialized) {
+      return null;
+    }
+    const entry: SourceEntry | undefined = this.configuration.entries.find((item: SourceEntry): boolean => item.id === id);
+    return entry === undefined ? null : copySource(entry);
   }
   async get(id: string, requireEnabled: boolean = true): Promise<SourceEntry> {
     const found: SourceEntry | undefined = (await this.list()).find((s: SourceEntry) => s.id === id);
@@ -79,24 +120,109 @@ class SourceStore {
     return found;
   }
   async save(entry: SourceEntry): Promise<void> {
-    const snapshot: SourceEntry = JSON.parse(JSON.stringify(entry)) as SourceEntry;
+    const expected: number = databaseGeneration();
+    const snapshot: SourceEntry = copySource(entry);
     const next: Promise<void> = this.queue.then(async (): Promise<void> => {
-      const entries: Array<SourceEntry> = (await this.list()).filter((s: SourceEntry) => s.id !== snapshot.id);
-      entries.push(snapshot); await this.persist(entries);
+      assertDatabaseGeneration(expected);
+      const entries: Array<SourceEntry> = await this.list();
+      assertDatabaseGeneration(expected);
+      const index: number = entries.findIndex((s: SourceEntry): boolean => s.id === snapshot.id);
+      if (index >= 0) {
+        entries[index] = snapshot;
+      } else {
+        entries.push(snapshot);
+      }
+      const configuration: SourceConfiguration = this.copyConfiguration(entries);
+      await this.persist(configuration);
     });
     this.queue = next.catch((): void => {});
     return next;
   }
   async remove(id: string): Promise<void> {
-    const next: Promise<void> = this.queue.then(async (): Promise<void> => { await this.persist((await this.list()).filter((s: SourceEntry) => s.id !== id)); });
+    const expected: number = databaseGeneration();
+    const next: Promise<void> = this.queue.then(async (): Promise<void> => {
+      assertDatabaseGeneration(expected);
+      const entries: Array<SourceEntry> = (await this.list()).filter((s: SourceEntry): boolean => s.id !== id);
+      assertDatabaseGeneration(expected);
+      await this.persist(this.copyConfiguration(entries));
+    });
     this.queue = next.catch((): void => {});
     return next;
   }
-  private async persist(entries: Array<SourceEntry>): Promise<void> {
-    const p: Prefs = await Prefs.getInstance();
-    await p.putString('sources_v1', JSON.stringify(entries));
-    this.entries = entries;
-    AppStorage.setOrCreate('sourceVersion', Date.now());
+  async connection(): Promise<SourceInstance | null> {
+    await this.list();
+    const instance: SourceInstance | undefined = this.configuration.instances.find(
+      (item: SourceInstance): boolean => item.id === this.configuration.activeInstance);
+    if (instance === undefined) {
+      return null;
+    }
+    const copy: SourceInstance = new SourceInstance();
+    copy.id = instance.id;
+    copy.endpoint = instance.endpoint;
+    copy.auth = instance.auth;
+    copy.name = instance.name;
+    return copy;
+  }
+
+  /** 同一服务按 remoteId 保留身份；更换服务必须由连接页显式确认。 */
+  syncSuwayomi(instance: SourceInstance, incoming: Array<SourceEntry>, replace: boolean = false): Promise<void> {
+    const expected: number = databaseGeneration();
+    const next: Promise<void> = this.queue.then(async (): Promise<void> => {
+      assertDatabaseGeneration(expected);
+      const entries: Array<SourceEntry> = await this.list();
+      const current: SourceInstance | null = await this.connection();
+      assertDatabaseGeneration(expected);
+      if (current !== null && current.endpoint !== instance.endpoint && !replace) {
+        throw new Error('更换服务地址前请确认替换连接');
+      }
+      if (current !== null && current.endpoint === instance.endpoint && current.id !== instance.id) {
+        throw new Error('服务连接身份已改变，请重新同步');
+      }
+      const configuration: SourceConfiguration = this.copyConfiguration(entries);
+      for (const entry of configuration.entries) {
+        if (entry.kind === 'suwayomi' && (entry.instanceId === instance.id || replace)) {
+          entry.enabled = false;
+        }
+      }
+      for (const supplied of incoming) {
+        const item: SourceEntry = copySource(supplied);
+        const old: SourceEntry | undefined = entries.find((entry: SourceEntry): boolean =>
+          entry.kind === 'suwayomi' && entry.instanceId === instance.id && entry.remoteId === item.remoteId);
+        if (old !== undefined) {
+          item.id = old.id;
+          item.enabled = old.enabled;
+        }
+        const index: number = configuration.entries.findIndex((entry: SourceEntry): boolean => entry.id === item.id);
+        if (index >= 0) {
+          configuration.entries[index] = item;
+        } else {
+          configuration.entries.push(item);
+        }
+      }
+      configuration.instances = [instance];
+      configuration.activeInstance = instance.id;
+      await this.persist(configuration);
+    });
+    this.queue = next.catch((): void => {});
+    return next;
+  }
+
+  private copyConfiguration(entries: Array<SourceEntry>): SourceConfiguration {
+    const configuration: SourceConfiguration = new SourceConfiguration();
+    configuration.entries = entries.map((entry: SourceEntry): SourceEntry => copySource(entry));
+    configuration.instances = this.configuration.instances.slice();
+    configuration.activeInstance = this.configuration.activeInstance;
+    return configuration;
+  }
+
+  private async persist(configuration: SourceConfiguration): Promise<void> {
+    const ticket: number = this.generation;
+    await saveSourceConfiguration(configuration);
+    if (ticket === this.generation) {
+      this.configuration = configuration;
+      this.initialized = true;
+      AppStorage.setOrCreate('sourceVersion', Date.now());
+    }
   }
 }
 

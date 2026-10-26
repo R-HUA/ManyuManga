@@ -1,5 +1,4 @@
 import { HdsNavigation } from '@kit.UIDesignKit';
-import { uiMaterial } from '@kit.ArkUI';
 import { LibraryPage } from './LibraryPage';
 import { UpdatesPage } from './UpdatesPage';
 import { SourcesPage } from './SourcesPage';
@@ -13,7 +12,9 @@ import { CategoryPage } from './CategoryPage';
 import { ChapterPreviewPage } from './ChapterPreviewPage';
 import { JmSourceSettingsPage } from './JmSourceSettingsPage';
 import { EhBrowsePage } from './eh/EhBrowsePage';
+import { BlockRulesPage } from './settings/BlockRulesPage';
 import { IconCircleButton } from '../common/Components';
+import { IMMERSIVE_TAB_BAR_MATERIAL } from '../common/ImmersiveMaterials';
 import {
   ROUTE_SEARCH,
   ROUTE_ALBUM,
@@ -21,7 +22,9 @@ import {
   ROUTE_DOWNLOADS,
   ROUTE_PREVIEW,
   ROUTE_JM_SETTINGS,
+  ROUTE_JM_BROWSE,
   ROUTE_EH_BROWSE,
+  ROUTE_BLOCK_RULES,
   NAV_STACK_DEPTH_KEY,
   MangaRouteParams
 } from '../common/Route';
@@ -63,11 +66,6 @@ export struct MainShell {
       });
     }
   }
-
-  private material: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
-    style: uiMaterial.ImmersiveStyle.THIN,
-    colorInvert: true
-  });
 
   @Builder
   private JmTabLabel(title: string, icon: Resource, index: number) {
@@ -137,12 +135,12 @@ export struct MainShell {
         // 功能页签切换：底部悬浮 Dock 栏
         Tabs({ barPosition: BarPosition.End, index: this.jmTab }) {
           TabContent() {
-            ExplorePage({ embeddedInShell: true })
+            ExplorePage({ embeddedInShell: true, sourceIdValue: 'jm' })
           }
           .tabBar(this.JmTabLabel('精选', $r('sys.symbol.star'), 0))
 
           TabContent() {
-            CategoryPage({ embeddedInShell: true })
+            CategoryPage({ embeddedInShell: true, sourceIdValue: 'jm' })
           }
           .tabBar(this.JmTabLabel('分类', $r('sys.symbol.square_grid_2x2'), 1))
         }
@@ -154,10 +152,7 @@ export struct MainShell {
         .barFloatingStyle({
           barSideMargin: 64,
           barBottomMargin: Math.max(16, this.bottom),
-          systemMaterial: new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.THIN,
-            colorInvert: true
-          })
+          systemMaterial: IMMERSIVE_TAB_BAR_MATERIAL
         })
         .onChange((idx: number) => {
           this.jmTab = idx;
@@ -184,12 +179,14 @@ export struct MainShell {
       DownloadsPage()
     } else if (name === ROUTE_PREVIEW) {
       ChapterPreviewPage()
-    } else if (name === 'jmBrowse') {
+    } else if (name === ROUTE_JM_BROWSE) {
       this.JmBrowseDestination()
     } else if (name === ROUTE_EH_BROWSE) {
       EhBrowsePage()
     } else if (name === 'jmSettings' || name === ROUTE_JM_SETTINGS) {
       JmSourceSettingsPage()
+    } else if (name === ROUTE_BLOCK_RULES) {
+      BlockRulesPage()
     }
   }
 
@@ -278,7 +275,7 @@ export struct MainShell {
         .barFloatingStyle({
           barSideMargin: 28,
           barBottomMargin: Math.max(16, this.bottom + 8),
-          systemMaterial: this.material
+          systemMaterial: IMMERSIVE_TAB_BAR_MATERIAL
         })
         .onChange((index: number) => {
           this.tab = index;

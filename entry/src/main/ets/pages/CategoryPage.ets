@@ -7,7 +7,8 @@ import { FONT_CAPTION, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TAB_BAR_HEIGHT, TEXT_
 import { EmptyView, SkeletonGrid } from '../common/Components';
 import { ROUTE_ALBUM } from '../common/Route';
 import { AlbumLite, CategoryItem, errorMessage } from '../models/Models';
-import { sourceApi as jmApi } from '../data/SourceApi';
+import { sourceApi } from '../data/SourceApi';
+import { sourceId } from '../data/Sources';
 import { blockTagsStore, customCatStore } from '../data/Stores';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } from '../entryability/EntryAbility';
 export { formatCount, langBadgeFor } from '../common/ComicBadge';
@@ -61,12 +62,13 @@ export class AlbumSource extends BasicDataSource<AlbumLite> {
 // ───────────────────────── 分类页 ─────────────────────────
 
 /** 分类列表进程内缓存（契约缺口：Stores.ets 无分类持久化缓存，切 Tab/返回仍保留选中与列表） */
-let cachedCategories: Array<CategoryItem> | null = null;
+const cachedCategories: Map<string, Array<CategoryItem>> = new Map();
 
 @Component
 export struct CategoryPage {
   @Consume('navPathStack') navPathStack: NavPathStack;
   @Prop embeddedInShell: boolean = false;
+  @Prop sourceIdValue: string = '';
 
   /* ── 安全区/断点契约（评审 Step2/Step4：EntryAbility 写入 AppStorage，页面 @StorageProp 消费）── */
   @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
@@ -123,8 +125,8 @@ export struct CategoryPage {
   aboutToAppear(): void {
     // 评审 Step2：首帧头部高度估算补上状态栏避让（onAreaChange 随后校准为实际值，缓解首帧重叠）
     this.headerHeight = (this.embeddedInShell ? 0 : this.topInset) + 150;
-    jmApi.init().catch((e: Error) => {
-      console.info(`[CategoryPage] jmApi.init: ${errorMessage(e)}`);
+    sourceApi.init().catch((e: Error) => {
+      console.info(`[CategoryPage] sourceApi.init: ${errorMessage(e)}`);
     });
     this.loadCategories();
     this.refreshCustomCats().catch((e: Error) => {
@@ -136,16 +138,17 @@ export struct CategoryPage {
   // ── 数据 ──
 
   private async loadCategories(): Promise<void> {
-    if (cachedCategories !== null) {
-      this.categories = cachedCategories;
+    const cached: Array<CategoryItem> | undefined = cachedCategories.get(this.sourceIdValue);
+    if (cached !== undefined) {
+      this.categories = cached;
       this.catsLoading = false;
       return;
     }
     this.catsLoading = true;
     this.catsError = '';
     try {
-      const list: Array<CategoryItem> = await jmApi.categories();
-      cachedCategories = list;
+      const list: Array<CategoryItem> = await sourceApi.categories(this.sourceIdValue);
+      cachedCategories.set(this.sourceIdValue, list);
       this.categories = list;
     } catch (e) {
       this.catsError = errorMessage(e as Error);
@@ -169,8 +172,9 @@ export struct CategoryPage {
   private async filterBlocked(list: Array<AlbumLite>): Promise<Array<AlbumLite>> {
     const out: Array<AlbumLite> = [];
     for (const it of list) {
+      const owner: string = it.id.indexOf('~') > 0 ? sourceId(it.id) : '';
       const blocked: boolean =
-        await blockTagsStore.isBlocked(it.title, it.author, it.category, it.categorySub);
+        await blockTagsStore.isBlocked(it.title, it.author, it.category, it.categorySub, owner);
       if (!blocked) {
         out.push(it);
       }
@@ -255,7 +259,7 @@ export struct CategoryPage {
     const seq: number = ++this.requestSeq;
     const slug: string = this.currentSlug();
     try {
-      const raw: Array<AlbumLite> = await jmApi.ranking(slug, this.order, target);
+      const raw: Array<AlbumLite> = await sourceApi.ranking(this.sourceIdValue, slug, this.order, target);
       if (seq !== this.requestSeq) {
         return;
       }

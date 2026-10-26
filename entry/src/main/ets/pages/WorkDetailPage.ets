@@ -2,7 +2,7 @@ import { WorkSourceSheet } from './detail/WorkSourceSheet';
 import { WorkChapterList } from './detail/WorkChapterList';
 import { WorkHeroInfo } from './detail/WorkHeroInfo';
 import promptAction from '@ohos.promptAction';
-import uiMaterial from '@ohos.arkui.uiMaterial';
+import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { MangaRouteParams, ROUTE_READER, ROUTE_DOWNLOADS, ROUTE_PREVIEW } from '../common/Route';
 import { Album, Chapter, ReadingProgress, CommentItem, CommentsResult, asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
@@ -15,6 +15,7 @@ import { matchingChapter } from '../data/Matching';
 import { IconCircleButton } from '../common/Components';
 import { BG, CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
+import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 
 @Component
 export struct WorkDetailPage {
@@ -42,29 +43,51 @@ export struct WorkDetailPage {
 
   private aid: string = '';
   private generation: number = 0;
+  private detailRequests: RequestAbortGroup = new RequestAbortGroup();
+  private commentRequests: RequestAbortGroup = new RequestAbortGroup();
+
+  private cancelRequests(): void {
+    this.detailRequests.abortAll();
+    this.commentRequests.abortAll();
+    this.loadingComments = false;
+  }
+
+  private renewRequests(): void {
+    this.cancelRequests();
+    this.detailRequests = new RequestAbortGroup();
+    this.commentRequests = new RequestAbortGroup();
+  }
 
   aboutToDisappear(): void {
     this.generation++;
+    this.cancelRequests();
   }
 
   private async load(key: string): Promise<void> {
+    this.renewRequests();
     const ticket: number = ++this.generation;
     this.busy = true;
     this.error = '';
     try {
-      const album: Album = await sourceApi.album(key);
+      const album: Album = await sourceApi.album(key, false, this.detailRequests);
       if (ticket !== this.generation) {
+        return;
+      }
+      const name: string = (await sourceStore.get(sourceId(key), false)).name;
+      const work: LibraryWork | null = await library.workFor(key);
+      const progress: ReadingProgress | null = await readProgressStore.get(key);
+      if (ticket !== this.generation || this.detailRequests.aborted()) {
         return;
       }
       this.album = album;
       this.aid = album.id;
-      this.sourceName = (await sourceStore.get(sourceId(key), false)).name;
-      this.work = await library.workFor(key);
-      this.progress = await readProgressStore.get(key);
+      this.sourceName = name;
+      this.work = work;
+      this.progress = progress;
       await albumCacheStore.put(album);
       await historyStore.record(album, album.coverUrl);
     } catch (e) {
-      if (ticket === this.generation) {
+      if (ticket === this.generation && !isRequestCancelled(e as Error)) {
         this.error = errorMessage(e as Error);
       }
     } finally {
@@ -121,10 +144,11 @@ export struct WorkDetailPage {
   }
 
   private async chooseSource(target: Album): Promise<void> {
+    this.renewRequests();
     const ticket: number = ++this.generation;
     this.busy = true;
     try {
-      const album: Album = await sourceApi.album(target.id);
+      const album: Album = await sourceApi.album(target.id, false, this.detailRequests);
       if (ticket !== this.generation) {
         return;
       }
@@ -132,6 +156,9 @@ export struct WorkDetailPage {
         const chapter: Chapter | undefined = this.album.episodes.find((c: Chapter) => c.id === this.progress!.chapterId);
         if (chapter !== undefined) {
           if (matchingChapter(chapter, album.episodes) === null) {
+            this.comments = [];
+            this.commentPage = 0;
+            this.commentsDone = false;
             this.album = album;
             this.aid = album.id;
             this.progress = await readProgressStore.get(album.id);
@@ -162,8 +189,14 @@ export struct WorkDetailPage {
         this.error = errorMessage(e as Error);
       }
     } finally {
-      this.busy = false;
+      if (ticket === this.generation) {
+        this.busy = false;
+      }
     }
+  }
+
+  private readFromStart(): void {
+    this.stack.pushPathByName(ROUTE_READER, { aid: this.aid, chapterIndex: 0, page: 0 } as MangaRouteParams);
   }
 
   private read(chapter?: Chapter): void {
@@ -187,22 +220,30 @@ export struct WorkDetailPage {
       return;
     }
     this.loadingComments = true;
+    if (this.commentRequests.aborted()) {
+      this.commentRequests = new RequestAbortGroup();
+    }
+    const requests: RequestAbortGroup = this.commentRequests;
+    const ticket: number = this.generation;
+    const key: string = this.aid;
     try {
-      const before: number = this.comments.length;
-      const result: CommentsResult = await sourceApi.comments(this.aid, this.commentPage + 1);
-      if (result.list.length === 0 || (result.total > 0 && before >= result.total)) {
-        this.commentsDone = true;
+      const result: CommentsResult = await sourceApi.comments(key, this.commentPage + 1, requests);
+      if (ticket !== this.generation || key !== this.aid || requests.aborted()) {
         return;
       }
-      this.comments = this.comments.concat(result.list);
-      this.commentPage++;
-      if (result.total > 0 && this.comments.length >= result.total) {
-        this.commentsDone = true;
+      if (result.list.length > 0) {
+        this.comments = this.comments.concat(result.list);
+        this.commentPage++;
       }
+      this.commentsDone = !result.hasNext;
     } catch (e) {
-      this.error = errorMessage(e as Error);
+      if (ticket === this.generation && !isRequestCancelled(e as Error)) {
+        this.error = errorMessage(e as Error);
+      }
     } finally {
-      this.loadingComments = false;
+      if (ticket === this.generation && requests === this.commentRequests) {
+        this.loadingComments = false;
+      }
     }
   }
 
@@ -255,6 +296,7 @@ export struct WorkDetailPage {
       sourceSheet: this.$sourceSheet,
       progress: this.$progress,
       read: (chapter?: Chapter): void => this.read(chapter),
+      reread: (): void => this.readFromStart(),
       add: (): Promise<void> => this.add(),
       download: (): Promise<void> => this.download(),
       descExpanded: this.$descExpanded
@@ -367,8 +409,7 @@ export struct WorkDetailPage {
       .bindSheet($$this.sourceSheet, this.SourcesSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
-        backgroundColor: CARD,
-        systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
+        systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }
     .hideTitleBar(true)
@@ -380,10 +421,19 @@ export struct WorkDetailPage {
       this.sourceSheet = params !== null && params['match'] === true;
     })
     .onShown(() => {
+      if (this.detailRequests.aborted()) {
+        this.renewRequests();
+        this.busy = false;
+        if (this.album === null && this.aid !== '') {
+          this.load(this.aid);
+          return;
+        }
+      }
       this.refresh();
     })
     .onHidden(() => {
       this.generation++;
+      this.cancelRequests();
     })
   }
 }

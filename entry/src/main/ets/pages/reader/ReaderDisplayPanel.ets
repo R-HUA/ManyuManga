@@ -1,5 +1,5 @@
 import { ChipOption } from './ReaderControls';
-import uiMaterial from '@ohos.arkui.uiMaterial';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
 import { PRIMARY } from '../../common/Theme';
 import { Prefs } from '../../util/Prefs';
 
@@ -23,7 +23,7 @@ export struct ReaderDisplayPanel {
           .selectedColor(PRIMARY)
           .trackColor('rgba(255,255,255,0.25)')
           .blockColor(Color.White)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+          .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
           .layoutWeight(1)
           .onChange((value: number, mode: SliderChangeMode) => {
             this.brightnessValue = value;

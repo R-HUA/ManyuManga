@@ -23,6 +23,11 @@ import {
   EhUrl,
   GallerySite
 } from './eh/EhNative';
+import { AbortControl, isRequestCancelled, RequestCancelled } from '../util/RequestAbort';
+
+function throwIfEhCancelled(control?: NativeRequestControl): void {
+  if (control !== undefined && control.isCancelled()) { throw new RequestCancelled(); }
+}
 
 /** 5 位页码文件名前缀（与 DownloadManager.pad5 同构）。 */
 function ehPad5(n: number): string {
@@ -35,6 +40,7 @@ function ehPad5(n: number): string {
 
 /** EhNative 抛出的英文协议错误 → 界面可读中文；未命中则原样返回。 */
 function ehFriendlyError(e: Error): Error {
+  if (isRequestCancelled(e)) { return e; }
   const raw: string = e.message ?? '';
   if (/^HTTP \d+$/.test(raw)) {
     return new Error(`服务器返回 ${raw}，可能需要登录或稍后再试`);
@@ -139,13 +145,16 @@ export class EhSource {
 
   /** 拉取任意 EH 列表 URL（首页/热门/关注/收藏/搜索）。control 用于页面离开时销毁在途请求。 */
   public async list(requestUrl: string, control?: NativeRequestControl): Promise<EhListPage> {
+    throwIfEhCancelled(control);
     const site: string = EhSettings.effectiveSite();
     let res: NativeGalleryListResult;
     try {
       res = await NativeEhClient.fetchGalleryList(site, requestUrl, control);
     } catch (e) {
+      throwIfEhCancelled(control);
       throw ehFriendlyError(e as Error);
     }
+    throwIfEhCancelled(control);
     return new EhListPage(res.items.map((it: NativeGallerySummary): AlbumLite => this.toAlbumLite(it)),
       res.nextUrl, res.prevUrl, res.firstUrl, res.resultCount);
   }
@@ -184,14 +193,16 @@ export class EhSource {
    * 抓取 EH 域图片字节（缩略图/封面）。官方域自动带登录 Cookie（域隔离在 NativeEhClient
    * 内部保证），ehgt CDN 仅补 Referer；非 EH 域返回 null 交回调用方。
    */
-  public async fetchImageBytes(url: string): Promise<ArrayBuffer | null> {
+  public async fetchImageBytes(url: string, control?: AbortControl): Promise<ArrayBuffer | null> {
+    throwIfEhCancelled(control);
     if (!this.isEhImageUrl(url)) {
       return null;
     }
     const site: string = EhSettings.effectiveSite();
     try {
-      return await NativeEhClient.downloadBinary(site, url, EhUrl.host(site));
+      return await NativeEhClient.downloadBinary(site, url, EhUrl.host(site), control);
     } catch (e) {
+      throwIfEhCancelled(control);
       throw ehFriendlyError(e as Error);
     }
   }
@@ -253,7 +264,8 @@ export class EhSource {
     };
   }
 
-  public async detail(rawKey: string): Promise<NativeGalleryDetail> {
+  public async detail(rawKey: string, control?: AbortControl): Promise<NativeGalleryDetail> {
+    throwIfEhCancelled(control);
     const id: EhIdentity = this.parseIdentity(rawKey);
     const site: string = EhSettings.effectiveSite();
     const cacheKey: string = this.scope(site, id);
@@ -263,14 +275,17 @@ export class EhSource {
     }
     let detail: NativeGalleryDetail;
     try {
-      detail = await NativeEhClient.fetchGalleryDetail(site, this.summaryFor(id, site));
+      detail = await NativeEhClient.fetchGalleryDetail(site, this.summaryFor(id, site), control);
+      throwIfEhCancelled(control);
       // 里站无权限（Sad Panda 空响应）时按表站重试一次
       if ((detail.gid === 0 || detail.pages === 0) && site === GallerySite.EX) {
-        detail = await NativeEhClient.fetchGalleryDetail(GallerySite.E, this.summaryFor(id, GallerySite.E));
+        detail = await NativeEhClient.fetchGalleryDetail(GallerySite.E, this.summaryFor(id, GallerySite.E), control);
       }
     } catch (e) {
+      throwIfEhCancelled(control);
       throw ehFriendlyError(e as Error);
     }
+    throwIfEhCancelled(control);
     if (detail.gid === 0 || detail.pages === 0) {
       // 空壳（未登录/无权限/解析失败）绝不进缓存：补完 Cookie、切换站点或网络恢复后可直接重试
       throw new Error('画廊详情解析失败：可能需要登录、Cookie 失效或稍后再试');
@@ -292,9 +307,10 @@ export class EhSource {
       item.uploader !== '' ? item.uploader : 'E-Hentai', item.thumb, item.categoryLabel, sub);
   }
 
-  public async album(rawKey: string): Promise<Album> {
+  public async album(rawKey: string, control?: AbortControl): Promise<Album> {
     const id: EhIdentity = this.parseIdentity(rawKey);
-    const detail: NativeGalleryDetail = await this.detail(rawKey);
+    const detail: NativeGalleryDetail = await this.detail(rawKey, control);
+    throwIfEhCancelled(control);
     const key: string = this.fullKey(id);
     const album: Album = new Album(key, detail.titleJpn !== '' ? detail.titleJpn : detail.title);
     album.coverUrl = detail.cover;
@@ -325,8 +341,9 @@ export class EhSource {
   }
 
   /** 虚拟页名 00001.eh..N：阅读器/下载器先拿到总页数与稳定缓存键，真实直链两阶段解析。 */
-  public async chapterImages(rawKey: string): Promise<Array<string>> {
-    const detail: NativeGalleryDetail = await this.detail(rawKey);
+  public async chapterImages(rawKey: string, control?: AbortControl): Promise<Array<string>> {
+    const detail: NativeGalleryDetail = await this.detail(rawKey, control);
+    throwIfEhCancelled(control);
     const pages: Array<string> = [];
     for (let i: number = 1; i <= detail.pages; i++) {
       pages.push(`${ehPad5(i)}.eh`);
@@ -337,26 +354,34 @@ export class EhSource {
     return pages;
   }
 
-  public async comments(rawKey: string, page: number = 1): Promise<CommentsResult> {
+  public async comments(rawKey: string, page: number = 1, control?: AbortControl): Promise<CommentsResult> {
+    throwIfEhCancelled(control);
     // 评论接口一次返回当前可见的全部楼层，没有第二页。页码大于 1 时给空页，避免调用方拼接出重复。
     if (page > 1) {
-      return new CommentsResult(0, []);
+      const empty: CommentsResult = new CommentsResult(0, []);
+      empty.hasNext = false;
+      return empty;
     }
     const id: EhIdentity = this.parseIdentity(rawKey);
-    const detail: NativeGalleryDetail = await this.detail(rawKey);
+    const detail: NativeGalleryDetail = await this.detail(rawKey, control);
+    throwIfEhCancelled(control);
     const site: string = EhSettings.effectiveSite();
     let loaded: NativeGalleryDetail;
     try {
-      loaded = await NativeEhClient.fetchGalleryDetailComments(site, detail);
+      loaded = await NativeEhClient.fetchGalleryDetailComments(site, detail, control);
     } catch (e) {
+      throwIfEhCancelled(control);
       throw ehFriendlyError(e as Error);
     }
+    throwIfEhCancelled(control);
     const list: Array<CommentItem> = loaded.comments.map((c: NativeGalleryComment, idx: number): CommentItem =>
       new CommentItem(`${c.id}`, c.user, c.body, `${c.score}`, false, c.posted, ''));
     if (loaded.comments.length > 0 && loaded.pages > 0) {
       this.detailCache.set(this.scope(site, id), loaded);
     }
-    return new CommentsResult(list.length, list);
+    const result: CommentsResult = new CommentsResult(list.length, list);
+    result.hasNext = false;
+    return result;
   }
 
   // ─────────────── 两阶段单页解析（阅读 / 下载共用） ───────────────
@@ -366,7 +391,8 @@ export class EhSource {
    * 缩略图每页容量（20/40 视站点设置）未知：先按假设跳页抓取，实测容量后重定位，
    * 仍失配则顺序向后推进；全部页码已知仍缺目标即页号异常。
    */
-  private async readerUrl(id: EhIdentity, pageIndex: number): Promise<string> {
+  private async readerUrl(id: EhIdentity, pageIndex: number, control?: AbortControl): Promise<string> {
+    throwIfEhCancelled(control);
     const site: string = EhSettings.effectiveSite();
     const cacheKey: string = this.scope(site, id);
     let urls: Map<number, string> | undefined = this.readerUrls.get(cacheKey);
@@ -378,7 +404,8 @@ export class EhSource {
     if (hit !== undefined) {
       return hit;
     }
-    const detail: NativeGalleryDetail = await this.detail(`${id.gid}_${id.token}`);
+    const detail: NativeGalleryDetail = await this.detail(`${id.gid}_${id.token}`, control);
+    throwIfEhCancelled(control);
     if (pageIndex > detail.pages || detail.pages === 0) {
       throw new Error(`页码越界：第 ${pageIndex} 页（画廊共 ${detail.pages} 页）`);
     }
@@ -395,7 +422,9 @@ export class EhSource {
         break;
       }
       if (!loaded.has(index)) {
-        const page: NativeGalleryPreviewPage = await NativeEhClient.fetchGalleryPreviewPage(site, detail.detailUrl, index);
+        const page: NativeGalleryPreviewPage = await NativeEhClient.fetchGalleryPreviewPage(
+          site, detail.detailUrl, index, control);
+        throwIfEhCancelled(control);
         loaded.add(index);
         if (page.items.length > 0) {
           this.previewPerPage.set(cacheKey, page.items.length);
@@ -424,23 +453,28 @@ export class EhSource {
   /**
    * 虚拟页名 → 真实图片字节。attempt>0 时附带 nl 键让服务端换一个 H@H 节点重新签发直链。
    */
-  public async fetchPage(rawKey: string, filename: string, attempt: number): Promise<ArrayBuffer> {
+  public async fetchPage(rawKey: string, filename: string, attempt: number,
+    control?: AbortControl): Promise<ArrayBuffer> {
     const id: EhIdentity = this.parseIdentity(rawKey);
     const pageIndex: number = parseInt(filename.replace(/\.eh$/i, ''), 10);
     if (!Number.isInteger(pageIndex) || pageIndex < 1) {
       throw new Error(`无效的 E-Hentai 页文件名：${filename}`);
     }
+    throwIfEhCancelled(control);
     const site: string = EhSettings.effectiveSite();
-    const pageUrl: string = await this.readerUrl(id, pageIndex);
+    const pageUrl: string = await this.readerUrl(id, pageIndex, control);
+    throwIfEhCancelled(control);
     const nlKey: string = `${id.gid}_${id.token}_${pageIndex}`;
     const skipHathKey: string = attempt > 0 ? (this.skipHathKeys.get(nlKey) ?? '') : '';
     try {
-      const page = await NativeEhClient.fetchReaderPage(site, pageUrl, skipHathKey);
+      const page = await NativeEhClient.fetchReaderPage(site, pageUrl, skipHathKey, control);
+      throwIfEhCancelled(control);
       if (page.skipHathKey !== undefined && page.skipHathKey !== '') {
         this.skipHathKeys.set(nlKey, page.skipHathKey);
       }
-      return await NativeEhClient.downloadBinary(site, page.imageUrl, page.pageUrl);
+      return await NativeEhClient.downloadBinary(site, page.imageUrl, page.pageUrl, control);
     } catch (e) {
+      throwIfEhCancelled(control);
       throw ehFriendlyError(e as Error);
     }
   }

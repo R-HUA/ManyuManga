@@ -40,7 +40,7 @@ export struct DownloadTaskCard {
             })
         }
         Column() {
-          SourceCover({ url: this.item.cover, radius: 8 })
+          SourceCover({ url: this.item.cover, sourceKey: this.item.albumId, radius: 8 })
         }
         .width(50)
         .height(66)
@@ -100,7 +100,7 @@ export struct DownloadTaskCard {
               this.onResume(this.item.id);
             })
           }
-          if (this.item.state === 'failed') {
+          if (this.item.state === 'failed' || this.item.state === 'canceled') {
             this.TaskActionPill('重试任务', true, false, () => {
               this.onRetry(this.item);
             })
@@ -169,10 +169,13 @@ export struct DownloadTaskCard {
     if (t.state === 'done') {
       return `已完成 · CBZ 已导出：${t.savedTo}`;
     }
+    if (t.state === 'canceled') {
+      return '失败：已取消，可重试';
+    }
     if (t.state === 'failed') {
       return `失败：${t.error === '' ? '未知错误' : t.error}`;
     }
-    return '已取消';
+    return '等待中';
   }
 
   private stateLabel(state: DownloadState): string {
@@ -188,14 +191,14 @@ export struct DownloadTaskCard {
     if (state === 'done') {
       return '完成';
     }
-    if (state === 'failed') {
+    if (state === 'failed' || state === 'canceled') {
       return '失败';
     }
-    return '已取消';
+    return '等待';
   }
 
   private badgeTextColor(state: DownloadState): ResourceColor {
-    if (state === 'running' || state === 'done' || state === 'failed') {
+    if (state === 'running' || state === 'done' || state === 'failed' || state === 'canceled') {
       return Color.White;
     }
     if (state === 'queued') {
@@ -211,7 +214,7 @@ export struct DownloadTaskCard {
     if (state === 'done') {
       return PRIMARY;
     }
-    if (state === 'failed') {
+    if (state === 'failed' || state === 'canceled') {
       return MASK_DARK;
     }
     if (state === 'queued') {

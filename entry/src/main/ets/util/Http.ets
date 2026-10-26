@@ -3,6 +3,7 @@
  */
 
 import http from '@ohos.net.http';
+import { RequestAbortGroup, RequestCancelled } from './RequestAbort';
 import { errorMessage } from '../models/Models';
 
 /** 原实现统一 UA（JmApi.kt:88-90），API 与图片请求共用 */
@@ -17,28 +18,28 @@ export class Http {
   /** GET 文本响应 */
   async getText(url: string, headers?: Record<string, string>,
     connectTimeoutMs: number = 5000, readTimeoutMs: number = 12000,
-    timeoutMs: number = 15000): Promise<string> {
+    timeoutMs: number = 15000, signal: RequestAbortGroup | null = null): Promise<string> {
     const h: Record<string, string> | null = headers === undefined ? null : headers;
     const result: Object = await this.request(url, http.RequestMethod.GET, h,
-      http.HttpDataType.STRING, connectTimeoutMs, readTimeoutMs, timeoutMs);
+      http.HttpDataType.STRING, connectTimeoutMs, readTimeoutMs, timeoutMs, signal);
     return `${result}`;
   }
 
   /** GET 二进制响应 */
   async getBytes(url: string, headers?: Record<string, string>,
     connectTimeoutMs: number = 5000, readTimeoutMs: number = 12000,
-    timeoutMs: number = 15000): Promise<ArrayBuffer> {
+    timeoutMs: number = 15000, signal: RequestAbortGroup | null = null): Promise<ArrayBuffer> {
     const h: Record<string, string> | null = headers === undefined ? null : headers;
     const result: Object = await this.request(url, http.RequestMethod.GET, h,
-      http.HttpDataType.ARRAY_BUFFER, connectTimeoutMs, readTimeoutMs, timeoutMs);
+      http.HttpDataType.ARRAY_BUFFER, connectTimeoutMs, readTimeoutMs, timeoutMs, signal);
     return result as ArrayBuffer;
   }
 
   /** HEAD 探活（2xx 视为成功，否则抛 HTTP {code}） */
   async head(url: string, connectTimeoutMs: number = 5000, readTimeoutMs: number = 12000,
-    timeoutMs: number = 15000): Promise<void> {
+    timeoutMs: number = 15000, signal: RequestAbortGroup | null = null): Promise<void> {
     await this.request(url, http.RequestMethod.HEAD, null,
-      http.HttpDataType.STRING, connectTimeoutMs, readTimeoutMs, timeoutMs);
+      http.HttpDataType.STRING, connectTimeoutMs, readTimeoutMs, timeoutMs, signal);
   }
 
   /** cookie 总条数（诊断用，对应 cookieJar.size()） */
@@ -57,9 +58,16 @@ export class Http {
   private async request(url: string, method: http.RequestMethod,
     headers: Record<string, string> | null, expect: http.HttpDataType,
     connectTimeoutMs: number, readTimeoutMs: number,
-    timeoutMs: number): Promise<Object> {
+    timeoutMs: number, signal: RequestAbortGroup | null): Promise<Object> {
+    if (signal !== null) {
+      signal.throwIfAborted();
+    }
     const req: http.HttpRequest = http.createHttp();
+    if (signal !== null) {
+      signal.track(req);
+    }
     try {
+      signal?.throwIfAborted();
       const finalHeaders: Record<string, string> = {};
       finalHeaders['User-Agent'] = JM_UA;
       if (headers !== null) {
@@ -81,7 +89,10 @@ export class Http {
         usingCache: false // API 鉴权头与 AES 密钥由秒级 ts 派生，命中旧缓存会以新钥解旧文导致错乱重试（Review M-1）；图片缓存走应用层 page_cache
       };
       const resp: http.HttpResponse = await this.withTimeout<http.HttpResponse>(
-        req.request(url, opt), timeoutMs, req);
+        req.request(url, opt), timeoutMs, req, signal);
+      if (signal !== null && signal.aborted()) {
+        throw new RequestCancelled();
+      }
       if (resp.responseCode < 200 || resp.responseCode >= 300) {
         throw new Error(`HTTP ${resp.responseCode}`);
       }
@@ -90,7 +101,15 @@ export class Http {
         throw new Error('空响应');
       }
       return resp.result as Object;
+    } catch (e) {
+      if (signal !== null && signal.aborted()) {
+        throw new RequestCancelled();
+      }
+      throw e as Error;
     } finally {
+      if (signal !== null) {
+        signal.untrack(req);
+      }
       try {
         req.destroy();
       } catch (e) {
@@ -100,9 +119,13 @@ export class Http {
   }
 
   /** 模拟 OkHttp callTimeout：整体超时即 destroy 请求并 reject */
-  private withTimeout<T>(p: Promise<T>, timeoutMs: number, req: http.HttpRequest): Promise<T> {
+  private withTimeout<T>(p: Promise<T>, timeoutMs: number, req: http.HttpRequest,
+    signal: RequestAbortGroup | null): Promise<T> {
     return new Promise<T>((resolve: (value: T) => void, reject: (reason: Error) => void) => {
+      let settled: boolean = false;
       const timer: number = setTimeout(() => {
+        if (settled) { return; }
+        settled = true;
         reject(new Error('请求超时'));
         try {
           req.destroy();
@@ -110,11 +133,31 @@ export class Http {
           // ignore
         }
       }, timeoutMs);
+      if (signal !== null) {
+        signal.cancelled.then((): void => {
+          if (settled) { return; }
+          settled = true;
+          clearTimeout(timer);
+          reject(new RequestCancelled());
+          try {
+            req.destroy();
+          } catch (e) {
+          }
+        });
+      }
       p.then((value: T) => {
+        if (settled) { return; }
+        settled = true;
         clearTimeout(timer);
         resolve(value);
       }).catch((e: Error) => {
+        if (settled) { return; }
+        settled = true;
         clearTimeout(timer);
+        if (signal !== null && signal.aborted()) {
+          reject(new RequestCancelled());
+          return;
+        }
         reject(new Error(errorMessage(e)));
       });
     });

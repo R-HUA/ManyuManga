@@ -1,7 +1,7 @@
 import promptAction from '@ohos.promptAction';
 import { jmApi } from '../data/JmApi';
 import { DomainSpeed } from '../models/Models';
-import { blockTagsStore } from '../data/Stores';
+import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../common/Route';
 import { IconCircleButton, EmptyView } from '../common/Components';
 import {
   BG,
@@ -28,8 +28,6 @@ export struct JmSourceSettingsPage {
   @State currentDomain: string = '';
   @State domainSpeeds: Array<DomainSpeed> = [];
   @State testingSpeed: boolean = false;
-  @State blockedTags: Array<string> = [];
-  @State newTagInput: string = '';
 
   aboutToAppear(): void {
     this.loadData();
@@ -39,7 +37,6 @@ export struct JmSourceSettingsPage {
     try {
       this.domains = jmApi.getDomains();
       this.currentDomain = this.domains[0] ?? '';
-      this.blockedTags = await blockTagsStore.getList();
     } catch (_e) {
     }
   }
@@ -71,27 +68,6 @@ export struct JmSourceSettingsPage {
     } catch (_e) {
       promptAction.showToast({ message: '切换线路失败' });
     }
-  }
-
-  private async addTag(): Promise<void> {
-    const t: string = this.newTagInput.trim();
-    if (t === '') {
-      return;
-    }
-    if (this.blockedTags.includes(t)) {
-      promptAction.showToast({ message: '该屏蔽词已存在' });
-      return;
-    }
-    await blockTagsStore.add(t);
-    this.blockedTags = await blockTagsStore.getList();
-    this.newTagInput = '';
-    promptAction.showToast({ message: `已添加屏蔽词「${t}」` });
-  }
-
-  private async removeTag(tag: string): Promise<void> {
-    await blockTagsStore.remove(tag);
-    this.blockedTags = await blockTagsStore.getList();
-    promptAction.showToast({ message: `已移除屏蔽词「${tag}」` });
   }
 
   build() {
@@ -210,82 +186,16 @@ export struct JmSourceSettingsPage {
             .borderRadius(20)
             .border({ width: 0.5, color: DIVIDER })
 
-            // 2. 内容屏蔽词过滤
-            Column({ space: 14 }) {
-              Column({ space: 4 }) {
-                Text('内容屏蔽词')
-                  .fontSize(16)
-                  .fontColor(TEXT_MAIN)
-                  .fontWeight(FontWeight.Bold)
-                  .width('100%')
-                Text('包含任意屏蔽词的作品将在发现、分类与搜索结果中自动过滤')
-                  .fontSize(12)
-                  .fontColor(TEXT_SUB)
-                  .width('100%')
-              }
+            Button('本源屏蔽规则', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(PRIMARY)
+              .backgroundColor(PRIMARY_SOFT)
               .width('100%')
-
-              Row({ space: 8 }) {
-                TextInput({ text: this.newTagInput, placeholder: '输入要屏蔽的题材或标签…' })
-                  .layoutWeight(1)
-                  .height(38)
-                  .borderRadius(14)
-                  .backgroundColor(SUB_CARD)
-                  .fontColor(TEXT_MAIN)
-                  .placeholderColor(TEXT_SUB)
-                  .onChange((val: string) => {
-                    this.newTagInput = val;
-                  })
-                  .onSubmit(() => {
-                    this.addTag();
-                  })
-
-                Button('添加', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                  .fontSize(13)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor(PRIMARY)
-                  .backgroundColor(PRIMARY_SOFT)
-                  .height(38)
-                  .onClick(() => {
-                    this.addTag();
-                  })
-              }
-              .width('100%')
-
-              if (this.blockedTags.length === 0) {
-                Text('暂无屏蔽词')
-                  .fontSize(12)
-                  .fontColor(TEXT_SUB)
-                  .padding(12)
-              } else {
-                Flex({ wrap: FlexWrap.Wrap }) {
-                  ForEach(this.blockedTags, (tag: string) => {
-                    Row({ space: 6 }) {
-                      Text(tag)
-                        .fontSize(12)
-                        .fontColor(TEXT_MAIN)
-                      SymbolGlyph($r('sys.symbol.xmark'))
-                        .fontSize(12)
-                        .fontColor([TEXT_SUB])
-                    }
-                    .padding({ left: 12, right: 10, top: 6, bottom: 6 })
-                    .margin({ right: 8, bottom: 8 })
-                    .borderRadius(14)
-                    .backgroundColor(SUB_CARD)
-                    .border({ width: 0.5, color: DIVIDER })
-                    .onClick(() => {
-                      this.removeTag(tag);
-                    })
-                  }, (tag: string) => tag)
-                }
-                .width('100%')
-              }
-            }
-            .padding(18)
-            .width('100%')
-            .backgroundColor(CARD)
-            .borderRadius(20)
-            .border({ width: 0.5, color: DIVIDER })
+              .height(40)
+              .onClick(() => {
+                this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: 'jm' } as MangaRouteParams);
+              })
           }
           .padding({ left: 16, right: 16, top: 16, bottom: 28 + this.bottomInset })
           .width('100%')

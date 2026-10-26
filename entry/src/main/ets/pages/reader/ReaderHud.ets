@@ -3,9 +3,10 @@ import { ReaderSettingsPanel } from './ReaderSettingsPanel';
 import { ReaderDisplayPanel } from './ReaderDisplayPanel';
 import { ReaderModePanel } from './ReaderModePanel';
 import { HudButton } from './ReaderControls';
+import { ReaderThumbStrip } from './ReaderThumbStrip';
 import { PageThumbItem } from './ReaderImageItem';
 import display from '@ohos.display';
-import uiMaterial from '@ohos.arkui.uiMaterial';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
 import { MASK_DARK, PRIMARY } from '../../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode } from '../../models/Models';
 
@@ -49,6 +50,7 @@ export struct ReaderHud {
   scrollToPageDelayed: (page: number) => void = (page: number): void => {};
   persistOptions: () => Promise<void> = async (): Promise<void> => {};
   setPreload: (n: number) => void = (n: number): void => {};
+  onHudTouch: (down: boolean) => void = (down: boolean): void => {};
   @Link bookmarks: Array<ReadingProgress>;
 
   build() {
@@ -58,16 +60,20 @@ export struct ReaderHud {
         .width('100%')
         .layoutWeight(1)
         .onClick(() => {
-          if (this.panel !== 'none') {
-            this.panel = 'none';
-          } else {
-            this.hudVisible = false;
-          }
+          this.panel = 'none';
+          this.hudVisible = false;
         })
       this.BottomHud()
     }
     .width('100%')
     .height('100%')
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.onHudTouch(true);
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.onHudTouch(false);
+      }
+    })
     .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
   }
 
@@ -153,7 +159,7 @@ export struct ReaderHud {
     .width('100%')
     .padding({ left: 14, right: 14, top: this.topSafeVp + 8, bottom: 10 })
     .backgroundColor(MASK_DARK)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK }))
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
   }
 
   @Builder
@@ -187,6 +193,17 @@ export struct ReaderHud {
         .border({ width: 0.5, color: 'rgba(255,255,255,0.16)' })
         .alignItems(HorizontalAlign.Center)
       }
+      if (this.pages.length > 0) {
+        ReaderThumbStrip({
+          pages: this.pages,
+          currentPage: this.currentPage,
+          photoId: this.chapterId(),
+          scrambleId: this.scrambleId,
+          jumpToPage: (page: number): void => {
+            this.jumpToPage(page);
+          }
+        })
+      }
       // 进度滑动条 + 上一话/下一话
       if (this.pages.length > 0) {
         Row({ space: 10 }) {
@@ -213,7 +230,7 @@ export struct ReaderHud {
               .selectedColor(PRIMARY)
               .trackColor('rgba(255,255,255,0.22)')
               .blockColor(Color.White)
-              .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
+              .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
               .width('100%')
               .height(28)
               .onChange((value: number, mode: SliderChangeMode) => {
@@ -289,7 +306,7 @@ export struct ReaderHud {
     .width('100%')
     .padding({ left: 16, right: 16, top: 14, bottom: this.bottomSafeVp + 12 })
     .backgroundColor(MASK_DARK)
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THICK }))
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
     .onClick(() => {
       // 阻断底栏点击穿透
     })
@@ -323,6 +340,11 @@ export struct ReaderHud {
       preloadCount: this.$preloadCount,
       setPreload: (n: number): void => this.setPreload(n)
     })
+  }
+
+  private chapterId(): string {
+    const ch: Chapter | undefined = this.chapters[this.chapterIndex];
+    return ch === undefined ? '' : ch.id;
   }
 
   private chapterTitle(): string {

@@ -123,10 +123,11 @@ export class CommentItem {
   }
 }
 
-/** 评论分页结果（Kotlin 用 Pair<Int, List<JmComment>>，ArkTS 无元组，改用结果类） */
+/** 评论分页结果。hasNext 由各图源填写：禁漫按页继续，E-Hentai 一次响应后结束。 */
 export class CommentsResult {
   total: number;
   list: Array<CommentItem>;
+  hasNext: boolean = false;
 
   constructor(total: number = 0, list: Array<CommentItem> = []) {
     this.total = total;

@@ -1,4 +1,3 @@
-import uiMaterial from '@ohos.arkui.uiMaterial';
 import { MangaRouteParams, ROUTE_READER } from '../../common/Route';
 import { ReadingProgress } from '../../models/Models';
 import { SourceCover } from '../../common/SourceCover';
@@ -17,7 +16,7 @@ export struct LibraryContinueBanner {
   build() {
     Row({ space: 12 }) {
       Column() {
-        SourceCover({ url: this.progress[0].coverUrl, radius: 8 })
+        SourceCover({ url: this.progress[0].coverUrl, sourceKey: this.progress[0].aid, radius: 8 })
       }
       .width(36)
       .height(48)
@@ -67,6 +66,5 @@ export struct LibraryContinueBanner {
     .borderRadius(20)
     .backgroundColor(CARD)
     .border({ width: 0.5, color: DIVIDER })
-    .systemMaterial(new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR }))
   }
 }

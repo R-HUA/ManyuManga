@@ -1,5 +1,6 @@
 import image from '@ohos.multimedia.image';
 import { loadPagePixelMap, releasePagePixelMap } from '../data/ImageDecode';
+import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { TEXT_SUB } from './Theme';
 
 @Component
@@ -11,6 +12,7 @@ export struct PagePreview {
   @State bitmap: image.PixelMap | null = null;
   @State error: string = '';
   private active: boolean = true;
+  private signal: RequestAbortGroup = new RequestAbortGroup();
 
   aboutToAppear(): void {
     this.load();
@@ -18,6 +20,7 @@ export struct PagePreview {
 
   aboutToDisappear(): void {
     this.active = false;
+    this.signal.abortAll();
     if (this.bitmap !== null) {
       releasePagePixelMap(this.bitmap);
       this.bitmap = null;
@@ -25,10 +28,13 @@ export struct PagePreview {
   }
 
   private async load(): Promise<void> {
+    this.signal.abortAll();
+    this.signal = new RequestAbortGroup();
+    const signal: RequestAbortGroup = this.signal;
     try {
       const bitmap: image.PixelMap | null = await loadPagePixelMap(
-        this.chapter, this.filename, this.scramble, this.thumbWidth);
-      if (!this.active) {
+        this.chapter, this.filename, this.scramble, this.thumbWidth, signal);
+      if (!this.active || signal.aborted()) {
         if (bitmap !== null) {
           releasePagePixelMap(bitmap);
         }
@@ -39,6 +45,9 @@ export struct PagePreview {
         this.error = '加载失败';
       }
     } catch (e) {
+      if (isRequestCancelled(e as Error)) {
+        return;
+      }
       if (this.active) {
         this.error = (e as Error).message;
       }

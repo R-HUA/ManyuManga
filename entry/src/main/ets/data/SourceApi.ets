@@ -1,141 +1,236 @@
 import common from '@ohos.app.ability.common';
-import fs from '@ohos.file.fs';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { jmApi } from './JmApi';
-import { suwayomi } from './Suwayomi';
-import { localSource } from './LocalSource';
-import { ehSource } from './EhSource';
 import { EhSettings } from './eh/EhSettings';
-import { sourceStore, sourceId, nativeId, sourceKey, SourceEntry } from './Sources';
-import { Album, AlbumLite, SearchResult, Chapter, CategoryItem, CommentsResult, DomainSpeed } from '../models/Models';
-import { httpUtil } from '../util/Http';
+import { sourceStore, sourceId, SourceEntry, SourceKind } from './Sources';
+import { Album, AlbumLite, SearchResult, CategoryItem, CommentsResult, DomainSpeed, errorMessage } from '../models/Models';
 import { offlineStore } from './OfflineStore';
+import { blockTagsStore } from './stores/FilterStores';
+import { setAppContext } from '../util/Prefs';
+import {
+  capabilitiesFor,
+  SourceRequestContext,
+  SourceStrategy
+} from './source/SourceContracts';
+import { readUriBytes } from './source/LocalStrategy';
+import { definitionFor } from './source/SourceRegistry';
+import { RequestAbortGroup } from '../util/RequestAbort';
 
-/** 阅读、目录和下载共享同一来源契约。 */
-export interface SourceAdapter {
-  searchSource(source: SourceEntry, query: string, page: number): Promise<SearchResult>;
-  album(key: string): Promise<Album>;
-  chapterImages(key: string): Promise<Array<string>>;
-  fetchPage(key: string, page: string, attempt: number): Promise<ArrayBuffer>;
+/** 配置按 sourceId 取到 SourceEntry 后，再用 kind 解析策略。 */
+export function strategyFor(kind: SourceKind): SourceStrategy {
+  return definitionFor(kind).strategy;
 }
-class SourceApi implements SourceAdapter {
+
+/** 阅读、目录和下载共享的图源入口。协议留在各策略里。 */
+class SourceApi {
   private covers: Map<string, string> = new Map();
+
+  /** 先写入上下文，再各自初始化图源。单个图源失败不挡住其余图源。 */
   async init(context?: common.Context): Promise<void> {
-    await jmApi.init(context);
     if (context !== undefined) {
-      await EhSettings.init(context);
+      setAppContext(context);
     }
+    await sourceStore.list();
+    const tasks: Array<Promise<void>> = [];
+    tasks.push(jmApi.init(context).catch((e: Error): void => {
+      hilog.error(0x0000, 'SourceApi', 'jm init: %{public}s', errorMessage(e));
+    }));
+    if (context !== undefined) {
+      tasks.push(EhSettings.init(context).catch((e: Error): void => {
+        hilog.error(0x0000, 'SourceApi', 'eh init: %{public}s', errorMessage(e));
+      }));
+    }
+    await Promise.all(tasks);
   }
-  private qualify(list: Array<AlbumLite>): Array<AlbumLite> {
-    return list.map((item: AlbumLite): AlbumLite => new AlbumLite(sourceKey('jm', item.id),
-      item.title, item.author, item.coverUrl, item.category, item.categorySub));
-  }
+
   async searchSource(source: SourceEntry, query: string, page: number = 1): Promise<SearchResult> {
-    await sourceStore.get(source.id);
+    const entry: SourceEntry = await sourceStore.get(source.id);
     const start: number = Date.now();
-    let result: SearchResult;
-    if (source.kind === 'jm') {
-      if (query === '') { result = new SearchResult(0, this.qualify(await jmApi.latest(page))); }
-      else {
-        const raw: SearchResult = await jmApi.search(query, page);
-        result = new SearchResult(raw.total, this.qualify(raw.list));
-      }
-    } else if (source.kind === 'local') { result = await localSource.search(query); }
-    else if (source.kind === 'eh') { result = await ehSource.searchSource(query, page); }
-    else { result = await suwayomi.search(source, query, page); }
+    const result: SearchResult = await strategyFor(entry.kind).search(
+      new SourceRequestContext(entry, ''), query, page);
+    result.list = await this.visibleAlbums(result.list);
     await sourceStore.get(source.id);
     source.latency = Date.now() - start;
-    for (const item of result.list) { this.covers.set(item.id, item.coverUrl); }
+    for (const item of result.list) {
+      this.covers.set(item.id, item.coverUrl);
+    }
     return result;
   }
-  async album(key: string, refresh: boolean = false): Promise<Album> {
+
+  async album(key: string, refresh: boolean = false, signal: RequestAbortGroup | null = null): Promise<Album> {
     const offline: Album | null = refresh ? null : await offlineStore.album(key);
-    if (offline !== null) { this.covers.set(key, offline.coverUrl); return offline; }
+    if (offline !== null) {
+      this.covers.set(key, offline.coverUrl);
+      return offline;
+    }
     const source: SourceEntry = await sourceStore.get(sourceId(key));
-    let album: Album;
-    if (source.kind === 'jm') {
-      album = await jmApi.album(nativeId(key));
-      album.id = key;
-      album.episodes = album.episodes.map((c: Chapter) => new Chapter(sourceKey(source.id, c.id), c.title, c.sort));
-      album.coverUrl = jmApi.albumCoverUrl(nativeId(key));
-    } else if (source.kind === 'local') { album = await localSource.album(nativeId(key)); }
-    else if (source.kind === 'eh') { album = await ehSource.album(key); }
-    else { album = await suwayomi.album(source, nativeId(key)); }
+    const album: Album = await strategyFor(source.kind).album(new SourceRequestContext(source, key, signal));
     await sourceStore.get(source.id);
     this.covers.set(key, album.coverUrl);
     return album;
   }
-  async chapterImages(key: string): Promise<Array<string>> {
+
+  async chapterImages(key: string, signal: RequestAbortGroup | null = null): Promise<Array<string>> {
     const offline: Array<string> | null = await offlineStore.pages(key);
-    if (offline !== null) { return offline; }
+    if (offline !== null) {
+      return offline;
+    }
     const source: SourceEntry = await sourceStore.get(sourceId(key));
-    let pages: Array<string>;
-    if (source.kind === 'jm') { pages = await jmApi.chapterImages(nativeId(key)); }
-    else if (source.kind === 'local') { pages = await localSource.pages(key); }
-    else if (source.kind === 'eh') { pages = await ehSource.chapterImages(key); }
-    else { pages = await suwayomi.pages(source, nativeId(key)); }
+    const pages: Array<string> = await strategyFor(source.kind).chapterImages(new SourceRequestContext(source, key, signal));
     await sourceStore.get(source.id);
-    if (pages.length === 0) { throw new Error('本章暂无可阅读的页面'); }
+    if (pages.length === 0) {
+      throw new Error('本章暂无可阅读的页面');
+    }
     return pages;
   }
-  async scrambleId(key: string): Promise<number> {
+
+  async scrambleId(key: string, signal: RequestAbortGroup | null = null): Promise<number> {
     const offline: number | null = await offlineStore.scramble(key);
-    if (offline !== null) { return offline; }
-    return sourceId(key) === 'jm' ? jmApi.scrambleId(nativeId(key)) : 0;
+    if (offline !== null) {
+      return offline;
+    }
+    const source: SourceEntry = await sourceStore.get(sourceId(key), false);
+    if (!capabilitiesFor(source.kind).pageRestore) {
+      return 0;
+    }
+    return strategyFor(source.kind).pageRestoreKey(new SourceRequestContext(source, key, signal));
   }
+
   imageUrl(key: string, filename: string, attempt: number = 0): string {
-    return sourceId(key) === 'jm' ? jmApi.imageUrl(nativeId(key), filename, attempt) : filename;
+    const source: SourceEntry | null = sourceStore.peek(sourceId(key));
+    return source === null ? filename : strategyFor(source.kind).imageUrl(new SourceRequestContext(source, key), filename, attempt);
   }
-  async fetchPage(key: string, page: string, attempt: number = 0): Promise<ArrayBuffer> {
+
+  async fetchPage(key: string, page: string, attempt: number = 0,
+    signal: RequestAbortGroup | null = null): Promise<ArrayBuffer> {
     const offline: ArrayBuffer | null = await offlineStore.bytes(key, page);
-    if (offline !== null) { return offline; }
+    if (offline !== null) {
+      return offline;
+    }
+    if (signal !== null) {
+      signal.throwIfAborted();
+    }
     const source: SourceEntry = await sourceStore.get(sourceId(key));
-    const bytes: ArrayBuffer = source.kind === 'jm' ? await jmApi.fetchBytes(this.imageUrl(key, page, attempt))
-      : (source.kind === 'eh' ? await ehSource.fetchPage(key, page, attempt)
-        : await this.fetchBytes(page));
+    const bytes: ArrayBuffer = await strategyFor(source.kind).fetchPage(
+      new SourceRequestContext(source, key, signal), page, attempt);
     await sourceStore.get(source.id);
     return bytes;
   }
-  async fetchBytes(url: string): Promise<ArrayBuffer> {
+
+  /** 封面字节按作品主键选择策略，不从 URL 猜测 Suwayomi 实例。 */
+  async fetchCover(key: string, url: string, signal: RequestAbortGroup | null = null): Promise<ArrayBuffer> {
     if (url.startsWith('file://')) {
-      const file: fs.File = fs.openSync(url, fs.OpenMode.READ_ONLY);
-      try {
-        const buffer: ArrayBuffer = new ArrayBuffer(fs.statSync(file.fd).size);
-        if (fs.readSync(file.fd, buffer) !== buffer.byteLength) { throw new Error('本地漫画页面读取不完整'); }
-        return buffer;
-      } finally { fs.closeSync(file); }
+      return readUriBytes(url);
     }
-    // E-Hentai 图片域（官方三域 + ehgt 缩略图 CDN）需带 Referer / 登录 Cookie，走专属客户端
-    const ehBytes: ArrayBuffer | null = await ehSource.fetchImageBytes(url);
-    if (ehBytes !== null) {
-      return ehBytes;
+    if (key === '') {
+      throw new Error('封面缺少图源标识');
     }
-    const source: SourceEntry | undefined = (await sourceStore.list()).find((s: SourceEntry) =>
-      s.kind === 'suwayomi' && url.startsWith(`${s.endpoint}/`));
-    return source === undefined ? jmApi.fetchBytes(url) : httpUtil.getBytes(url, await suwayomi.headers(source));
+    if (signal !== null) {
+      signal.throwIfAborted();
+    }
+    const source: SourceEntry = await sourceStore.get(sourceId(key), false);
+    return strategyFor(source.kind).fetchCover(new SourceRequestContext(source, key, signal), url);
   }
+
   albumCoverUrl(key: string, attempt: number = 0): string {
-    return sourceId(key) === 'jm' ? jmApi.albumCoverUrl(nativeId(key), attempt) : this.covers.get(key) ?? '';
+    return this.coverUrl(key, attempt, false);
   }
-  albumThumbUrl(key: string, attempt: number = 0): string { return this.albumCoverUrl(key, attempt); }
-  async latest(page: number = 1): Promise<Array<AlbumLite>> { return this.qualify(await jmApi.latest(page)); }
-  async random(): Promise<Array<AlbumLite>> { return this.qualify(await jmApi.random()); }
-  async ranking(category: string, order: string, page: number = 1): Promise<Array<AlbumLite>> {
-    return this.qualify(await jmApi.ranking(category, order, page));
+
+  albumThumbUrl(key: string, attempt: number = 0): string {
+    return this.coverUrl(key, attempt, true);
   }
-  async categories(): Promise<Array<CategoryItem>> { return jmApi.categories(); }
-  async comments(key: string, page: number = 1): Promise<CommentsResult> {
-    if (sourceId(key) === 'jm') {
-      return jmApi.comments(nativeId(key), page);
+
+  resolveDirectKey(source: SourceEntry, input: string): string {
+    const entry: SourceEntry | null = sourceStore.peek(source.id);
+    if (entry === null || !entry.enabled || !capabilitiesFor(entry.kind).idJump) {
+      throw new Error('该书源当前不支持编号直达');
     }
-    if (sourceId(key) === 'eh') {
-      return ehSource.comments(key, page);
+    return strategyFor(entry.kind).resolveDirectKey(entry, input);
+  }
+
+  searchExpression(source: SourceEntry, namespace: string, value: string): string {
+    const entry: SourceEntry | null = sourceStore.peek(source.id);
+    if (entry === null) {
+      throw new Error('书源尚未初始化或已移除');
     }
-    return new CommentsResult();
+    return strategyFor(entry.kind).searchExpression(namespace, value);
   }
-  async search(query: string, page: number = 1, order: string = 'mr', time: string = 'a', year: string = '', month: string = ''): Promise<SearchResult> {
-    const raw: SearchResult = await jmApi.search(query, page, order, time, year, month);
-    return new SearchResult(raw.total, this.qualify(raw.list));
+
+  private async visibleAlbums(list: Array<AlbumLite>): Promise<Array<AlbumLite>> {
+    const kept: Array<AlbumLite> = [];
+    for (const item of list) {
+      if (item.id.indexOf('~') < 1) {
+        kept.push(item);
+        continue;
+      }
+      const blocked: boolean = await blockTagsStore.isBlocked(
+        item.title, item.author, item.category, item.categorySub, sourceId(item.id));
+      if (!blocked) {
+        kept.push(item);
+      }
+    }
+    return kept;
   }
-  async testDomains(): Promise<Array<DomainSpeed>> { return jmApi.testDomains(); }
+
+  async latest(id: string, page: number = 1): Promise<Array<AlbumLite>> {
+    const source: SourceEntry = await sourceStore.get(id);
+    if (!capabilitiesFor(source.kind).latest) {
+      throw new Error('该图源不支持最新列表');
+    }
+    return this.visibleAlbums(await strategyFor(source.kind).latest(new SourceRequestContext(source), page));
+  }
+
+  async random(id: string): Promise<Array<AlbumLite>> {
+    const source: SourceEntry = await sourceStore.get(id);
+    if (!capabilitiesFor(source.kind).random) {
+      throw new Error('该图源不支持随机推荐');
+    }
+    return this.visibleAlbums(await strategyFor(source.kind).random(new SourceRequestContext(source)));
+  }
+
+  async ranking(id: string, category: string, order: string, page: number = 1): Promise<Array<AlbumLite>> {
+    const source: SourceEntry = await sourceStore.get(id);
+    if (!capabilitiesFor(source.kind).ranking) {
+      throw new Error('该图源不支持通用榜单');
+    }
+    return this.visibleAlbums(await strategyFor(source.kind).ranking(new SourceRequestContext(source), category, order, page));
+  }
+
+  async categories(id: string): Promise<Array<CategoryItem>> {
+    const source: SourceEntry = await sourceStore.get(id);
+    if (!capabilitiesFor(source.kind).categories) {
+      throw new Error('该图源不支持通用分类');
+    }
+    return strategyFor(source.kind).categories(new SourceRequestContext(source));
+  }
+
+  async comments(key: string, page: number = 1, signal: RequestAbortGroup | null = null): Promise<CommentsResult> {
+    if (signal !== null) {
+      signal.throwIfAborted();
+    }
+    const source: SourceEntry = await sourceStore.get(sourceId(key), false);
+    if (!capabilitiesFor(source.kind).comments) {
+      return new CommentsResult();
+    }
+    return strategyFor(source.kind).comments(new SourceRequestContext(source, key, signal), page);
+  }
+
+  async testDomains(id: string): Promise<Array<DomainSpeed>> {
+    const source: SourceEntry = await sourceStore.get(id);
+    if (!capabilitiesFor(source.kind).domainTest) {
+      throw new Error('该图源不支持节点测速');
+    }
+    return strategyFor(source.kind).testDomains(new SourceRequestContext(source));
+  }
+
+  private coverUrl(key: string, attempt: number, thumb: boolean): string {
+    const cached: string = this.covers.get(key) ?? '';
+    const source: SourceEntry | null = sourceStore.peek(sourceId(key));
+    if (source === null || !capabilitiesFor(source.kind).computedCover) {
+      return cached;
+    }
+    return strategyFor(source.kind).coverUrl(new SourceRequestContext(source, key), cached, attempt, thumb);
+  }
 }
+
 export const sourceApi: SourceApi = new SourceApi();

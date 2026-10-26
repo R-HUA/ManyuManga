@@ -6,10 +6,15 @@
 import { MangaRouteParams, ROUTE_ALBUM } from '../../common/Route';
 import { ehSource, EhListPage } from '../../data/EhSource';
 import { EhSettings } from '../../data/eh/EhSettings';
-import { GallerySite, NativeRequestGate } from '../../data/eh/EhNative';
+import { EhSearchFilter } from '../../data/eh/EhSearchFilter';
+import { EhFilterSheet } from './EhFilterSheet';
+import { GallerySite } from '../../data/eh/EhNative';
+import { RequestAbortGroup, isRequestCancelled } from '../../util/RequestAbort';
 import { AlbumLite, errorMessage } from '../../models/Models';
 import { IconCircleButton } from '../../common/Components';
 import { ComicCard } from '../../common/ComicCard';
+import { SearchSuggestField } from '../search/SearchSuggestField';
+import { searchHistoryStore, withoutBlockedAlbums } from '../../data/stores/FilterStores';
 import { BasicDataSource } from '../../common/DataSource';
 import {
   BG,
@@ -20,8 +25,7 @@ import {
   TEXT_MAIN,
   TEXT_SUB,
   DIVIDER,
-  BAR_LIGHT,
-  TAB_BAR_HEIGHT
+  BAR_LIGHT
 } from '../../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
@@ -59,18 +63,25 @@ export struct EhBrowsePage {
   @State error: string = '';
   @State siteLabel: string = 'E-HENTAI';
   @State containerWidth: number = 0;
+  @State filter: EhSearchFilter = new EhSearchFilter();
+  @State filterSheet: boolean = false;
   private ticket: number = 0;
-  private listGate: NativeRequestGate = new NativeRequestGate();
+  private listGate: RequestAbortGroup = new RequestAbortGroup();
   private gallerySource: BasicDataSource<AlbumLite> = new BasicDataSource<AlbumLite>();
 
   aboutToAppear(): void {
     this.siteLabel = EhSettings.site() === GallerySite.EX ? 'EXHENTAI' : 'E-HENTAI';
-    this.load('reset');
+    this.bootstrap();
+  }
+
+  private async bootstrap(): Promise<void> {
+    this.filter = await EhSearchFilter.load();
+    await this.load('reset');
   }
 
   aboutToDisappear(): void {
     this.ticket++;
-    this.listGate.cancel();
+    this.listGate.abortAll();
   }
 
   private baseUrl(): string {
@@ -78,12 +89,12 @@ export struct EhBrowsePage {
       return ehSource.popularUrl();
     }
     if (this.tab === 2) {
-      return ehSource.watchedUrl();
+      return this.filter.buildListUrl(ehSource.watchedUrl());
     }
     if (this.tab === 3) {
-      return ehSource.favoritesUrl();
+      return this.filter.buildListUrl(ehSource.favoritesUrl());
     }
-    return ehSource.homeUrl();
+    return this.filter.buildListUrl(ehSource.homeUrl());
   }
 
   /** 加载模式：reset 回到当前入口/搜索首页；more 沿 nextUrl 游标追加；first 回列表头。 */
@@ -91,17 +102,17 @@ export struct EhBrowsePage {
     if (mode === 'more' && (this.nextUrl === '' || this.loading)) {
       return;
     }
-    this.listGate.cancel();
-    this.listGate = new NativeRequestGate();
+    this.listGate.abortAll();
+    this.listGate = new RequestAbortGroup();
     const ticket: number = ++this.ticket;
     let url: string = '';
     if (mode === 'more') {
       url = this.nextUrl;
     } else if (mode === 'first') {
       url = this.firstUrl !== '' ? this.firstUrl
-        : (this.query.trim() !== '' ? ehSource.searchUrl(this.query.trim()) : this.baseUrl());
+        : (this.query.trim() !== '' ? this.filter.buildUrl(this.query.trim()) : this.baseUrl());
     } else {
-      url = this.query.trim() !== '' ? ehSource.searchUrl(this.query.trim()) : this.baseUrl();
+      url = this.query.trim() !== '' ? this.filter.buildUrl(this.query.trim()) : this.baseUrl();
     }
     this.loading = true;
     this.error = '';
@@ -110,7 +121,10 @@ export struct EhBrowsePage {
       if (ticket !== this.ticket) {
         return;
       }
-      const incoming: Array<AlbumLite> = page.items;
+      const incoming: Array<AlbumLite> = await withoutBlockedAlbums(page.items, 'eh');
+      if (ticket !== this.ticket) {
+        return;
+      }
       if (mode === 'more' && this.items.length > 0) {
         const fresh: Array<AlbumLite> = incoming.filter((a: AlbumLite): boolean =>
           !this.items.some((b: AlbumLite): boolean => b.id === a.id));
@@ -126,15 +140,16 @@ export struct EhBrowsePage {
       this.totalLabel = page.totalLabel;
       this.siteLabel = EhSettings.site() === GallerySite.EX ? 'EXHENTAI' : 'E-HENTAI';
     } catch (e) {
-      if (ticket === this.ticket) {
-        this.error = errorMessage(e as Error);
-        if (mode !== 'more') {
-          this.items = [];
-          this.gallerySource.setList([]);
-          this.nextUrl = '';
-          this.prevUrl = '';
-          this.firstUrl = '';
-        }
+      if (isRequestCancelled(e as Error) || ticket !== this.ticket) {
+        return;
+      }
+      this.error = errorMessage(e as Error);
+      if (mode !== 'more') {
+        this.items = [];
+        this.gallerySource.setList([]);
+        this.nextUrl = '';
+        this.prevUrl = '';
+        this.firstUrl = '';
       }
     } finally {
       if (ticket === this.ticket) {
@@ -237,7 +252,8 @@ export struct EhBrowsePage {
           .fontColor(TEXT_SUB)
       }
       .width('100%')
-      .padding({ top: 48, bottom: 48 })
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
     } else if (this.error !== '' && this.items.length === 0) {
       Column({ space: 12 }) {
         Text(this.error)
@@ -257,7 +273,8 @@ export struct EhBrowsePage {
           })
       }
       .width('100%')
-      .padding({ top: 48, bottom: 48 })
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
     } else if (this.items.length === 0) {
       Column() {
         Text(this.tab === 2 ? '关注订阅为空：登录后在我的标签页添加关注标签' :
@@ -268,7 +285,8 @@ export struct EhBrowsePage {
           .padding({ left: 24, right: 24 })
       }
       .width('100%')
-      .padding({ top: 48, bottom: 48 })
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
     } else {
       WaterFlow() {
         LazyForEach(this.gallerySource, (item: AlbumLite) => {
@@ -289,6 +307,20 @@ export struct EhBrowsePage {
         this.load('more');
       })
     }
+  }
+
+  @Builder
+  private FilterSheetPanel() {
+    EhFilterSheet({
+      filter: this.filter,
+      apply: (next: EhSearchFilter): void => {
+        this.filter = next;
+        this.load('reset');
+      },
+      close: (): void => {
+        this.filterSheet = false;
+      }
+    })
   }
 
   build() {
@@ -318,6 +350,14 @@ export struct EhBrowsePage {
           .layoutWeight(1)
 
           IconCircleButton({
+            symbol: $r('sys.symbol.slider_horizontal_2'),
+            active: this.filter.hasActiveFilter(),
+            onTap: (): void => {
+              this.filterSheet = true;
+            }
+          })
+
+          IconCircleButton({
             symbol: $r('sys.symbol.magnifyingglass'),
             active: this.searchMode,
             onTap: (): void => {
@@ -336,17 +376,19 @@ export struct EhBrowsePage {
         .border({ width: { bottom: 0.5 }, color: DIVIDER })
 
         if (this.searchMode) {
-          Search({ value: this.query, placeholder: '搜索画廊，支持 artist:xxx / language:chinese 语法…' })
-            .width('100%')
-            .height(40)
-            .backgroundColor(CARD)
-            .margin({ left: 16, right: 16, top: 8 })
-            .onChange((val: string) => {
+          SearchSuggestField({
+            text: this.$query,
+            sourceId: 'eh',
+            placeholder: '搜索画廊，支持 artist:xxx / language:chinese 语法…',
+            onSubmit: (val: string): void => {
               this.query = val;
-            })
-            .onSubmit(() => {
+              if (val.trim() !== '') {
+                searchHistoryStore.record(val.trim()).catch((): void => {});
+              }
               this.load('reset');
-            })
+            }
+          })
+            .margin({ left: 16, right: 16, top: 8 })
         }
 
         // 入口页签
@@ -406,8 +448,13 @@ export struct EhBrowsePage {
       }
       .width('100%')
       .height('100%')
-      .padding({ bottom: TAB_BAR_HEIGHT + this.bottomInset })
+      .padding({ bottom: this.bottomInset })
       .backgroundColor(BG)
+      .bindSheet($$this.filterSheet, this.FilterSheetPanel(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        backgroundColor: CARD
+      })
     }
     .hideTitleBar(true)
   }

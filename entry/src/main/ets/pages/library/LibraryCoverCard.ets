@@ -18,7 +18,7 @@ export struct LibraryCoverCard {
   build() {
     Column({ space: 6 }) {
       Stack({ alignContent: Alignment.TopStart }) {
-        SourceCover({ url: this.work.cover, radius: 12 })
+        SourceCover({ url: this.work.cover, sourceKey: this.work.activeKey, radius: 12 })
 
         // Top-left & Top-right overlay row
         Row() {

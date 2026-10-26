@@ -1,7 +1,8 @@
-import { uiMaterial } from '@kit.ArkUI';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
+import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
 import { IconCircleButton, EmptyView } from '../common/Components';
 import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
@@ -25,6 +26,17 @@ export struct ChapterPreviewPage {
   @State loading: boolean = true;
   @State error: string = '';
   @State gridWidthVp: number = 360;
+  private loadToken: number = 0;
+  private loadSignal: RequestAbortGroup = new RequestAbortGroup();
+
+  aboutToDisappear(): void {
+    this.cancelLoad();
+  }
+
+  private cancelLoad(): void {
+    this.loadToken++;
+    this.loadSignal.abortAll();
+  }
 
   /** 按设备宽度计算列数：最小 3 列，宽屏自动扩展 */
   private columnsCount(): number {
@@ -65,17 +77,27 @@ export struct ChapterPreviewPage {
   }
 
   private async load(): Promise<void> {
+    this.loadSignal.abortAll();
+    const signal: RequestAbortGroup = new RequestAbortGroup();
+    this.loadSignal = signal;
+    const token: number = ++this.loadToken;
+    const chapterId: string = this.chapterId;
     this.loading = true;
     this.error = '';
     try {
-      const pages: Array<string> = await sourceApi.chapterImages(this.chapterId);
-      this.scrambleId = await sourceApi.scrambleId(this.chapterId);
+      const pages: Array<string> = await sourceApi.chapterImages(chapterId, signal);
+      if (token !== this.loadToken || signal.aborted()) { return; }
+      const scrambleId: number = await sourceApi.scrambleId(chapterId, signal);
+      if (token !== this.loadToken || signal.aborted()) { return; }
+      this.scrambleId = scrambleId;
       this.allPages = pages;
       this.currentPageIndex = 0;
     } catch (e) {
-      this.error = errorMessage(e as Error);
+      if (token === this.loadToken && !signal.aborted() && !isRequestCancelled(e as Error)) {
+        this.error = errorMessage(e as Error);
+      }
     } finally {
-      this.loading = false;
+      if (token === this.loadToken && !signal.aborted()) { this.loading = false; }
     }
   }
 
@@ -230,9 +252,7 @@ export struct ChapterPreviewPage {
                 .borderRadius(19)
                 .height(38)
                 .layoutWeight(1)
-                .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-                  style: uiMaterial.ImmersiveStyle.REGULAR
-                }))
+                .menuSystemMaterial(IMMERSIVE_REGULAR_MATERIAL)
                 .onSelect((index: number) => {
                   this.currentPageIndex = index;
                 })
@@ -262,6 +282,10 @@ export struct ChapterPreviewPage {
       .backgroundColor(BG)
     }
     .hideTitleBar(true)
+    .onHidden((): void => { this.cancelLoad(); })
+    .onShown((): void => {
+      if (this.loading && this.loadSignal.aborted()) { this.load(); }
+    })
     .onReady((ctx: NavDestinationContext) => {
       const rec: Record<string, Object> | null = asRecord(ctx.pathInfo.param as Object);
       if (rec !== null) {

@@ -1,4 +1,6 @@
 import { sourceStore, SourceEntry } from '../data/Sources';
+import { capabilitiesFor } from '../data/source/SourceContracts';
+import { presentationFor } from '../data/source/SourceCatalog';
 import { MangaRouteParams, ROUTE_ALBUM } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
 import { library } from '../data/Library';
@@ -20,6 +22,8 @@ import {
   DIVIDER
 } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
+import { SearchSuggestField } from './search/SearchSuggestField';
+import { searchHistoryStore } from '../data/stores/FilterStores';
 
 class SearchGroup {
   source: SourceEntry = new SourceEntry();
@@ -64,6 +68,9 @@ export struct SearchAllPage {
   private async search(): Promise<void> {
     const ticket: number = ++this.ticket;
     const query: string = this.query.trim();
+    if (query !== '') {
+      searchHistoryStore.record(query).catch((): void => {});
+    }
     try {
       const sources: Array<SourceEntry> = (await sourceStore.list()).filter((s: SourceEntry) =>
         s.enabled && (this.onlySource === '' || s.id === this.onlySource));
@@ -108,7 +115,7 @@ export struct SearchAllPage {
         ? result.list
         : group.items.concat(result.list.filter((a: AlbumLite) => !group.items.some((b: AlbumLite) => a.id === b.id)));
       group.page = page;
-      group.more = group.source.kind !== 'local' && result.list.length > 0 &&
+      group.more = capabilitiesFor(group.source.kind).searchPaging && result.list.length > 0 &&
         (result.hasNext !== null ? result.hasNext : result.total === 0 || group.items.length < result.total);
     } catch (e) {
       if (ticket === this.ticket) {
@@ -234,28 +241,26 @@ export struct SearchAllPage {
 
         // Search Bar
         Row({ space: 8 }) {
-          Search({
-            value: this.query,
-            placeholder: this.matchAid === '' ? '输入书名、作者或标签…' : '查找同一作品的其他图源…'
+          SearchSuggestField({
+            text: this.$query,
+            sourceId: this.onlySource,
+            placeholder: this.matchAid === '' ? '输入书名、作者或标签…' : '查找同一作品的其他图源…',
+            onEdit: (_text: string): void => {
+              this.ticket++;
+            },
+            onSubmit: (text: string): void => {
+              this.query = text;
+              this.search();
+            }
           })
             .layoutWeight(1)
-            .height(40)
-            .backgroundColor(CARD)
-            .onChange((text: string) => {
-              this.query = text;
-              this.ticket++;
-            })
-            .onSubmit(() => {
-              this.search();
-            })
 
-          Text('检索')
+          Button('检索', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
             .fontSize(13)
             .fontWeight(FontWeight.Bold)
             .fontColor(Color.White)
-            .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-            .borderRadius(18)
             .backgroundColor(PRIMARY)
+            .height(40)
             .onClick(() => {
               this.search();
             })
@@ -288,14 +293,13 @@ export struct SearchAllPage {
             ForEach(this.visibleGroups(), (group: SearchGroup) => {
               Column({ space: 12 }) {
                 Row({ space: 8 }) {
-                  Text(group.source.kind === 'jm' ? 'JM' : (group.source.kind === 'eh' ? 'EH'
-                    : (group.source.kind === 'local' ? '本地' : '扩展')))
+                  Text(presentationFor(group.source.kind).shortLabel)
                     .fontSize(10)
                     .fontWeight(FontWeight.Bold)
-                    .fontColor(group.source.kind === 'jm' ? ACCENT : PRIMARY)
+                    .fontColor(presentationFor(group.source.kind).useAccent ? ACCENT : PRIMARY)
                     .padding({ left: 7, right: 7, top: 3, bottom: 3 })
                     .borderRadius(8)
-                    .backgroundColor(group.source.kind === 'jm' ? ACCENT_SOFT : PRIMARY_SOFT)
+                    .backgroundColor(presentationFor(group.source.kind).useAccent ? ACCENT_SOFT : PRIMARY_SOFT)
 
                   Text(group.source.name)
                     .fontSize(16)
@@ -352,7 +356,7 @@ export struct SearchAllPage {
                   Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
                     ForEach(group.items, (item: AlbumLite) => {
                       Column({ space: 6 }) {
-                        SourceCover({ url: item.coverUrl, radius: 10 })
+                        SourceCover({ url: item.coverUrl, sourceKey: item.id, radius: 10 })
                         Text(item.title)
                           .fontSize(12)
                           .fontWeight(FontWeight.Medium)

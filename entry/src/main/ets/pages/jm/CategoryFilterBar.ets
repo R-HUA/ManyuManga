@@ -1,5 +1,5 @@
 import { formatCount } from '../../common/ComicBadge';
-import { uiMaterial } from '@kit.ArkUI';
+import { IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../../common/ImmersiveMaterials';
 import { BAR_LIGHT, CARD, CHIP_BG, CHIP_R, FONT_CAPTION, PRIMARY, SPACE_L, SPACE_S, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { TagChip } from '../../common/Components';
 import { ROUTE_SEARCH } from '../../common/Route';
@@ -124,9 +124,7 @@ export struct CategoryFilterBar {
           .height(32)
           .backgroundColor(CHIP_BG)
           .borderRadius(16)
-          .menuSystemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR
-          }))
+          .menuSystemMaterial(IMMERSIVE_REGULAR_MATERIAL)
           .onSelect((index: number) => {
             const codes: Array<string> = ['mr', 'mv_t', 'mv_w', 'mv_m', 'mv'];
             this.selectOrder(codes[index] ?? 'mr');
@@ -147,8 +145,7 @@ export struct CategoryFilterBar {
     .bindSheet($$this.catDrawerVisible, this.CategoryDrawer(), {
       height: '70%',
       dragBar: true,
-      backgroundColor: CARD,
-      systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK })
+      systemMaterial: IMMERSIVE_SHEET_MATERIAL
     })
     .onAreaChange((_oldArea: Area, newArea: Area) => {
       const h: number = Number(newArea.height);

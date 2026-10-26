@@ -1,6 +1,8 @@
 import { Prefs, PrefKeys } from '../../util/Prefs';
-import { Album, AlbumLite, Chapter, asArray, asRecord, asString } from '../../models/Models';
-import { parseJsonArray } from './StoreSupport';
+import { Album, AlbumLite, asArray, asRecord, asString } from '../../models/Models';
+import { parseJsonArray, StoreQueue } from './StoreSupport';
+import { albumFromJson, albumToJson } from '../db/RowCodec';
+import { assertDatabaseGeneration } from '../db/AppDatabase';
 const ALBUM_CACHE_LIMIT: number = 100;
 export class HomeCacheData {
   random: Array<AlbumLite> = [];
@@ -9,13 +11,17 @@ export class HomeCacheData {
 }
 
 export class AlbumCacheStore {
+  private queue: StoreQueue = new StoreQueue();
   private loaded: boolean = false;
   private loading: Promise<void> | null = null;
   private items: Array<Album> = [];
 
   private ensureLoaded(): Promise<void> {
     if (this.loading === null) {
-      this.loading = this.doLoad();
+      this.loading = this.doLoad().catch((error: Error): void => {
+        this.loading = null;
+        throw error;
+      });
     }
     return this.loading;
   }
@@ -35,80 +41,58 @@ export class AlbumCacheStore {
     this.loaded = true;
   }
 
-  private parseAlbum(it: Object): Album | null {
-    const rec: Record<string, Object> | null = asRecord(it);
-    if (rec === null) {
+  private parseAlbum(item: Object): Album | null {
+    try {
+      return albumFromJson(JSON.stringify(item));
+    } catch (error) {
+      // 详情缓存损坏时按未命中处理，后续由网络重新获取。
       return null;
     }
-    const a: Album = new Album(asString(rec['id']), asString(rec['name']));
-    a.coverUrl = asString(rec['coverUrl']);
-    a.description = asString(rec['description']);
-    a.language = asString(rec['language']);
-    a.originalUrl = asString(rec['originalUrl']);
-    a.likes = asString(rec['likes']);
-    a.views = asString(rec['views']);
-    const authors: Array<Object> | null = asArray(rec['author']);
-    if (authors !== null) {
-      for (const x of authors) {
-        const v: string = asString(x);
-        if (v !== '') {
-          a.author.push(v);
-        }
-      }
-    }
-    const tags: Array<Object> | null = asArray(rec['tags']);
-    if (tags !== null) {
-      for (const x of tags) {
-        const v: string = asString(x);
-        if (v !== '') {
-          a.tags.push(v);
-        }
-      }
-    }
-    const eps: Array<Object> | null = asArray(rec['episodes']);
-    if (eps !== null) {
-      for (const x of eps) {
-        const e: Record<string, Object> | null = asRecord(x);
-        if (e !== null) {
-          const chapter: Chapter = new Chapter(asString(e['id']), asString(e['title']), asString(e['sort']));
-          chapter.number = asString(e['number']);
-          a.episodes.push(chapter);
-        }
-      }
-    }
-    return a;
+  }
+
+  async list(): Promise<Array<Album>> {
+    await this.queue.wait();
+    await this.ensureLoaded();
+    return this.items.map((album: Album): Album => albumFromJson(albumToJson(album)));
   }
 
   async get(albumId: string): Promise<Album | null> {
+    await this.queue.wait();
     await this.ensureLoaded();
     for (const it of this.items) {
       if (it.id === albumId) {
-        return it;
+        return albumFromJson(albumToJson(it));
       }
     }
     return null;
   }
 
-  async put(album: Album): Promise<void> {
-    await this.ensureLoaded();
-    this.items = this.items.filter((it: Album) => it.id !== album.id);
-    this.items.unshift(album);
-    while (this.items.length > ALBUM_CACHE_LIMIT) {
-      this.items.pop();
-    }
-    const prefs: Prefs = await Prefs.getInstance();
-    await prefs.putString(PrefKeys.ALBUM_CACHE, JSON.stringify(this.items));
+  put(album: Album): Promise<void> {
+    const snapshot: Album = albumFromJson(albumToJson(album));
+    return this.queue.run(async (generation: number): Promise<void> => {
+      await this.ensureLoaded();
+      const items: Array<Album> = [snapshot].concat(this.items.filter((item: Album): boolean => item.id !== snapshot.id))
+        .slice(0, ALBUM_CACHE_LIMIT);
+      const prefs: Prefs = await Prefs.getInstance();
+      assertDatabaseGeneration(generation);
+      await prefs.putString(PrefKeys.ALBUM_CACHE, JSON.stringify(items));
+      this.items = items;
+    });
   }
 }
 
 export class PagesCacheStore {
+  private queue: StoreQueue = new StoreQueue();
   private loaded: boolean = false;
   private loading: Promise<void> | null = null;
   private items: Array<ListEntry> = [];
 
   private ensureLoaded(): Promise<void> {
     if (this.loading === null) {
-      this.loading = this.doLoad();
+      this.loading = this.doLoad().catch((error: Error): void => {
+        this.loading = null;
+        throw error;
+      });
     }
     return this.loading;
   }
@@ -143,6 +127,7 @@ export class PagesCacheStore {
   }
 
   async get(photoId: string): Promise<Array<string> | null> {
+    await this.queue.wait();
     await this.ensureLoaded();
     for (const it of this.items) {
       if (it.key === photoId) {
@@ -152,18 +137,19 @@ export class PagesCacheStore {
     return null;
   }
 
-  async put(photoId: string, list: Array<string>): Promise<void> {
-    await this.ensureLoaded();
+  put(photoId: string, list: Array<string>): Promise<void> {
     const entry: ListEntry = new ListEntry();
     entry.key = photoId;
     entry.list = list.slice();
-    this.items = this.items.filter((it: ListEntry) => it.key !== photoId);
-    this.items.unshift(entry);
-    while (this.items.length > 200) {
-      this.items.pop();
-    }
-    const prefs: Prefs = await Prefs.getInstance();
-    await prefs.putString(PrefKeys.PAGES_CACHE, JSON.stringify(this.items));
+    return this.queue.run(async (generation: number): Promise<void> => {
+      await this.ensureLoaded();
+      const items: Array<ListEntry> = [entry].concat(this.items.filter((item: ListEntry): boolean => item.key !== photoId))
+        .slice(0, 200);
+      const prefs: Prefs = await Prefs.getInstance();
+      assertDatabaseGeneration(generation);
+      await prefs.putString(PrefKeys.PAGES_CACHE, JSON.stringify(items));
+      this.items = items;
+    });
   }
 }
 

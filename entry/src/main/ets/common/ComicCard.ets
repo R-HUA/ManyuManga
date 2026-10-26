@@ -1,7 +1,8 @@
 import { TEXT_MAIN, TEXT_SUB, DIVIDER, CHIP_BG, COVER_R, COVER_ASPECT_RATIO } from './Theme';
 import { SourceCover } from './SourceCover';
 import { sourceApi } from '../data/SourceApi';
-import { ehSource } from '../data/EhSource';
+import { sourceId } from '../data/Sources';
+import { capabilitiesForSourceId } from '../data/source/SourceContracts';
 @Component
 export struct ComicCard {
   @Prop @Watch('onCoverUrl') coverUrl: string = '';
@@ -19,13 +20,20 @@ export struct ComicCard {
     this.coverRetry = 0;
   }
 
-  /** EH 封面要带 Referer / Cookie，走 SourceCover。其余图源保留 Image，失败时换禁漫镜像。 */
-  private ehCover(): boolean {
-    return ehSource.isEhImageUrl(this.coverUrl);
+  /** 需要图源身份的封面走 SourceCover。其余图源保留 Image，失败时换镜像。 */
+  private signedCover(): boolean {
+    if (this.aid === '') {
+      return false;
+    }
+    try {
+      return capabilitiesForSourceId(sourceId(this.aid)).signedCover;
+    } catch (e) {
+      return false;
+    }
   }
 
   private coverSrc(): string {
-    if (this.coverRetry > 0 && this.aid !== '' && !this.ehCover()) {
+    if (this.coverRetry > 0 && this.aid !== '' && !this.signedCover()) {
       return sourceApi.albumThumbUrl(this.aid, this.coverRetry);
     }
     return this.coverUrl;
@@ -71,8 +79,8 @@ export struct ComicCard {
       Stack({ alignContent: Alignment.TopEnd }) {
         if (this.loading) {
           this.CoverSkeleton()
-        } else if (this.ehCover()) {
-          SourceCover({ url: this.coverUrl, radius: COVER_R })
+        } else if (this.signedCover()) {
+          SourceCover({ url: this.coverUrl, sourceKey: this.aid, radius: COVER_R })
           if (this.badge !== '') {
             this.Badge()
           }

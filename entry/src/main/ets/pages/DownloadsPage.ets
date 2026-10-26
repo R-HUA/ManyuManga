@@ -1,22 +1,38 @@
 import { saveDownload } from './downloads/DownloadFileExporter';
+import { DownloadedPane } from './downloads/DownloadedPane';
 import { BasicDataSource } from '../common/DataSource';
 import { DownloadTaskCard } from './downloads/DownloadTaskCard';
 import { DownloadSummary } from './downloads/DownloadSummary';
 import { PRIMARY, PRIMARY_SOFT, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK } from '../common/Theme';
 import { EmptyView, IconCircleButton } from '../common/Components';
-import { Album, errorMessage } from '../models/Models';
+import { errorMessage } from '../models/Models';
 import { downloadManager, DownloadTask } from '../data/DownloadManager';
-import { albumCacheStore } from '../data/Stores';
-import { sourceApi as jmApi } from '../data/SourceApi';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
-/** 页下载并发展示值 */
-const DL_PAGE_CONCURRENCY: number = 3;
-
 /* ===== 任务列表懒加载数据源 ===== */
 
 class TaskDataSource extends BasicDataSource<DownloadTask> {
-  reload(items: Array<DownloadTask>): void { this.setList(items); }
+  private rows: Array<DownloadTask> = [];
+  private watchers: Array<DataChangeListener> = [];
+  totalCount(): number { return this.rows.length; }
+  getData(index: number): DownloadTask { return this.rows[index]; }
+  registerDataChangeListener(listener: DataChangeListener): void {
+    if (!this.watchers.includes(listener)) { this.watchers.push(listener); }
+  }
+  unregisterDataChangeListener(listener: DataChangeListener): void {
+    this.watchers = this.watchers.filter((item: DataChangeListener): boolean => item !== listener);
+  }
+  reload(items: Array<DownloadTask>): void {
+    this.rows = items.slice();
+    for (const listener of this.watchers) { listener.onDataReloaded(); }
+  }
+  replace(task: DownloadTask): boolean {
+    const index: number = this.rows.findIndex((item: DownloadTask): boolean => item.id === task.id);
+    if (index < 0) { return false; }
+    this.rows[index] = task;
+    for (const listener of this.watchers) { listener.onDataChange(index); }
+    return true;
+  }
 }
 
 @Component
@@ -33,6 +49,7 @@ export struct DownloadsPage {
 
   /* ===== 数据与选择态 ===== */
   @State tasks: Array<DownloadTask> = [];
+  @State section: string = 'offline';
   @State selectMode: boolean = false;
   @State selectedIds: Array<number> = [];
   @State pendingDeleteIds: Array<number> = [];
@@ -40,8 +57,10 @@ export struct DownloadsPage {
 
   private initialized: boolean = false;
   private taskDS: TaskDataSource = new TaskDataSource();
-  private changeListener: (task: DownloadTask) => void = (): void => {
-    this.refreshTasks();
+  private changeListener: (task: DownloadTask) => void = (task: DownloadTask): void => {
+    const present: boolean = downloadManager.tasks.some((item: DownloadTask): boolean => item.id === task.id);
+    if (!present || !this.taskDS.replace(task)) { this.refreshTasks(); return; }
+    this.tasks = this.tasks.map((item: DownloadTask): DownloadTask => item.id === task.id ? task : item);
   };
 
   aboutToAppear(): void {
@@ -136,16 +155,11 @@ export struct DownloadsPage {
     }
   }
 
-  /** 失败重试：无 retry(id) 契约，用 removeTask + album（缓存优先，网络兜底）+ enqueue 组合 */
+  /** 使用同一任务续传，保留已完成页面。 */
   private async onRetry(t: DownloadTask): Promise<void> {
     try {
       this.showToast('正在重新入队…');
-      let album: Album | null = await albumCacheStore.get(t.albumId);
-      if (album === null) {
-        album = await jmApi.album(t.albumId);
-      }
-      await downloadManager.removeTask(t.id, false);
-      await downloadManager.enqueue(album);
+      await downloadManager.retry(t.id);
       this.showToast('已重新加入下载队列');
     } catch (e) {
       this.showToast(`重试失败：${errorMessage(e as Error)}`);
@@ -160,7 +174,6 @@ export struct DownloadsPage {
 
     /** 保存到用户所选位置：DocumentViewPicker 保存选择器 + 分块拷贝到所选 URI */
   private async onSaveTo(t: DownloadTask): Promise<void> {
-    if (t.savedTo === '') { this.showToast('文件路径为空，无法保存'); return; }
     try {
       if (await saveDownload(t)) { this.showToast('已保存到所选位置'); }
     } catch (e) { this.showToast(`保存失败：${errorMessage(e as Error)}`); }
@@ -230,7 +243,7 @@ export struct DownloadsPage {
         .fontWeight(FontWeight.Bold)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
-      if (this.tasks.length > 0) {
+      if (this.section === 'tasks' && this.tasks.length > 0) {
         Text(this.selectMode ? '完成' : '批量管理')
           .fontSize(12)
           .fontWeight(FontWeight.Bold)
@@ -258,8 +271,13 @@ export struct DownloadsPage {
       Stack() {
         Column() {
           this.TopBar()
+          this.SectionBar()
 
-          if (this.loading) {
+          if (this.section === 'offline') {
+            DownloadedPane()
+              .layoutWeight(1)
+              .width('100%')
+          } else if (this.loading) {
             this.SkeletonList()
           } else if (this.loadError !== '') {
             Column() {
@@ -276,7 +294,7 @@ export struct DownloadsPage {
             .justifyContent(FlexAlign.Center)
           } else if (this.tasks.length === 0) {
             Column() {
-              EmptyView({ message: '还没有离线下载任务，在漫画详情页点击「全本离线缓存」即可生成标准 CBZ 归档', showRetry: false })
+              EmptyView({ message: '还没有下载任务', showRetry: false })
             }
             .width('100%')
             .layoutWeight(1)
@@ -293,7 +311,7 @@ export struct DownloadsPage {
                 ListItem() {
                   this.TaskRow(item)
                 }
-              }, (item: DownloadTask) => `task_${item.id}_${item.state}_${item.done}_${this.isSelected(item.id)}`)
+              }, (item: DownloadTask) => `task_${item.id}`)
             }
             .width('100%')
             .layoutWeight(1)
@@ -319,6 +337,26 @@ export struct DownloadsPage {
     }
     .hideTitleBar(true)
     .backgroundColor(BG)
+  }
+
+  @Builder
+  private SectionBar() {
+    Row({ space: 8 }) {
+      Button('已下载', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+        .fontSize(13)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.section === 'offline' ? Color.White : PRIMARY)
+        .backgroundColor(this.section === 'offline' ? PRIMARY : PRIMARY_SOFT)
+        .onClick(() => { this.section = 'offline'; })
+      Button('下载任务', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+        .fontSize(13)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.section === 'tasks' ? Color.White : PRIMARY)
+        .backgroundColor(this.section === 'tasks' ? PRIMARY : PRIMARY_SOFT)
+        .onClick(() => { this.section = 'tasks'; })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 4, bottom: 4 })
   }
 
   /** 首载骨架（脉冲呼吸占位行） */
@@ -479,7 +517,7 @@ export struct DownloadsPage {
               .onChange((value: boolean) => {
                 this.deleteFileToo = value;
               })
-            Text('同时删除已导出的离线漫画包（不可恢复）')
+            Text('同时删除应用内 CBZ 文件')
               .fontSize(12)
               .fontColor(TEXT_MAIN)
               .layoutWeight(1)

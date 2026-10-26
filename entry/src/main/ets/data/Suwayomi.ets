@@ -1,8 +1,10 @@
 import http from '@ohos.net.http';
 import util from '@ohos.util';
-import { SourceEntry, SourceAuth, sourceKey, readSourceSecret, saveSourceSecret } from './Sources';
+import { SourceEntry, SourceAuth, SourceInstance, sourceKey, sourceStore, readSourceSecret, saveSourceSecret } from './Sources';
 import { Album, AlbumLite, Chapter, SearchResult, asRecord, asArray, asString, asNumber } from '../models/Models';
 import { utf8Encode } from './JmApi';
+import { isRequestCancelled, RequestAbortGroup, RequestCancelled } from '../util/RequestAbort';
+import { assertDatabaseGeneration, databaseGeneration } from './db/AppDatabase';
 
 function record(value: Object | undefined): Record<string, Object> {
   const result: Record<string, Object> | null = asRecord(value);
@@ -43,8 +45,15 @@ export class SuwayomiClient {
     }
     return headers;
   }
-  async query(source: SourceEntry, query: string, variables: Record<string, Object>, authorization?: string): Promise<Record<string, Object>> {
+  async query(source: SourceEntry, query: string, variables: Record<string, Object>,
+    authorization?: string, signal: RequestAbortGroup | null = null): Promise<Record<string, Object>> {
+    if (signal !== null) {
+      signal.throwIfAborted();
+    }
     const request: http.HttpRequest = http.createHttp();
+    if (signal !== null) {
+      signal.track(request);
+    }
     try {
       const headers: Record<string, string> = authorization === undefined ? await this.headers(source) : { 'Content-Type': 'application/json', 'Authorization': authorization };
       const response: http.HttpResponse = await request.request(`${source.endpoint}/api/graphql`, {
@@ -56,6 +65,9 @@ export class SuwayomiClient {
         readTimeout: 20000,
         usingCache: false
       });
+      if (signal !== null && signal.aborted()) {
+        throw new RequestCancelled();
+      }
       if (response.responseCode === 401 || response.responseCode === 403) {
         throw new Error('书源登录失效，请在书源设置中重新登录');
       }
@@ -68,20 +80,36 @@ export class SuwayomiClient {
         throw new Error(asString(record(errors[0])['message'], '书源请求失败'));
       }
       return record(body['data']);
+    } catch (e) {
+      if (signal !== null && (signal.aborted() || isRequestCancelled(e as Error))) {
+        throw new RequestCancelled();
+      }
+      throw e as Error;
     } finally {
+      if (signal !== null) {
+        signal.untrack(request);
+      }
       request.destroy();
     }
   }
   async connect(endpoint: string, name: string, auth: SourceAuth, user: string, password: string,
-    instance: string = `s${Date.now()}`): Promise<Array<SourceEntry>> {
+    _instance: string = '', replace: boolean = false): Promise<Array<SourceEntry>> {
+    const expected: number = databaseGeneration();
     const base: string = endpoint.trim().replace(/\/+$/, '');
     if (!/^https?:\/\/[^\s/]+/.test(base)) {
       throw new Error('请输入完整的服务地址');
     }
+    const current: SourceInstance | null = await sourceStore.connection();
+    if (current !== null && current.endpoint !== base && !replace) {
+      throw new Error('更换服务地址前请确认替换连接');
+    }
+    const instance: string = current !== null && current.endpoint === base ? current.id : `s${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
     const server: SourceEntry = new SourceEntry(instance, name, 'suwayomi');
     server.endpoint = base;
     let authorization: string = '';
-    if (auth === 'basic') {
+    if (auth !== 'none' && current !== null && current.endpoint === base && current.auth === auth && user === '' && password === '') {
+      authorization = await readSourceSecret(instance);
+    } else if (auth === 'basic') {
       const token: string = new util.Base64Helper().encodeToStringSync(utf8Encode(`${user}:${password}`));
       authorization = `Basic ${token}`;
     } else if (auth === 'login') {
@@ -96,10 +124,16 @@ export class SuwayomiClient {
     }
     const data: Record<string, Object> = await this.query(server,
       'query { sources { nodes { id name lang displayName } } }', {}, authorization);
+    assertDatabaseGeneration(expected);
     if (auth !== 'none') { await saveSourceSecret(instance, authorization); }
-    return array(record(data['sources'])['nodes']).map((value: Object): SourceEntry => {
+    const seen: Set<string> = new Set();
+    const entries: Array<SourceEntry> = array(record(data['sources'])['nodes']).map((value: Object): SourceEntry => {
       const node: Record<string, Object> = record(value);
       const id: string = asString(node['id']);
+      if (id === '' || seen.has(id)) {
+        throw new Error('服务端扩展标识为空或重复');
+      }
+      seen.add(id);
       const entry: SourceEntry = new SourceEntry(`${instance}_${id}`,
         `${name} · ${asString(node['displayName'], asString(node['name']))}`, 'suwayomi');
       entry.instanceId = instance;
@@ -109,6 +143,14 @@ export class SuwayomiClient {
       entry.auth = auth;
       return entry;
     });
+    const connection: SourceInstance = new SourceInstance();
+    connection.id = instance;
+    connection.endpoint = base;
+    connection.auth = auth;
+    connection.name = name;
+    assertDatabaseGeneration(expected);
+    await sourceStore.syncSuwayomi(connection, entries, replace);
+    return entries;
   }
   async search(source: SourceEntry, query: string, page: number): Promise<SearchResult> {
     const data: Record<string, Object> = await this.query(source,
@@ -124,10 +166,10 @@ export class SuwayomiClient {
     result.hasNext = payload['hasNextPage'] === true;
     return result;
   }
-  async album(source: SourceEntry, id: string): Promise<Album> {
+  async album(source: SourceEntry, id: string, signal: RequestAbortGroup | null = null): Promise<Album> {
     const data: Record<string, Object> = await this.query(source,
       'mutation Details($input: FetchMangaAndChaptersInput!) { fetchMangaAndChapters(input: $input) { manga { id title author artist genre description thumbnailUrl url } chapters { id name chapterNumber sourceOrder } } }',
-      variables({ id: Number(id), fetchManga: true, fetchChapters: true } as DetailInput));
+      variables({ id: Number(id), fetchManga: true, fetchChapters: true } as DetailInput), undefined, signal);
     const payload: Record<string, Object> = record(data['fetchMangaAndChapters']);
     const node: Record<string, Object> = record(payload['manga']);
     const album: Album = new Album(sourceKey(source.id, id), asString(node['title']));
@@ -146,10 +188,10 @@ export class SuwayomiClient {
     }).sort((a: Chapter, b: Chapter) => Number(a.number) - Number(b.number) || Number(b.sort) - Number(a.sort));
     return album;
   }
-  async pages(source: SourceEntry, chapter: string): Promise<Array<string>> {
+  async pages(source: SourceEntry, chapter: string, signal: RequestAbortGroup | null = null): Promise<Array<string>> {
     const data: Record<string, Object> = await this.query(source,
       'mutation Pages($input: FetchChapterPagesInput!) { fetchChapterPages(input: $input) { pages } }',
-      variables({ chapterId: Number(chapter) } as PagesInput));
+      variables({ chapterId: Number(chapter) } as PagesInput), undefined, signal);
     const pages: Array<string> = array(record(data['fetchChapterPages'])['pages']).map((v: Object) => absolute(source, asString(v)));
     if (pages.length === 0) {
       throw new Error('本章暂无可阅读的页面');

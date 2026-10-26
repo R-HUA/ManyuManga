@@ -1,6 +1,7 @@
 import image from '@ohos.multimedia.image';
 import { cropPageWhitespace } from '../../data/ImageDecode';
-import { loadPagePixelMap, releasePagePixelMap } from '../../data/ImageDecode';
+import { isPixelMapValid, loadPagePixelMap, releasePagePixelMap } from '../../data/ImageDecode';
+import { isRequestCancelled, RequestAbortGroup } from '../../util/RequestAbort';
 const PLACEHOLDER_BG: string = '#16161A';
 const FAILED_BG: string = '#201619';
 const SCRAMBLE_DEFAULT: number = 220980;
@@ -12,6 +13,7 @@ export struct PageThumbItem {
   @Prop @Watch('onSrcChanged') scrambleId: number = SCRAMBLE_DEFAULT;
   @State pixelMap: image.PixelMap | undefined = undefined;
   private token: number = 0;
+  private signal: RequestAbortGroup = new RequestAbortGroup();
 
   aboutToAppear(): void {
     this.doLoad();
@@ -19,6 +21,7 @@ export struct PageThumbItem {
 
   aboutToDisappear(): void {
     this.token++;
+    this.signal.abortAll();
     this.releaseMap();
   }
 
@@ -39,9 +42,12 @@ export struct PageThumbItem {
       return;
     }
     const t: number = ++this.token;
+    this.signal.abortAll();
+    this.signal = new RequestAbortGroup();
+    const signal: RequestAbortGroup = this.signal;
     this.releaseMap();
     try {
-      const pm: image.PixelMap | null = await loadPagePixelMap(this.photoId, this.filename, this.scrambleId, 240);
+      const pm: image.PixelMap | null = await loadPagePixelMap(this.photoId, this.filename, this.scrambleId, 240, signal);
       if (t !== this.token) {
         if (pm !== null) {
           releasePagePixelMap(pm);
@@ -50,6 +56,9 @@ export struct PageThumbItem {
       }
       this.pixelMap = pm === null ? undefined : pm;
     } catch (e) {
+      if (isRequestCancelled(e as Error)) {
+        return;
+      }
       // 缩略图失败保持占位底色
     }
   }
@@ -91,6 +100,7 @@ export struct ReaderImageItem {
   @State failed: boolean = false;
   @State aspect: number = 0.7;
   private loadToken: number = 0;
+  private signal: RequestAbortGroup = new RequestAbortGroup();
 
   aboutToAppear(): void {
     this.doLoad();
@@ -98,6 +108,7 @@ export struct ReaderImageItem {
 
   aboutToDisappear(): void {
     this.loadToken++;
+    this.signal.abortAll();
     this.releaseMap();
   }
 
@@ -120,12 +131,15 @@ export struct ReaderImageItem {
       return;
     }
     const token: number = ++this.loadToken;
+    this.signal.abortAll();
+    this.signal = new RequestAbortGroup();
+    const signal: RequestAbortGroup = this.signal;
     this.loading = true;
     this.failed = false;
     this.releaseMap();
     try {
       let map: image.PixelMap | null = await loadPagePixelMap(
-        this.photoId, this.filename, this.scrambleId, this.targetWidth);
+        this.photoId, this.filename, this.scrambleId, this.targetWidth, signal);
       if (token !== this.loadToken) {
         if (map !== null) {
           releasePagePixelMap(map);
@@ -144,8 +158,12 @@ export struct ReaderImageItem {
         finally { releasePagePixelMap(original); }
         if (token !== this.loadToken) { await map.release(); return; }
       }
-      const info: image.ImageInfo | undefined = map.getImageInfoSync();
-      if (info === undefined || info.size === undefined || info.size.height <= 0) {
+      if (!isPixelMapValid(map)) {
+        releasePagePixelMap(map);
+        throw new Error('图像尺寸无效，请重试');
+      }
+      const info: image.ImageInfo = map.getImageInfoSync();
+      if (info.size === undefined || info.size.height <= 0) {
         releasePagePixelMap(map);
         throw new Error('图像尺寸无效，请重试');
       }
@@ -154,6 +172,9 @@ export struct ReaderImageItem {
       this.pixelMap = map;
       this.loading = false;
     } catch (e) {
+      if (isRequestCancelled(e as Error)) {
+        return;
+      }
       if (token === this.loadToken) {
         this.loading = false;
         this.failed = true;

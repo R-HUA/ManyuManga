@@ -1,7 +1,23 @@
-import { Prefs, PrefKeys } from '../../util/Prefs';
-import { asString } from '../../models/Models';
-import { parseJsonArray } from './StoreSupport';
-const SEARCH_HISTORY_LIMIT: number = 50;
+import {
+  BlockRuleRow,
+  loadBlockRules,
+  loadCustomCategories,
+  loadSearchHistory,
+  loadSearchHistoryPage,
+  addBlockRule,
+  setBlockRuleEnabled,
+  removeBlockRule,
+  addCustomCategory,
+  removeCustomCategory,
+  recordSearchHistory,
+  importSearchHistory,
+  removeSearchHistory,
+  clearSearchHistory
+} from '../db/CatalogDao';
+import { AlbumLite } from '../../models/Models';
+import { sourceId } from '../Sources';
+import { StoreQueue } from './StoreSupport';
+import { assertDatabaseGeneration, databaseGeneration } from '../db/AppDatabase';
 const BLOCK_TAGS_VERSION_KEY: string = 'blockTagsVersion';
 function bumpBlockTagsVersion(): void {
   AppStorage.setOrCreate(BLOCK_TAGS_VERSION_KEY, Date.now());
@@ -22,98 +38,73 @@ function codePointCount(s: string): number {
   return n;
 }
 export class SearchHistoryStore {
-  private items: Array<string> = [];
-  private loaded: boolean = false;
-  private loading: Promise<void> | null = null;
+  private queue: StoreQueue = new StoreQueue();
 
-  private ensureLoaded(): Promise<void> {
-    if (this.loading === null) {
-      this.loading = this.doLoad();
-    }
-    return this.loading;
-  }
-
-  private async doLoad(): Promise<void> {
-    if (this.loaded) {
-      return;
-    }
-    const prefs: Prefs = await Prefs.getInstance();
-    const arr: Array<Object> = parseJsonArray(await prefs.getString(PrefKeys.SEARCH_HISTORY, '[]'));
-    for (const it of arr) {
-      const v: string = asString(it);
-      if (v !== '') {
-        this.items.push(v);
-      }
-    }
-    this.loaded = true;
-  }
-
-  /** 搜索历史（最近在前） */
   async getList(): Promise<Array<string>> {
-    await this.ensureLoaded();
-    return this.items.slice();
+    await this.queue.wait();
+    return loadSearchHistory();
   }
 
-  /** 记录：trim、去重置顶、上限 50（SearchHistoryStore.kt:34-41） */
-  async record(query: string): Promise<void> {
-    await this.ensureLoaded();
-    const q: string = query.trim();
-    if (q === '') {
-      return;
-    }
-    this.items = this.items.filter((it: string) => it !== q);
-    this.items.unshift(q);
-    while (this.items.length > SEARCH_HISTORY_LIMIT) {
-      this.items.pop();
-    }
-    await this.persist();
+  async getPage(offset: number, limit: number): Promise<Array<string>> {
+    await this.queue.wait();
+    return loadSearchHistoryPage(offset, limit);
   }
 
-  async removeAll(queries: Array<string>): Promise<void> {
-    await this.ensureLoaded();
-    this.items = this.items.filter((it: string) => queries.indexOf(it) < 0);
-    await this.persist();
+  record(query: string): Promise<void> {
+    const value: string = query.trim();
+    if (value === '') { return Promise.resolve(); }
+    return this.queue.run(async (): Promise<void> => { await recordSearchHistory(value); });
   }
 
-  async clear(): Promise<void> {
-    await this.ensureLoaded();
-    this.items = [];
-    await this.persist();
+  removeAll(queries: Array<string>): Promise<void> {
+    const snapshot: Array<string> = queries.slice();
+    return this.queue.run(async (): Promise<void> => { await removeSearchHistory(snapshot); });
   }
 
-  /** 导入合并（去重，后写的在前）（SearchHistoryStore.kt:54-65） */
-  async importAll(newQueries: Array<string>): Promise<void> {
-    await this.ensureLoaded();
-    let changed: boolean = false;
-    for (let i: number = newQueries.length - 1; i >= 0; i--) {
-      const v: string = newQueries[i].trim();
-      if (v !== '' && this.items.indexOf(v) < 0) {
-        this.items.unshift(v);
-        changed = true;
-      }
-    }
-    while (this.items.length > SEARCH_HISTORY_LIMIT) {
-      this.items.pop();
-    }
-    if (changed) {
-      await this.persist();
-    }
+  clear(): Promise<void> {
+    return this.queue.run(async (): Promise<void> => { await clearSearchHistory(); });
   }
 
-  private async persist(): Promise<void> {
-    const prefs: Prefs = await Prefs.getInstance();
-    await prefs.putString(PrefKeys.SEARCH_HISTORY, JSON.stringify(this.items));
+  invalidate(): void {}
+
+  importAll(queries: Array<string>): Promise<void> {
+    const snapshot: Array<string> = queries.slice();
+    return this.queue.run(async (): Promise<void> => { await importSearchHistory(snapshot); });
   }
 }
 
+export class BlockRule {
+  id: number = 0;
+  kind: string = 'keyword';
+  value: string = '';
+  enabled: number = 1;
+  sourceId: string = '';
+  updatedAt: number = 0;
+}
+
+/**
+ * kind 映射：keyword 为关键词；tag、exact、exact_tag 为精确标签。
+ * 其他旧值仍按关键词，避免已有行失效。
+ */
+export function canonicalBlockKind(kind: string): string {
+  if (kind === 'tag' || kind === 'exact' || kind === 'exact_tag') {
+    return 'tag';
+  }
+  return 'keyword';
+}
+
 export class BlockTagsStore {
-  private items: Array<string> = [];
+  private queue: StoreQueue = new StoreQueue();
+  private rules: Array<BlockRule> = [];
   private loaded: boolean = false;
   private loading: Promise<void> | null = null;
 
   private ensureLoaded(): Promise<void> {
     if (this.loading === null) {
-      this.loading = this.doLoad();
+      this.loading = this.doLoad().catch((error: Error): void => {
+        this.loading = null;
+        throw error;
+      });
     }
     return this.loading;
   }
@@ -122,135 +113,192 @@ export class BlockTagsStore {
     if (this.loaded) {
       return;
     }
-    const prefs: Prefs = await Prefs.getInstance();
-    const arr: Array<Object> = parseJsonArray(await prefs.getString(PrefKeys.BLOCK_TAGS, '[]'));
-    for (const it of arr) {
-      const v: string = asString(it).trim();
-      if (v !== '' && this.items.indexOf(v) < 0) {
-        this.items.push(v);
-      }
+    const generation: number = databaseGeneration();
+    const rows: Array<BlockRuleRow> = await loadBlockRules();
+    assertDatabaseGeneration(generation);
+    const next: Array<BlockRule> = [];
+    for (const row of rows) {
+      next.push(ruleFromRow(row));
     }
+    this.rules = next;
     this.loaded = true;
   }
 
-  async getList(): Promise<Array<string>> {
+  async rulesFor(sourceId: string): Promise<Array<BlockRule>> {
+    await this.queue.wait();
     await this.ensureLoaded();
-    return this.items.slice();
-  }
-
-  /** 添加：trim + 去重（BlockTagsStore.kt:46-58 等价） */
-  async add(tag: string): Promise<void> {
-    await this.ensureLoaded();
-    const t: string = tag.trim();
-    if (t === '' || this.items.indexOf(t) >= 0) {
-      return;
+    const items: Array<BlockRule> = [];
+    for (const rule of this.rules) {
+      if (rule.sourceId === sourceId) {
+        items.push(copyRule(rule));
+      }
     }
-    this.items.push(t);
-    await this.persist();
-    bumpBlockTagsVersion();
+    return items;
   }
 
-  async remove(tag: string): Promise<void> {
-    await this.ensureLoaded();
-    this.items = this.items.filter((t: string) => t !== tag);
-    await this.persist();
-    bumpBlockTagsVersion();
+  addRule(sourceId: string, kind: string, value: string): Promise<void> {
+    const text: string = value.trim();
+    if (text === '') { return Promise.resolve(); }
+    return this.queue.run(async (): Promise<void> => {
+      const row: BlockRuleRow = new BlockRuleRow();
+      row.kind = canonicalBlockKind(kind);
+      row.value = text;
+      row.sourceId = sourceId;
+      row.updatedAt = Date.now();
+      const inserted: BlockRuleRow = await addBlockRule(row);
+      if (this.loaded && !this.rules.some((rule: BlockRule): boolean => rule.id === inserted.id)) {
+        this.rules.push(ruleFromRow(inserted));
+      }
+      bumpBlockTagsVersion();
+    });
   }
 
-  async clear(): Promise<void> {
-    await this.ensureLoaded();
-    this.items = [];
-    await this.persist();
-    bumpBlockTagsVersion();
+  setEnabled(id: number, enabled: boolean): Promise<void> {
+    return this.queue.run(async (): Promise<void> => {
+      const updatedAt: number = Date.now();
+      await setBlockRuleEnabled(id, enabled, updatedAt);
+      if (this.loaded) {
+        this.rules = this.rules.map((rule: BlockRule): BlockRule => {
+          const next: BlockRule = copyRule(rule);
+          if (next.id === id) { next.enabled = enabled ? 1 : 0; next.updatedAt = updatedAt; }
+          return next;
+        });
+      }
+      bumpBlockTagsVersion();
+    });
   }
 
-  /**
-   * 命中判定：拼接 title + author + category + categorySub 小写后包含任一屏蔽词
-   * （BlockTagsStore.kt:59-74；原实现还会比对 TagStore 真实 tags，词云已裁剪故不移植）
-   */
-  async isBlocked(title: string, author: string, category: string, categorySub: string): Promise<boolean> {
+  removeRule(id: number): Promise<void> {
+    return this.queue.run(async (): Promise<void> => {
+      await removeBlockRule(id);
+      if (this.loaded) { this.rules = this.rules.filter((rule: BlockRule): boolean => rule.id !== id); }
+      bumpBlockTagsVersion();
+    });
+  }
+
+  async isBlocked(title: string, author: string, category: string, categorySub: string,
+    itemSource: string = ''): Promise<boolean> {
+    await this.queue.wait();
     await this.ensureLoaded();
-    if (this.items.length === 0) {
-      return false;
-    }
-    const joined: string = `${title}${author}${category}${categorySub}`.toLowerCase();
-    for (const t of this.items) {
-      if (joined.indexOf(t.toLowerCase()) >= 0) {
+    for (const rule of this.rules) {
+      if (rule.enabled !== 1) {
+        continue;
+      }
+      if (rule.sourceId !== '' && rule.sourceId !== itemSource) {
+        continue;
+      }
+      if (ruleHits(rule, title, author, category, categorySub)) {
         return true;
       }
     }
     return false;
   }
 
-  private async persist(): Promise<void> {
-    const prefs: Prefs = await Prefs.getInstance();
-    await prefs.putString(PrefKeys.BLOCK_TAGS, JSON.stringify(this.items));
+  invalidate(): void {
+    this.loading = null;
+    this.loaded = false;
+    this.rules = [];
   }
+
+}
+
+function ruleFromRow(row: BlockRuleRow): BlockRule {
+  const rule: BlockRule = new BlockRule();
+  rule.id = row.id;
+  rule.kind = canonicalBlockKind(row.kind);
+  rule.value = row.value;
+  rule.enabled = row.enabled === 1 ? 1 : 0;
+  rule.sourceId = row.sourceId;
+  rule.updatedAt = row.updatedAt;
+  return rule;
+}
+
+function copyRule(rule: BlockRule): BlockRule {
+  const next: BlockRule = new BlockRule();
+  next.id = rule.id;
+  next.kind = rule.kind;
+  next.value = rule.value;
+  next.enabled = rule.enabled;
+  next.sourceId = rule.sourceId;
+  next.updatedAt = rule.updatedAt;
+  return next;
+}
+
+function ruleHits(rule: BlockRule, title: string, author: string, category: string, categorySub: string): boolean {
+  if (rule.kind === 'tag') {
+    return exactTagHit(rule.value, title, author, category, categorySub);
+  }
+  const needle: string = rule.value.trim().toLowerCase();
+  if (needle === '') {
+    return false;
+  }
+  const joined: string = `${title}${author}${category}${categorySub}`.toLowerCase();
+  return joined.indexOf(needle) >= 0;
+}
+
+function exactTagHit(stored: string, title: string, author: string, category: string, categorySub: string): boolean {
+  const text: string = stored.trim();
+  if (text === '') {
+    return false;
+  }
+  const fields: Array<string> = [title, author, category, categorySub];
+  for (const field of fields) {
+    if (sameText(field, text)) {
+      return true;
+    }
+  }
+  const cut: number = text.indexOf(':');
+  if (cut <= 0 || cut >= text.length - 1) {
+    return false;
+  }
+  const namespace: string = text.substring(0, cut).trim();
+  const name: string = text.substring(cut + 1).trim();
+  return sameText(category, namespace) && (sameText(categorySub, name) || sameText(title, name));
+}
+
+function sameText(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 export class CustomCatStore {
-  private items: Array<string> = [];
-  private loaded: boolean = false;
-  private loading: Promise<void> | null = null;
-
-  private ensureLoaded(): Promise<void> {
-    if (this.loading === null) {
-      this.loading = this.doLoad();
-    }
-    return this.loading;
-  }
-
-  private async doLoad(): Promise<void> {
-    if (this.loaded) {
-      return;
-    }
-    const prefs: Prefs = await Prefs.getInstance();
-    const arr: Array<Object> = parseJsonArray(await prefs.getString(PrefKeys.CUSTOM_CATS, '[]'));
-    for (const it of arr) {
-      const v: string = asString(it);
-      if (v !== '') {
-        this.items.push(v);
-      }
-    }
-    this.loaded = true;
-  }
+  private queue: StoreQueue = new StoreQueue();
 
   async getList(): Promise<Array<string>> {
-    await this.ensureLoaded();
-    return this.items.slice();
+    await this.queue.wait();
+    return loadCustomCategories();
   }
 
-  /** 添加（≤16 个 Unicode 码点，查重）；返回错误信息或 '' 表示成功（Stores.kt:188-198） */
-  async add(raw: string): Promise<string> {
-    await this.ensureLoaded();
-    const t: string = raw.trim();
-    if (t === '') {
-      return '不能为空';
-    }
-    const cp: number = codePointCount(t);
-    if (cp > 16) {
-      return `最多 16 个字符（当前 ${cp}）`;
-    }
-    if (this.items.indexOf(t) >= 0) {
-      return '已存在';
-    }
-    this.items.push(t);
-    await this.persist();
-    return '';
+  add(raw: string): Promise<string> {
+    const name: string = raw.trim();
+    if (name === '') { return Promise.resolve('不能为空'); }
+    const count: number = codePointCount(name);
+    if (count > 16) { return Promise.resolve(`最多 16 个字符（当前 ${count}）`); }
+    return this.queue.run(async (): Promise<string> => {
+      return await addCustomCategory(name) ? '' : '已存在';
+    });
   }
 
-  async remove(t: string): Promise<void> {
-    await this.ensureLoaded();
-    this.items = this.items.filter((it: string) => it !== t);
-    await this.persist();
+  remove(name: string): Promise<void> {
+    return this.queue.run(async (): Promise<void> => { await removeCustomCategory(name); });
   }
 
-  private async persist(): Promise<void> {
-    const prefs: Prefs = await Prefs.getInstance();
-    await prefs.putString(PrefKeys.CUSTOM_CATS, JSON.stringify(this.items));
-  }
+  invalidate(): void {}
 }
 
 export const searchHistoryStore: SearchHistoryStore = new SearchHistoryStore();
 export const blockTagsStore: BlockTagsStore = new BlockTagsStore();
 export const customCatStore: CustomCatStore = new CustomCatStore();
+
+/** 列表过滤只调用 isBlocked，不另写一套命中规则。 */
+export async function withoutBlockedAlbums(list: Array<AlbumLite>, fallbackSource: string): Promise<Array<AlbumLite>> {
+  const kept: Array<AlbumLite> = [];
+  for (const item of list) {
+    const owner: string = item.id.indexOf('~') > 0 ? sourceId(item.id) : fallbackSource;
+    const blocked: boolean = await blockTagsStore.isBlocked(
+      item.title, item.author, item.category, item.categorySub, owner);
+    if (!blocked) {
+      kept.push(item);
+    }
+  }
+  return kept;
+}

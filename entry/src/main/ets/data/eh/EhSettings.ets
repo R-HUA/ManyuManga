@@ -5,11 +5,11 @@
 import common from '@ohos.app.ability.common';
 import webview from '@ohos.web.webview';
 import util from '@ohos.util';
-import { Prefs } from '../../util/Prefs';
+import { relationalStore } from '@kit.ArkData';
+import { dbQuery, dbTransaction, txExecute } from '../db/AppDatabase';
+import { cellString, readRows } from '../db/RowCodec';
 import { saveSourceSecret, readSourceSecret, clearSourceSecret } from '../Sources';
 import { NativeEhClient, EhTagTranslator, GallerySite } from './EhNative';
-
-const PREF_SITE: string = 'eh_site_mode';
 
 export class EhSettings {
   private static siteMode: string = GallerySite.E;
@@ -21,8 +21,13 @@ export class EhSettings {
    * 1.3MB 词库解码与全量解析延迟到首帧之后再做，避免卡启动。
    */
   static async init(context: common.Context): Promise<void> {
-    const prefs: Prefs = await Prefs.getInstance();
-    EhSettings.siteMode = await prefs.getString(PREF_SITE, GallerySite.E);
+    const rows: relationalStore.ResultSet = await dbQuery(
+      'SELECT value FROM source_setting WHERE source_id = ? AND key = ?', ['eh', 'site']);
+    let savedSite: string = GallerySite.E;
+    await readRows(rows, (row: relationalStore.ResultSet): void => {
+      savedSite = cellString(row, 'value');
+    });
+    EhSettings.applyRestoredSite(savedSite);
     try {
       EhSettings.cookieHeader = await readSourceSecret('eh');
       NativeEhClient.configureCookieHeader(EhSettings.cookieHeader);
@@ -70,9 +75,18 @@ export class EhSettings {
   }
 
   static async setSite(mode: string): Promise<void> {
+    const selected: string = mode === GallerySite.EX ? GallerySite.EX : GallerySite.E;
+    await dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
+      await txExecute(tx,
+        'INSERT INTO source_setting (source_id, key, value) VALUES (?, ?, ?) ON CONFLICT(source_id, key) DO UPDATE SET value = excluded.value',
+        ['eh', 'site', selected]);
+    });
+    EhSettings.applyRestoredSite(selected);
+  }
+
+  /** 恢复事务提交后同步内存，不产生额外持久化操作。 */
+  static applyRestoredSite(mode: string): void {
     EhSettings.siteMode = mode === GallerySite.EX ? GallerySite.EX : GallerySite.E;
-    const prefs: Prefs = await Prefs.getInstance();
-    await prefs.putString(PREF_SITE, EhSettings.siteMode);
   }
 
   /** 已导入的 Cookie 头（k1=v1; k2=v2 形式，可能为空）。 */

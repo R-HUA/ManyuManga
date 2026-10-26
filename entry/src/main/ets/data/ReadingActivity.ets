@@ -1,4 +1,5 @@
-import { Prefs } from '../util/Prefs';
+import { ActivityRow, loadStats, recordActivity } from './db/ReadingDao';
+import { StoreQueue } from './stores/StoreSupport';
 
 export class ActivityStats {
   milliseconds: number = 0;
@@ -6,21 +7,21 @@ export class ActivityStats {
   books: Array<string> = [];
 }
 class ReadingActivity {
-  private queue: Promise<void> = Promise.resolve();
+  private queue: StoreQueue = new StoreQueue();
   async stats(): Promise<ActivityStats> {
-    return JSON.parse(await (await Prefs.getInstance()).getString('activity_v1', JSON.stringify(new ActivityStats()))) as ActivityStats;
+    await this.queue.wait();
+    const row: ActivityRow = await loadStats();
+    const stats: ActivityStats = new ActivityStats();
+    stats.milliseconds = row.milliseconds;
+    stats.pages = row.pages;
+    stats.books = row.books;
+    return stats;
   }
   record(book: string, page: string, elapsed: number): Promise<void> {
-    const next: Promise<void> = this.queue.then(async (): Promise<void> => {
-      const stats: ActivityStats = await this.stats();
-      stats.milliseconds += elapsed;
-      if (!stats.pages.includes(page)) { stats.pages.push(page); }
-      if (!stats.books.includes(book)) { stats.books.push(book); }
-      await (await Prefs.getInstance()).putString('activity_v1', JSON.stringify(stats));
+    return this.queue.run(async (): Promise<void> => {
+      await recordActivity(book, page, elapsed);
       AppStorage.setOrCreate('activityVersion', Date.now());
     });
-    this.queue = next.catch((): void => {});
-    return next;
   }
 }
 export const readingActivity: ReadingActivity = new ReadingActivity();

@@ -1,15 +1,18 @@
 import image from '@ohos.multimedia.image';
 import { sourceApi } from '../data/SourceApi';
+import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { SUB_CARD, TEXT_SUB, DIVIDER } from './Theme';
 
 @Component
 export struct SourceCover {
   @Prop @Watch('reload') url: string = '';
+  @Prop @Watch('reload') sourceKey: string = '';
   @Prop deriveColor: boolean = false;
   @Prop radius: number = 12;
   onColor: (color: string) => void = (): void => {};
   @State bitmap: image.PixelMap | null = null;
   private generation: number = 0;
+  private signal: RequestAbortGroup = new RequestAbortGroup();
 
   aboutToAppear(): void {
     this.reload();
@@ -17,6 +20,7 @@ export struct SourceCover {
 
   aboutToDisappear(): void {
     this.generation++;
+    this.signal.abortAll();
     if (this.bitmap !== null) {
       this.bitmap.release();
       this.bitmap = null;
@@ -25,6 +29,9 @@ export struct SourceCover {
 
   private async reload(): Promise<void> {
     const ticket: number = ++this.generation;
+    this.signal.abortAll();
+    this.signal = new RequestAbortGroup();
+    const signal: RequestAbortGroup = this.signal;
     const previous: image.PixelMap | null = this.bitmap;
     this.bitmap = null;
     if (previous !== null) {
@@ -35,7 +42,7 @@ export struct SourceCover {
     }
     let pending: image.PixelMap | null = null;
     try {
-      const bytes: ArrayBuffer = await sourceApi.fetchBytes(this.url);
+      const bytes: ArrayBuffer = await sourceApi.fetchCover(this.sourceKey, this.url, signal);
       const source: image.ImageSource = image.createImageSource(bytes);
       let bitmap: image.PixelMap;
       try {
@@ -72,6 +79,9 @@ export struct SourceCover {
       this.bitmap = bitmap;
       pending = null;
     } catch (_e) {
+      if (isRequestCancelled(_e as Error)) {
+        return;
+      }
       if (ticket === this.generation) {
         this.bitmap = null;
       }

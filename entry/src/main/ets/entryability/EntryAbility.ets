@@ -3,8 +3,9 @@ import { window } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import fs from '@ohos.file.fs';
-import { jmApi } from '../data/JmApi';
-import { EhSettings } from '../data/eh/EhSettings';
+import { sourceApi } from '../data/SourceApi';
+import { openDatabase } from '../data/db/AppDatabase';
+import { setAppContext } from '../util/Prefs';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
@@ -55,11 +56,12 @@ export default class EntryAbility extends UIAbility {
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     this.observerId = errorManager.on('error', this.errorObserver);
-    // P0 修复（评审 Step1）：启动即注入全局 Context（Prefs.getAppContext 依赖），
-    // 并后台刷新域名池——jmApi.init(context) 内部调用 setAppContext(context)
     AppStorage.setOrCreate(IS_DARK_MODE_KEY,
       this.context.config?.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
-    jmApi.init(this.context).then((): Promise<void> => EhSettings.init(this.context)).catch((e: Error) => {
+    setAppContext(this.context);
+    openDatabase(this.context).catch((e: Error) => {
+      hilog.error(DOMAIN, TAG, 'database init: %{public}s', errorMessageText(e));
+    }).then((): Promise<void> => sourceApi.init(this.context)).catch((e: Error) => {
       hilog.error(DOMAIN, TAG, 'source init: %{public}s', errorMessageText(e));
     });
   }

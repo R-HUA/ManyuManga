@@ -5,7 +5,9 @@ import fs from '@ohos.file.fs';
 import { md5Hex } from './JmApi';
 import { sourceApi } from './SourceApi';
 import { sourceId, nativeId } from './Sources';
+import { capabilitiesForSourceId } from './source/SourceContracts';
 import { Prefs, getAppContext } from '../util/Prefs';
+import { isRequestCancelled, RequestAbortGroup, RequestCancelled } from '../util/RequestAbort';
 export { releasePagePixelMap, isPixelMapValid } from './PageCachePool';
 const SCRAMBLE_268850: number = 268850;
 const SCRAMBLE_421926: number = 421926;
@@ -82,10 +84,13 @@ function mappableFormat(fmt: image.PixelMapFormat): image.PixelMapFormat | null 
  * 重排成功时原图已 release，调用方只需持有返回值。
  */
 export async function descramble(src: image.PixelMap, segments: number): Promise<image.PixelMap> {
-  if (segments <= 0) {
+  if (segments <= 0 || !isPixelMapValid(src)) {
     return src;
   }
   const info: image.ImageInfo = src.getImageInfoSync();
+  if (info.size === undefined) {
+    return src;
+  }
   const w: number = info.size.width;
   const h: number = info.size.height;
   if (w <= 0 || h <= 0 || h < segments) {
@@ -156,7 +161,10 @@ export async function descrambleFromBytes(buf: ArrayBuffer, photoId: string,
   if (pm === null) {
     return null;
   }
-  return sourceId(photoId) === 'jm' ? descramble(pm, computeSegments(scrambleId, nativeId(photoId), filename)) : pm;
+  if (!capabilitiesForSourceId(sourceId(photoId)).pageRestore) {
+    return pm;
+  }
+  return descramble(pm, computeSegments(scrambleId, nativeId(photoId), filename));
 }
 
 /**
@@ -188,18 +196,22 @@ function snapWidthTier(w: number): number {
 }
 
 export async function loadPagePixelMap(photoId: string, filename: string,
-  scrambleId: number, targetWidth: number): Promise<image.PixelMap | null> {
+  scrambleId: number, targetWidth: number, signal: RequestAbortGroup | null = null): Promise<image.PixelMap | null> {
   targetWidth = snapWidthTier(targetWidth);
   const key: string = memoryKey(photoId, filename, scrambleId, targetWidth);
-  // 内存缓存快路径（信号量外，PageLoader.kt:64）
   const fast: image.PixelMap | null = await takeFromMemory(key);
   if (fast !== null) {
     return fast;
   }
+  if (signal !== null) {
+    signal.throwIfAborted();
+  }
   const sem: DecodeSemaphore = await semFor();
   await sem.acquire();
   try {
-    // 二次确认（PageLoader.kt:66）：等信号量期间其它加载可能已把同键结果放入内存缓存
+    if (signal !== null) {
+      signal.throwIfAborted();
+    }
     const again: image.PixelMap | null = await takeFromMemory(key);
     if (again !== null) {
       return again;
@@ -215,15 +227,26 @@ export async function loadPagePixelMap(photoId: string, filename: string,
         }
       }
     }
-    const bytes: ArrayBuffer | null = await fetchPageBytes(photoId, filename);
+    const bytes: ArrayBuffer | null = await fetchPageBytes(photoId, filename, signal);
     if (bytes === null) {
       return null;
+    }
+    if (signal !== null) {
+      signal.throwIfAborted();
     }
     let pm: image.PixelMap | null = await descrambleFromBytes(bytes, photoId, filename, scrambleId);
     if (pm === null) {
       return null;
     }
+    if (!isPixelMapValid(pm)) {
+      await pm.release();
+      return null;
+    }
     const info: image.ImageInfo = pm.getImageInfoSync();
+    if (info.size === undefined) {
+      await pm.release();
+      return null;
+    }
     const w: number = info.size.width;
     if (targetWidth >= 1 && targetWidth < w && w > 0) {
       const ratio: number = targetWidth / w;
@@ -244,7 +267,6 @@ export async function loadPagePixelMap(photoId: string, filename: string,
         }
       }
     }
-    // 结果发布入内存 LRU 并借出（零拷贝共享；调用方用 releasePagePixelMap 归还）
     const published: image.PixelMap | null = publishIntoMemory(key, pm);
     return published !== null ? published : pm;
   } finally {
@@ -292,10 +314,10 @@ export function cachedRawFilePath(photoId: string, filename: string): string | n
 /**
  * 原图字节来源：页缓存 → 网络（换域名重试 3 次）；成功且 autoCache 开启时写缓存并 trim。
  */
-export async function fetchPageBytes(photoId: string, filename: string): Promise<ArrayBuffer | null> {
+export async function fetchPageBytes(photoId: string, filename: string,
+  signal: RequestAbortGroup | null = null): Promise<ArrayBuffer | null> {
   const cacheFile: string | null = pageCacheFile(photoId, filename);
   if (cacheFile === null) {
-    // photoId/filename 未过白名单（服务端可控）：整页按失败处理，不落盘（Review H-4）
     return null;
   }
   if (fileExists(cacheFile)) {
@@ -305,10 +327,16 @@ export async function fetchPageBytes(photoId: string, filename: string): Promise
       // 缓存损坏则走网络
     }
   }
+  if (signal !== null) {
+    signal.throwIfAborted();
+  }
   let lastError: Error = new Error('页面下载失败');
   for (let attempt: number = 0; attempt <= 2; attempt++) {
+    if (signal !== null && signal.aborted()) {
+      throw new RequestCancelled();
+    }
     try {
-      const bytes: ArrayBuffer = await sourceApi.fetchPage(photoId, filename, attempt);
+      const bytes: ArrayBuffer = await sourceApi.fetchPage(photoId, filename, attempt, signal);
       if (bytes.byteLength > 0) {
         const prefs: Prefs = await Prefs.getInstance();
         if (await prefs.autoCache()) {
@@ -323,6 +351,9 @@ export async function fetchPageBytes(photoId: string, filename: string): Promise
         return bytes;
       }
     } catch (e) {
+      if (isRequestCancelled(e as Error)) {
+        throw e as Error;
+      }
       lastError = e as Error;
       if (/登录|认证|401|403/.test(lastError.message)) { throw lastError; }
     }
@@ -332,7 +363,13 @@ export async function fetchPageBytes(photoId: string, filename: string): Promise
 
 /** 白边裁剪使用独立位图，避免改变由多个页面共享的缓存。 */
 export async function cropPageWhitespace(original: image.PixelMap): Promise<image.PixelMap> {
+  if (!isPixelMapValid(original)) {
+    throw new Error('图像尺寸无效');
+  }
   const info: image.ImageInfo = original.getImageInfoSync();
+  if (info.size === undefined) {
+    throw new Error('图像尺寸无效');
+  }
   const width: number = info.size.width;
   const height: number = info.size.height;
   const buffer: ArrayBuffer = new ArrayBuffer(width * height * 4);
