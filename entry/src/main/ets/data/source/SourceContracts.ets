@@ -1,7 +1,21 @@
-import { Album, AlbumLite, CategoryItem, CommentsResult, DomainSpeed, SearchResult } from '../../models/Models';
+import { Album, AlbumLite, CategoryItem, CommentsResult, DomainSpeed, SearchOptions, SearchResult } from '../../models/Models';
+import { EhSearchFilter } from '../eh/EhSearchFilter';
 import { SourceEntry, SourceKind, sourceStore } from '../Sources';
 import { RequestAbortGroup } from '../../util/RequestAbort';
 import { definitionFor } from './SourceRegistry';
+
+/** 每次提交保留独立筛选快照，续页不读取正在编辑的控件。 */
+export class SourceSearchOptions {
+  jm: SearchOptions = new SearchOptions();
+  eh: EhSearchFilter = new EhSearchFilter();
+
+  copy(): SourceSearchOptions {
+    const next: SourceSearchOptions = new SourceSearchOptions();
+    next.jm = new SearchOptions('', 1, this.jm.order, this.jm.time, this.jm.year, this.jm.month);
+    next.eh.copyFrom(this.eh);
+    return next;
+  }
+}
 
 /**
  * 一次图源调用的身份。
@@ -13,6 +27,7 @@ export class SourceRequestContext {
   key: string;
   /** 非空时，该次图源请求归入这一组；组作废后不得复用。 */
   signal: RequestAbortGroup | null = null;
+  searchOptions: SourceSearchOptions | null = null;
 
   constructor(source: SourceEntry, key: string = '', signal: RequestAbortGroup | null = null) {
     this.source = source;

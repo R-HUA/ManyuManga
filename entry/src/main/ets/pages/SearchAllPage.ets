@@ -1,8 +1,9 @@
-import { sourceStore, SourceEntry } from '../data/Sources';
-import { capabilitiesFor } from '../data/source/SourceContracts';
+import { sourceStore, SourceEntry, SourceKind } from '../data/Sources';
+import { capabilitiesFor, SourceSearchOptions } from '../data/source/SourceContracts';
 import { HdsNavDestination } from '@kit.UIDesignKit';
 import { IMMERSIVE_CONTROL_MATERIAL } from '../common/ImmersiveMaterials';
-import { ComicGrid } from '../common/ComicGrid';
+import { SearchGroup, SearchGroupResults } from './search/SearchGroupResults';
+import { SearchFilters } from './search/SearchFilters';
 import { SearchHistory } from './search/SearchHistory';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, SearchScope, SearchSelection, searchSelectionFromObject } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
@@ -11,20 +12,10 @@ import { searchLibraryWorks } from '../data/SearchQuery';
 import { LibrarySearchResults } from './search/LibrarySearchResults';
 import { highConfidence } from '../data/Matching';
 import { Album, AlbumLite, SearchResult, asRecord, asString, errorMessage } from '../models/Models';
-import { BG, SUB_CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
+import { BG, PRIMARY, DANGER, TEXT_SUB } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { SearchSuggestField } from './search/SearchSuggestField';
 import { searchHistoryStore } from '../data/stores/FilterStores';
-
-class SearchGroup {
-  source: SourceEntry = new SourceEntry();
-  items: Array<AlbumLite> = [];
-  page: number = 0;
-  more: boolean = false;
-  loading: boolean = true;
-  error: string = '';
-  query: string = '';
-}
 
 @Component
 export struct SearchAllPage {
@@ -43,6 +34,8 @@ export struct SearchAllPage {
   @State libraryWorks: Array<LibraryWork> = [];
   @State libraryLoading: boolean = false;
   @State selection: SearchSelection | null = null;
+  @State private searchKind: SourceKind | null = null;
+  @State private searchOptions: SourceSearchOptions = new SourceSearchOptions();
 
   @State private submitted: string = '';
   private ticket: number = 0;
@@ -127,9 +120,11 @@ export struct SearchAllPage {
         group.source = source;
         group.query = selection === null ? query : sourceApi.searchExpression(source,
           selection.term.namespace, selection.term.value, selection.field);
+        group.options = this.searchOptions.copy();
         return group;
       });
       this.sourceName = this.scope === 'source' ? sources[0].name : '';
+      this.searchKind = this.scope === 'source' ? sources[0].kind : null;
       this.error = sources.length === 0 ? '没有已启用的图源' : '';
       let cursor: number = 0;
       const work = async (): Promise<void> => {
@@ -158,7 +153,7 @@ export struct SearchAllPage {
     group.error = '';
     this.groups = this.groups.slice();
     try {
-      const result: SearchResult = await sourceApi.searchSource(group.source, group.query, page);
+      const result: SearchResult = await sourceApi.searchSource(group.source, group.query, page, group.options);
       if (ticket !== this.ticket || !this.active) {
         return;
       }
@@ -268,59 +263,54 @@ export struct SearchAllPage {
         onSubmit: (text: string, selection: SearchSelection | null): void => {
           this.query = text; this.selection = selection; this.search();
         } }).layoutWeight(1)
-    }.width('100%').height('100%').padding({ left: 16, right: 16 })
+    }.width('100%').height(56).padding({ left: 16, right: 16 })
   }
 
   build() {
     HdsNavDestination() {
       Navigation() {
-      Scroll() {
-        Column({ space: 20 }) {
-          if (this.query.trim() === '') {
-            SearchHistory({ onSubmit: (text: string): void => { this.query = text; this.selection = null; this.search(); } })
+        Column() {
+          if (this.scope === 'source' && (this.searchKind === 'jm' || this.searchKind === 'eh')) {
+            SearchFilters({ kind: this.searchKind, options: this.searchOptions, onApply: (options: SourceSearchOptions): void => {
+              this.searchOptions = options;
+              if (this.submitted !== '') { this.search(); }
+            } })
           }
-          if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(13).width('100%') }
-          if (this.matching) { Text('正在核对关联作品').fontColor(TEXT_SUB).fontSize(13).width('100%') }
-          if (this.submitted !== '') {
-            if (this.groups.length > 1) {
-              Row({ space: 8 }) {
-                Toggle({ type: ToggleType.Checkbox, isOn: this.onlyHits })
-                  .onChange((value: boolean): void => { this.onlyHits = value; })
-                Text('仅看有结果').fontColor(TEXT_SUB).fontSize(13)
-              }.width('100%')
-            }
-            if (this.scope === 'library') { LibrarySearchResults({ works: this.libraryWorks, loading: this.libraryLoading }) }
-            ForEach(this.visibleGroups(), (group: SearchGroup) => {
-              Column({ space: 12 }) {
-                Row() {
-                  Text(group.source.name).fontSize(18).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
-                  if (group.loading) { LoadingProgress().width(22).height(22) }
-                  if (this.scope === 'all' && group.items.length > 0) {
-                    Button('查看全部', { buttonStyle: ButtonStyleMode.NORMAL })
-                      .fontColor(PRIMARY).backgroundColor(SUB_CARD).onClick(() => {
-                        this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: group.source.id, scope: 'source',
-                          query: this.submitted, selection: this.selection === null ? undefined : this.selection } as MangaRouteParams);
-                      })
-                  }
-                }.width('100%')
-                if (group.error !== '') {
-                  Text(group.error).fontColor(DANGER).fontSize(13).width('100%')
-                  Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.loadGroup(this.groups.indexOf(group), Math.max(1, group.page)))
-                } else if (!group.loading && group.items.length === 0) {
-                  Text('没有搜索结果').fontColor(TEXT_SUB).fontSize(13).width('100%')
+          Scroll() {
+            Column({ space: 20 }) {
+              if (this.query.trim() === '') {
+                SearchHistory({ onSubmit: (text: string): void => { this.query = text; this.selection = null; this.search(); } })
+              }
+              if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(13).width('100%') }
+              if (this.matching) { Text('正在核对关联作品').fontColor(TEXT_SUB).fontSize(13).width('100%') }
+              if (this.submitted !== '') {
+                if (this.groups.length > 1) {
+                  Row({ space: 8 }) {
+                    Toggle({ type: ToggleType.Checkbox, isOn: this.onlyHits })
+                      .onChange((value: boolean): void => { this.onlyHits = value; })
+                    Text('仅看有结果').fontColor(TEXT_SUB).fontSize(13)
+                  }.width('100%')
                 }
-                ComicGrid({ items: group.items, rows: this.scope === 'all' ? 2 : 0, onOpen: (item: AlbumLite): void => { this.choose(item); } })
-              }.width('100%').alignItems(HorizontalAlign.Start)
-            }, (group: SearchGroup) => group.source.id)
-          }
-        }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 32 + this.bottomInset })
-      }.width('100%').height('100%').align(Alignment.TopStart).scrollBar(BarState.Off)
-      .onReachEnd(() => {
-        if (this.scope === 'source' && this.groups.length === 1 && this.groups[0].more && !this.groups[0].loading) { this.loadGroup(0, this.groups[0].page + 1); }
-      })
+                if (this.scope === 'library') { LibrarySearchResults({ works: this.libraryWorks, loading: this.libraryLoading }) }
+                ForEach(this.visibleGroups(), (group: SearchGroup) => {
+                  SearchGroupResults({ group: group, summary: this.scope === 'all',
+                    onOpen: (item: AlbumLite): void => { this.choose(item); },
+                    onViewAll: (): void => {
+                      this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: group.source.id, scope: 'source',
+                        query: this.submitted, selection: this.selection === null ? undefined : this.selection } as MangaRouteParams);
+                    },
+                    onRetry: (): void => { this.loadGroup(this.groups.indexOf(group), Math.max(1, group.page)); } })
+                }, (group: SearchGroup) => group.source.id)
+              }
+            }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 32 + this.bottomInset })
+          }.width('100%').layoutWeight(1).align(Alignment.TopStart).scrollBar(BarState.Off)
+          .onReachEnd(() => {
+            if (this.scope === 'source' && this.groups.length === 1 && this.groups[0].more && !this.groups[0].loading) { this.loadGroup(0, this.groups[0].page + 1); }
+          })
+        }.width('100%').height('100%')
       }.mode(NavigationMode.Stack).titleMode(NavigationTitleMode.Mini).hideBackButton(true)
       .title({ builder: (): void => this.SearchTitle(), height: TitleHeight.MainOnly }, { backgroundColor: Color.Transparent })
-      .width('100%').height('100%')
+      .width('100%').height('100%').padding({ top: this.topInset })
     }.hideTitleBar(true).backgroundColor(BG)
     .onReady((context: NavDestinationContext) => {
       const params: Record<string, Object> | null = asRecord(context.pathInfo.param as Object);
@@ -351,7 +341,7 @@ export struct SearchAllPage {
       } else if (this.scope === 'source') {
         const ticket: number = ++this.ticket;
         sourceStore.get(this.onlySource).then((source: SourceEntry) => {
-          if (ticket === this.ticket && this.active) { this.sourceName = source.name; }
+          if (ticket === this.ticket && this.active) { this.sourceName = source.name; this.searchKind = source.kind; }
         }).catch((e: Error) => {
           if (ticket === this.ticket && this.active) { this.error = errorMessage(e); }
         });

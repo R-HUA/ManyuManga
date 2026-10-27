@@ -1,5 +1,5 @@
 import { jmApi } from '../JmApi';
-import { Album, Chapter, AlbumLite, CategoryItem, CommentsResult, DomainSpeed, SearchResult } from '../../models/Models';
+import { Album, Chapter, AlbumLite, CategoryItem, CommentsResult, DomainSpeed, SearchOptions, SearchResult } from '../../models/Models';
 import { SourceEntry, SourceKind, sourceKey, nativeId } from '../Sources';
 import { SourceRequestContext, SourceStrategy } from './SourceContracts';
 
@@ -34,7 +34,8 @@ export class JmStrategy implements SourceStrategy {
     if (query === '') {
       return new SearchResult(0, this.qualifyAlbums(await jmApi.latest(page), ctx.source.id));
     }
-    const raw: SearchResult = await jmApi.search(query, page);
+    const filter: SearchOptions = ctx.searchOptions === null ? new SearchOptions() : ctx.searchOptions.jm;
+    const raw: SearchResult = await jmApi.search(query, page, filter.order, filter.time, filter.year, filter.month);
     return new SearchResult(raw.total, this.qualifyAlbums(raw.list, ctx.source.id));
   }
 

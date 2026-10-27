@@ -1,5 +1,7 @@
 import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
 import { SourceEntry, copySource, sourceStore } from '../../data/Sources';
+import { EhSettings } from '../../data/eh/EhSettings';
+import { GallerySite } from '../../data/eh/EhNative';
 import { SourceCapabilities, capabilitiesFor } from '../../data/source/SourceContracts';
 import {
   SourceAction,
@@ -11,7 +13,7 @@ import { sourceGlyph } from '../../common/SourceGlyph';
 import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS, ROUTE_SEARCH } from '../../common/Route';
 import { errorMessage } from '../../models/Models';
 import { IconCircleButton } from '../../common/Components';
-import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 
 @Component
 export struct SourceEntryCard {
@@ -30,6 +32,11 @@ export struct SourceEntryCard {
 
   private presentation(): SourcePresentation {
     return presentationFor(this.source.kind);
+  }
+
+  private displayName(): string {
+    return this.source.kind === 'eh' && this.source.name === 'E-Hentai / ExHentai' ?
+      (EhSettings.effectiveSite() === GallerySite.EX ? 'ExHentai' : 'E-Hentai') : this.source.name;
   }
 
   /** 主动作：点击整行直接进入该图源的发现广场或检索页 */
@@ -106,8 +113,8 @@ export struct SourceEntryCard {
   }
 
   build() {
-    Row({ space: 14 }) {
-      Row({ space: 14 }) {
+    Row({ space: 12 }) {
+      Row({ space: 12 }) {
       // 左侧图源光感图标
       Stack({ alignContent: Alignment.Center }) {
         SymbolGlyph(sourceGlyph(this.presentation().iconToken))
@@ -121,16 +128,12 @@ export struct SourceEntryCard {
 
       // 中间名称与精简状态
       Column({ space: 4 }) {
-        Row({ space: 6 }) {
-          Text(this.source.name)
-            .fontColor(this.source.enabled ? TEXT_MAIN : TEXT_SUB)
-            .fontSize(16)
-            .fontWeight(FontWeight.Bold)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Circle({ width: 6, height: 6 })
-            .fill(this.source.enabled ? STATUS_OK : DIVIDER)
-        }
+        Text(this.displayName())
+          .fontColor(this.source.enabled ? TEXT_MAIN : TEXT_SUB)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(this.source.enabled ? (this.source.kind === 'local' ? '本地文件' : this.source.kind === 'suwayomi' ? '扩展图源' : '在线画廊') : '已停用')
           .fontColor(TEXT_SUB)
           .fontSize(12)
@@ -181,7 +184,7 @@ export struct SourceEntryCard {
           });
         })
     }
-    .padding({ left: 16, right: 14, top: 14, bottom: 14 })
+    .padding(14)
     .width('100%')
     .backgroundColor(CARD)
     .borderRadius(18)

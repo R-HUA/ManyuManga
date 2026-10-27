@@ -1,7 +1,7 @@
 /**
  * E-Hentai 高级搜索筛选面板：搜索模式、10 大分类开关（官方色标）、
  * 最低评分、页数区间与 advsearch 十项开关。编辑在副本上进行，
- * 点「应用」后仅在当前浏览会话生效。
+ * 点「应用」后由当前页面提交。
  */
 import {
   EhSearchFilter,
@@ -9,7 +9,6 @@ import {
   EhCategoryOption,
   EH_CATEGORY_OPTIONS
 } from '../../data/eh/EhSearchFilter';
-import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
 import { SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
@@ -44,8 +43,8 @@ export struct EhFilterSheet {
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
   /** 当前生效的筛选（构造时传入，编辑不落库）。 */
   filter: EhSearchFilter = new EhSearchFilter();
+  @Prop searchFilters: boolean = true;
   /** 编辑副本：点「应用」才由父页回写生效。 */
-  private readonly modes: Array<EhSearchMode> = ['normal', 'tag', 'uploader', 'watched'];
   @State draft: EhSearchFilter = new EhSearchFilter();
   apply: (filter: EhSearchFilter) => void = (): void => {};
   close: () => void = (): void => {};
@@ -88,6 +87,43 @@ export struct EhFilterSheet {
   }
 
   @Builder
+  private ModeChip(label: string, mode: EhSearchMode) {
+    Button(label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+      .fontSize(12)
+      .fontWeight(this.draft.mode === mode ? FontWeight.Bold : FontWeight.Medium)
+      .fontColor(this.draft.mode === mode ? PRIMARY : TEXT_MAIN)
+      .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+      .margin({ right: 8, bottom: 8 })
+      .backgroundColor(this.draft.mode === mode ? PRIMARY_SOFT : SUB_CARD)
+      .onClick(() => { this.draft.mode = mode; })
+  }
+
+  @Builder
+  private CategoryChip(option: EhCategoryOption) {
+    Button(option.label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+      .fontSize(12)
+      .fontWeight(this.draft.categoryOn(option.bit) ? FontWeight.Bold : FontWeight.Medium)
+      .fontColor(this.draft.categoryOn(option.bit) ? Color.White : TEXT_SUB)
+      .padding({ left: 11, right: 11, top: 7, bottom: 7 })
+      .margin({ right: 8, bottom: 8 })
+      .backgroundColor(this.draft.categoryOn(option.bit) ? option.color : SUB_CARD)
+      .border({ width: 0.5, color: this.draft.categoryOn(option.bit) ? option.color : DIVIDER })
+      .onClick(() => { this.draft.toggleCategory(option.bit); })
+  }
+
+  @Builder
+  private RatingChip(value: number) {
+    Button(value === 0 ? '不限' : `${value} 星`, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+      .fontSize(12)
+      .fontWeight(this.draft.minRating === value ? FontWeight.Bold : FontWeight.Medium)
+      .fontColor(this.draft.minRating === value ? PRIMARY : TEXT_SUB)
+      .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+      .margin({ right: 8, bottom: 8 })
+      .backgroundColor(this.draft.minRating === value ? PRIMARY_SOFT : SUB_CARD)
+      .onClick(() => { this.draft.minRating = value; })
+  }
+
+  @Builder
   private FlagRow(row: EhFlagRow) {
     Row() {
       Text(row.label)
@@ -107,22 +143,26 @@ export struct EhFilterSheet {
   build() {
     Scroll() {
       Column({ space: 14 }) {
-        Text('高级搜索筛选')
+        Text(this.searchFilters ? '搜索筛选' : '画廊分类')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor(TEXT_MAIN)
           .width('100%')
 
         // ── 搜索模式 ──
-        Column({ space: 8 }) {
-          Text('搜索模式').fontSize(12).fontColor(TEXT_SUB)
-          Select([{ value: '普通' }, { value: '标签' }, { value: '上传者' }, { value: '关注' }])
-            .selected(this.modes.indexOf(this.draft.mode)).value(['普通', '标签', '上传者', '关注'][this.modes.indexOf(this.draft.mode)])
-            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
-            .onSelect((index: number): void => { this.draft.mode = this.modes[index]; })
+        if (this.searchFilters) {
+          Column({ space: 8 }) {
+            Text('搜索模式').fontSize(12).fontColor(TEXT_SUB)
+            Flex({ wrap: FlexWrap.Wrap }) {
+              this.ModeChip('普通', 'normal')
+              this.ModeChip('标签', 'tag')
+              this.ModeChip('上传者', 'uploader')
+              this.ModeChip('关注', 'watched')
+            }.width('100%')
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
         }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
 
         // ── 分类 ──
         Column({ space: 8 }) {
@@ -137,25 +177,24 @@ export struct EhFilterSheet {
               })
           }
           .width('100%')
-          Column() {
+          Flex({ wrap: FlexWrap.Wrap }) {
             ForEach(EH_CATEGORY_OPTIONS, (option: EhCategoryOption) => {
-              Row() {
-                Text(option.label).fontSize(14).fontColor(TEXT_MAIN).layoutWeight(1)
-                Checkbox({ name: option.label }).select(this.draft.categoryOn(option.bit))
-                  .onChange((selected: boolean): void => { if (selected !== this.draft.categoryOn(option.bit)) { this.draft.toggleCategory(option.bit); } })
-              }.width('100%').height(44)
+              this.CategoryChip(option)
             }, (option: EhCategoryOption) => `${option.bit}`)
           }.width('100%')
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
 
+        if (this.searchFilters) {
         // ── 最低评分 ──
         Column({ space: 8 }) {
           Text('最低评分').fontSize(12).fontColor(TEXT_SUB)
-          Select([{ value: '不限' }, { value: '2 星' }, { value: '3 星' }, { value: '4 星' }, { value: '5 星' }])
-            .selected(RATING_OPTIONS.indexOf(this.draft.minRating)).value(this.draft.minRating === 0 ? '不限' : `${this.draft.minRating} 星`)
-            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL).onSelect((index: number): void => { this.draft.minRating = RATING_OPTIONS[index]; })
+          Flex({ wrap: FlexWrap.Wrap }) {
+            ForEach(RATING_OPTIONS, (value: number) => {
+              this.RatingChip(value)
+            }, (value: number) => `${value}`)
+          }.width('100%')
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
@@ -217,14 +256,11 @@ export struct EhFilterSheet {
             ForEach(FLAG_ROWS, (row: EhFlagRow) => {
               this.FlagRow(row)
             }, (row: EhFlagRow) => row.key)
-            Text('评分与页数条件也在高级模式下生效')
-              .fontSize(11)
-              .fontColor(TEXT_SUB)
-              .width('100%')
           }
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
+        }
 
         // ── 操作 ──
         Row({ space: 10 }) {

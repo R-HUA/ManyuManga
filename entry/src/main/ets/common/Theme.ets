@@ -34,7 +34,8 @@ export const CARD_R: number = 16;
 export const CHIP_R: number = 14;
 
 export const COVER_ASPECT_RATIO: number = 0.75;
-export const TAB_BAR_HEIGHT: number = 64;
+/** HDS 悬浮页签默认高度，用于内容与续读条避让。 */
+export const TAB_BAR_HEIGHT: number = 56;
 
 export const FONT_TITLE: number = 17;
 export const FONT_BODY: number = 14;

@@ -5,7 +5,7 @@ import { BasicDataSource } from '../common/DataSource';
 import { formatCount, langBadgeFor } from '../common/ComicBadge';
 import { AlbumCard } from './jm/AlbumCard';
 import { AddCatDialog } from './jm/AddCatDialog';
-import { FONT_CAPTION, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TEXT_SUB, comicColumns } from '../common/Theme';
+import { FONT_CAPTION, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TEXT_SUB, TAB_BAR_HEIGHT, comicColumns } from '../common/Theme';
 import { EmptyView, SkeletonGrid } from '../common/Components';
 import { ROUTE_ALBUM } from '../common/Route';
 import { AlbumLite, CategoryItem, errorMessage } from '../models/Models';
@@ -483,7 +483,7 @@ export struct CategoryPage {
                 this.openAlbum(item);
               }
             })
-          }
+          }.width((this.contentWidth - SPACE_M * (this.gridColumns() - 1)) / this.gridColumns())
         }, (item: AlbumLite) => item.id)
       }
       .columnsTemplate(this.columnsTemplateStr())
@@ -501,35 +501,39 @@ export struct CategoryPage {
 
   @Builder
   private Footer() {
-    Row({ space: SPACE_S }) {
-      if (this.loadingMore) {
-        LoadingProgress()
-          .width(16)
-          .height(16)
-          .color(PRIMARY)
-        Text('加载中…')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
-      } else if (this.moreError) {
-        Text('加载失败，点击重试')
-          .fontSize(FONT_CAPTION)
-          .fontColor(PRIMARY)
-          .onClick(() => {
-            this.retryMore();
-          })
-      } else if (this.finished) {
-        Text('— 没有更多了 —')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
-      } else {
-        Text('上拉加载更多')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
+    Column() {
+      Row({ space: SPACE_S }) {
+        if (this.loadingMore) {
+          LoadingProgress()
+            .width(16)
+            .height(16)
+            .color(PRIMARY)
+          Text('加载中…')
+            .fontSize(FONT_CAPTION)
+            .fontColor(TEXT_SUB)
+        } else if (this.moreError) {
+          Text('加载失败，点击重试')
+            .fontSize(FONT_CAPTION)
+            .fontColor(PRIMARY)
+            .onClick(() => {
+              this.retryMore();
+            })
+        } else if (this.finished) {
+          Text('— 没有更多了 —')
+            .fontSize(FONT_CAPTION)
+            .fontColor(TEXT_SUB)
+        } else {
+          Text('上拉加载更多')
+            .fontSize(FONT_CAPTION)
+            .fontColor(TEXT_SUB)
+        }
       }
+      .width('100%')
+      .height(40)
+      .justifyContent(FlexAlign.Center)
     }
     .width('100%')
-    .height(40)
-    .justifyContent(FlexAlign.Center)
+    .padding({ bottom: (this.embeddedInShell ? TAB_BAR_HEIGHT : 0) + this.bottomInset + SPACE_S })
   }
 
   build() {
@@ -541,7 +545,6 @@ export struct CategoryPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ bottom: this.bottomInset + SPACE_S })
     .onRefreshing(() => { this.reload(); })
     .onAreaChange((_old: Area, area: Area): void => { this.contentWidth = Number(area.width) - 32; })
   }

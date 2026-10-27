@@ -8,6 +8,66 @@ function deferred() {
 }
 
 export async function searchTests(test) {
+  await test('搜索筛选穿过统一图源入口，禁漫分页保留排序和时间且主键带来源', async env => {
+    const { sourceStore } = env.load('data/Sources');
+    const { SourceSearchOptions } = env.load('data/source/SourceContracts');
+    const { AlbumLite, SearchResult } = env.load('models/Models');
+    const calls = [];
+    env.load('data/JmApi').jmApi.search = async (...args) => {
+      calls.push(args); return new SearchResult(5, [new AlbumLite('123', '结果')]);
+    };
+    const options = new SourceSearchOptions(); options.jm.order = 'mv'; options.jm.time = 'w';
+    const result = await env.load('data/SourceApi').sourceApi.searchSource(await sourceStore.get('jm'), '查询', 2, options);
+    assert.deepEqual(calls, [['查询', 2, 'mv', 'w', '', '']]);
+    assert.equal(result.list[0].id, 'jm~123');
+  });
+
+  await test('EH 搜索筛选进入实际请求且分类切换隔离分页游标，上传者保留高级条件', async env => {
+    const { SourceSearchOptions } = env.load('data/source/SourceContracts');
+    const { sourceStore } = env.load('data/Sources');
+    const { ehSource, EhListPage } = env.load('data/EhSource');
+    const api = env.load('data/SourceApi').sourceApi, urls = [];
+    ehSource.list = async url => {
+      urls.push(url); const next = new URL(url); next.searchParams.set('next', '123');
+      return new EhListPage([], next.toString(), '', url, '');
+    };
+    const options = new SourceSearchOptions(); options.eh.categoryMask = 2;
+    options.eh.minRating = 4; options.eh.pageFrom = '20';
+    const source = await sourceStore.get('eh');
+    await api.searchSource(source, '关键词', 1, options);
+    await api.searchSource(source, '关键词', 2, options);
+    assert.equal(new URL(urls[1]).searchParams.get('next'), '123');
+    assert.equal(new URL(urls[1]).searchParams.get('f_cats'), '1021');
+    assert.equal(new URL(urls[1]).searchParams.get('f_srdd'), '4');
+    options.eh.categoryMask = 4;
+    await api.searchSource(source, '关键词', 1, options);
+    assert.equal(new URL(urls[2]).searchParams.get('next'), null);
+    assert.equal(new URL(urls[2]).searchParams.get('f_cats'), '1019');
+    options.eh.mode = 'uploader';
+    const uploader = new URL(options.eh.buildUrl('user name'));
+    assert.equal(decodeURIComponent(uploader.pathname), '/uploader/user name');
+    assert.equal(uploader.searchParams.get('f_search'), null);
+    assert.equal(uploader.searchParams.get('f_cats'), '1019');
+    assert.equal(uploader.searchParams.get('f_spf'), '20');
+  });
+
+  await test('结果分组保存筛选副本，编辑筛选不改旧查询的后续页', async env => {
+    await env.load('data/Sources').sourceStore.list();
+    const { SearchResult } = env.load('models/Models');
+    const api = env.load('data/SourceApi').sourceApi, calls = [];
+    api.searchSource = async (_source, _query, page, options) => {
+      calls.push({ page, order: options.jm.order, mask: options.eh.categoryMask }); return new SearchResult();
+    };
+    const page = new (env.load('pages/SearchAllPage').SearchAllPage)();
+    page.scope = 'source'; page.onlySource = 'jm'; page.query = '查询';
+    page.searchOptions.jm.order = 'mv'; page.searchOptions.eh.categoryMask = 2;
+    await page.search();
+    page.searchOptions.jm.order = 'tf'; page.searchOptions.eh.categoryMask = 4;
+    await page.loadGroup(0, 2);
+    assert.deepEqual(calls, [{ page: 1, order: 'mv', mask: 2 }, { page: 2, order: 'mv', mask: 2 }]);
+    await page.search(); assert.deepEqual(calls.at(-1), { page: 1, order: 'tf', mask: 4 });
+  });
+
   await test('EH 标签、别名、上传者与标签模式共享精确查询且 URL 仅编码一次', async env => {
     const { ehTermQuery, ehTagQuery } = env.load('data/eh/EhQuery');
     const cases = [['f', 'female'], ['char', 'character'], ['circle', 'group'], ['lang', 'language'],

@@ -1,4 +1,4 @@
-import { HdsNavigation } from '@kit.UIDesignKit';
+import { HdsNavigation, HdsNavigationTitleMode, TitleSize } from '@kit.UIDesignKit';
 import common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import promptAction from '@ohos.promptAction';
@@ -438,7 +438,8 @@ export struct ProfilePage {
       .width('100%')
       .scrollBar(BarState.Off).align(Alignment.TopStart).clip(false)
     }
-    .titleBar({ content: { title: { mainTitle: '我的' } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleBar({ content: { title: { mainTitle: '我的', mainTitleSize: TitleSize.TITLE_ML } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleMode(HdsNavigationTitleMode.MINI)
     .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller])
     .width('100%').height('100%').backgroundColor(BG)
   }

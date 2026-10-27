@@ -115,24 +115,25 @@ export class EhSearchFilter {
 
   /**
    * 构建搜索/列表 URL：mode 决定基址（关注=watched，上传者=/uploader/，其余=站点根），
-   * 分类掩码作用于全部模式；高级开关、评分、页数仅在 advanced 开启时附加。
+   * 分类掩码作用于全部模式；评分与页数条件自动启用服务端高级查询。
    */
   public buildUrl(query: string): string {
     const site: string = EhSettings.effectiveSite();
     const trimmed: string = query.trim();
-    if (this.mode === 'uploader' && trimmed !== '') {
-      return `${EhUrl.host(site)}uploader/${encodeURIComponent(trimmed)}`;
-    }
-    const base: string = this.mode === 'watched' ? EhUrl.watched(site) : EhUrl.host(site);
+    const uploader: boolean = this.mode === 'uploader' && trimmed !== '';
+    const base: string = uploader ? `${EhUrl.host(site)}uploader/${encodeURIComponent(trimmed)}` :
+      this.mode === 'watched' ? EhUrl.watched(site) : EhUrl.host(site);
     const params: Array<string> = [];
     if (this.categoryMask !== EH_CATEGORY_ALL) {
       params.push(`f_cats=${(~this.categoryMask) & EH_CATEGORY_ALL}`);
     }
     const keyword: string = this.mode === 'tag' ? ehTagQuery(trimmed) : trimmed;
-    if (keyword !== '') {
+    if (keyword !== '' && !uploader) {
       params.push(`f_search=${encodeURIComponent(keyword)}`);
     }
-    if (this.advanced) {
+    const from: string = EhSearchFilter.numeric(this.pageFrom);
+    const to: string = EhSearchFilter.numeric(this.pageTo);
+    if (this.advanced || this.minRating >= 2 || from !== '' || to !== '') {
       params.push('advsearch=1');
       if (this.inName) { params.push('f_sname=on'); }
       if (this.inTags) { params.push('f_stags=on'); }
@@ -149,8 +150,6 @@ export class EhSearchFilter {
         params.push('f_sr=on');
         params.push(`f_srdd=${rating}`);
       }
-      const from: string = EhSearchFilter.numeric(this.pageFrom);
-      const to: string = EhSearchFilter.numeric(this.pageTo);
       if (from !== '' || to !== '') {
         params.push('f_sp=on');
         params.push(`f_spf=${from}`);

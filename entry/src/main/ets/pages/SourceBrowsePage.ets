@@ -87,7 +87,7 @@ export struct SourceBrowsePage {
             FlowItem() {
               ComicCard({ aid: item.id, coverUrl: item.coverUrl, title: item.title, author: item.author, badge: item.category,
                 onCardClick: (): void => { this.stack.pushPathByName(ROUTE_ALBUM, { aid: item.id } as MangaRouteParams); } })
-            }
+            }.width((this.contentWidth - 12 * (comicColumns(this.contentWidth) - 1)) / comicColumns(this.contentWidth))
           }, (item: AlbumLite) => item.id)
         }.columnsTemplate(`1fr `.repeat(comicColumns(this.contentWidth))).columnsGap(12).rowsGap(16)
         .width('100%').height('100%').padding({ left: 16, right: 16 }).clip(false)

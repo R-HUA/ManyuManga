@@ -1,4 +1,4 @@
-import { HdsNavigation, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
+import { HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, TitleSize } from '@kit.UIDesignKit';
 import { LibraryContinueBanner } from './library/LibraryContinueBanner';
 import { LibraryCoverCard } from './library/LibraryCoverCard';
 import { LibraryCategorySheet } from './library/LibraryCategorySheet';
@@ -199,7 +199,7 @@ export struct LibraryPage {
 
   private bottomPadding(): number {
     if (this.selected.length > 0) { return 84 + this.bottomInset; }
-    const tabs: number = this.breakpoint === 'lg' ? 0 : TAB_BAR_HEIGHT + 10;
+    const tabs: number = this.breakpoint === 'lg' ? 0 : TAB_BAR_HEIGHT;
     return 24 + tabs + this.bottomInset + (this.progress.length > 0 && !this.hideContinueBanner ? 88 : 0);
   }
 
@@ -406,8 +406,9 @@ export struct LibraryPage {
     .height('100%')
     .backgroundColor(BG)
     }
-    .titleBar({ content: { title: { mainTitle: this.selected.length > 0 ? `已选 ${this.selected.length} 部` : '书架' }, menu: { value: this.headerMenus() } },
+    .titleBar({ content: { title: { mainTitle: this.selected.length > 0 ? `已选 ${this.selected.length} 部` : '书架', mainTitleSize: TitleSize.TITLE_ML }, menu: { value: this.headerMenus() } },
       style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleMode(HdsNavigationTitleMode.MINI)
     .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller]).width('100%').height('100%')
     .bindSheet($$this.sheet, this.FilterSheet(), { height: SheetSize.FIT_CONTENT, dragBar: true, systemMaterial: IMMERSIVE_SHEET_MATERIAL })
     .bindSheet($$this.categorySheet, this.CategorySheet(), {

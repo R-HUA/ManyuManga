@@ -9,6 +9,7 @@ import { blockTagsStore } from './stores/FilterStores';
 import { setAppContext } from '../util/Prefs';
 import {
   capabilitiesFor,
+  SourceSearchOptions,
   SourceRequestContext,
   SourceStrategy
 } from './source/SourceContracts';
@@ -43,11 +44,13 @@ class SourceApi {
     await Promise.all(tasks);
   }
 
-  async searchSource(source: SourceEntry, query: string, page: number = 1): Promise<SearchResult> {
+  async searchSource(source: SourceEntry, query: string, page: number = 1,
+    options: SourceSearchOptions | null = null): Promise<SearchResult> {
     const entry: SourceEntry = await sourceStore.get(source.id);
     const start: number = Date.now();
-    const result: SearchResult = await strategyFor(entry.kind).search(
-      new SourceRequestContext(entry, ''), query, page);
+    const context: SourceRequestContext = new SourceRequestContext(entry, '');
+    context.searchOptions = options;
+    const result: SearchResult = await strategyFor(entry.kind).search(context, query, page);
     result.list = await this.visibleAlbums(result.list);
     await sourceStore.get(source.id);
     source.latency = Date.now() - start;

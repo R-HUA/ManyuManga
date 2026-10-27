@@ -1,4 +1,4 @@
-import { HdsNavigation } from '@kit.UIDesignKit';
+import { HdsNavigation, HdsNavigationTitleMode, TitleSize } from '@kit.UIDesignKit';
 import { SuwayomiConnectSheet } from './sources/SuwayomiConnectSheet';
 import { SourceSettingsSheet } from './sources/SourceSettingsSheet';
 import promptAction from '@ohos.promptAction';
@@ -13,7 +13,7 @@ import { SourceEntryCard } from './sources/SourceEntryCard';
 import { IconCircleButton } from '../common/Components';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
 import { SearchSuggestField } from './search/SearchSuggestField';
-import { BG, CARD, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT } from '../common/Theme';
+import { BG, CARD, SUB_CARD, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -167,14 +167,17 @@ export struct SourcesPage {
 
       Scroll(this.scroller) {
         Column({ space: 12 }) {
-          Row({ space: 14 }) {
-            SymbolGlyph($r('sys.symbol.externaldrive')).fontSize(22).fontColor([TEXT_MAIN]).width(46).height(46)
+          Row({ space: 12 }) {
+            Stack() {
+              SymbolGlyph($r('sys.symbol.externaldrive')).fontSize(22).fontColor([TEXT_MAIN])
+            }.width(46).height(46).borderRadius(14).backgroundColor(SUB_CARD)
             Column({ space: 4 }) {
               Text('Suwayomi').fontSize(16).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN)
               Text(this.connectionLabel).fontSize(12).fontColor(TEXT_SUB).maxLines(1)
             }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-            IconCircleButton({ glyph: $r('sys.symbol.gearshape'), onTap: (): void => { this.openConnect(new SourceEntry(), false); } })
-          }.width('100%').padding(16).backgroundColor(CARD).borderRadius(18)
+            IconCircleButton({ glyph: $r('sys.symbol.gearshape'), btnSize: 36, iconSize: 20, bg: SUB_CARD,
+              onTap: (): void => { this.openConnect(new SourceEntry(), false); } })
+          }.width('100%').padding(14).backgroundColor(CARD).borderRadius(18)
           .onClick(() => { this.openConnect(new SourceEntry(), false); })
           ForEach(this.sources, (source: SourceEntry) => {
             SourceEntryCard({
@@ -211,9 +214,10 @@ export struct SourcesPage {
       .scrollBar(BarState.Off).align(Alignment.TopStart).clip(false)
       }.width('100%').height('100%')
     }
-    .titleBar({ content: { title: { mainTitle: '图源' }, menu: { value: [
+    .titleBar({ content: { title: { mainTitle: '图源', mainTitleSize: TitleSize.TITLE_ML }, menu: { value: [
       { content: { icon: $r('sys.symbol.magnifyingglass'), label: '搜索全部图源', action: (): void => { this.stack.pushPathByName(ROUTE_SEARCH, { scope: 'all' } as MangaRouteParams); } } }
     ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleMode(HdsNavigationTitleMode.MINI)
     .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller])
     .width('100%')
     .height('100%')

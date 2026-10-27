@@ -91,13 +91,13 @@ function environment() {
       source = source.replace(/  build\(\) \{[\s\S]*?(?=  private reportVisibility)/, '');
     }
     // 保留真实页面方法，只移除本地 Node 无法执行的 ArkUI 声明式布局。
-    if (/[/\\]pages[/\\](SearchAllPage|ExplorePage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|detail[/\\]WorkTags|reader[/\\]ReaderImageItem|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
+    if (/[/\\]pages[/\\](SearchAllPage|ExplorePage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|detail[/\\]WorkTags|reader[/\\]ReaderImageItem|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
       const builder = source.indexOf('  @Builder');
       const end = builder >= 0 ? builder : source.indexOf('  build()');
       assert.ok(end > 0);
       source = (source.slice(0, end) + '\n}').replace(/@Component\s+export struct /g, 'export class ')
         .replace(/@(Consume|StorageProp|Watch|Prop|Link)\([^)]*\)\s*/g, '')
-        .replace(/@(State|Prop|Link)\s+/g, '');
+        .replace(/@(State|Prop|Link|ObjectLink|Observed)\s+/g, '');
     }
     const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
     const native = {

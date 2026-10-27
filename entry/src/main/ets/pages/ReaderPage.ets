@@ -286,26 +286,10 @@ export struct ReaderPage {
     this.controller.syncHudTimer();
   }
 
-  private readingGesture(): GestureType {
-    return GestureGroup(GestureMode.Exclusive,
-      TapGesture({ count: 2, fingers: 1 })
-        .onAction((event: GestureEvent): void => {
-          const point: Array<number> = this.tapPoint(event);
-          this.controller.onDoubleTap(point[0], point[1]);
-        }),
-      TapGesture({ count: 1, fingers: 1 })
-        .onAction((event: GestureEvent): void => {
-          const point: Array<number> = this.tapPoint(event);
-          this.controller.handleCanvasClick(point[0], point[1]);
-        })
-    );
-  }
-
   private tapPoint(event: GestureEvent): Array<number> {
-    if (event.fingerList.length === 0) {
-      return [0, 0];
-    }
-    return [event.fingerList[0].localX, event.fingerList[0].localY];
+    // 键盘或手柄触发时没有触点，按画布中央操作；触屏使用原生点击坐标。
+    return event.tapLocation === undefined ? [this.canvasWidthVp / 2, this.canvasHeightVp / 2]
+      : [event.tapLocation.x, event.tapLocation.y];
   }
 
   /** HUD 隐藏时的微型常驻页码胶囊 */
@@ -375,7 +359,18 @@ export struct ReaderPage {
         .height('100%')
         .gesture(
             GestureGroup(GestureMode.Parallel,
-              this.readingGesture(),
+              GestureGroup(GestureMode.Exclusive,
+                TapGesture({ count: 2, fingers: 1 })
+                  .onAction((event: GestureEvent): void => {
+                    const point: Array<number> = this.tapPoint(event);
+                    this.controller.onDoubleTap(point[0], point[1]);
+                  }),
+                TapGesture({ count: 1, fingers: 1 })
+                  .onAction((event: GestureEvent): void => {
+                    const point: Array<number> = this.tapPoint(event);
+                    this.controller.handleCanvasClick(point[0], point[1]);
+                  })
+              ),
               PinchGesture({ fingers: 2 })
                 .onActionStart((event: GestureEvent): void => {
                   this.controller.onPinchStart(event);

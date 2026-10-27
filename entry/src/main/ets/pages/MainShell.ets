@@ -138,12 +138,13 @@ export struct MainShell {
         .barPosition(BarPosition.End)
         .scrollable(false)
         .barMode(BarMode.Fixed)
-        .barHeight(this.breakpoint === 'lg' || this.selecting ? 0 : 60)
+        // 负值恢复 HDS 悬浮页签的原生高度，隐藏时才覆盖为零。
+        .barHeight(this.breakpoint === 'lg' || this.selecting ? 0 : -1)
         .barOverlap(this.breakpoint !== 'lg')
         .barBackgroundColor(Color.Transparent)
         .barFloatingStyle({
-          barSideMargin: 36,
-          barBottomMargin: 10 + this.bottom,
+          barWidth: { smallWidth: 264, mediumWidth: 288, largeWidth: 304 },
+          barBottomMargin: this.bottom,
           systemMaterialEffect: HDS_NATIVE_MATERIAL
         })
         .onChange((index: number) => {

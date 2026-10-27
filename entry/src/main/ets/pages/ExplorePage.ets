@@ -1,12 +1,20 @@
 import { ComicGrid } from '../common/ComicGrid';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SOURCE_BROWSE } from '../common/Route';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
-import { PRIMARY, TEXT_MAIN, TEXT_SUB, DANGER } from '../common/Theme';
+import { PRIMARY, TEXT_MAIN, TEXT_SUB, DANGER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { AlbumLite, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 
 type HomeSection = 'ranking' | 'random' | 'latest';
+
+interface HomeSectionView {
+  title: string;
+  section: HomeSection;
+  items: Array<AlbumLite>;
+  loading: boolean;
+  error: string;
+}
 
 @Component
 export struct ExplorePage {
@@ -75,27 +83,27 @@ export struct ExplorePage {
   }
 
   @Builder
-  private Section(title: string, section: HomeSection, items: Array<AlbumLite>, loading: boolean, error: string) {
+  private Section($$: HomeSectionView) {
     Column({ space: 12 }) {
       Row({ space: 8 }) {
-        Text(title).fontSize(20).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
-        if (section === 'ranking') {
+        Text($$.title).fontSize(20).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
+        if ($$.section === 'ranking') {
           Select(this.labels.map((label: string): SelectOption => { return { value: label }; }))
             .selected(this.orders.indexOf(this.currentRank)).value(this.labels[this.orders.indexOf(this.currentRank)])
             .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
             .onSelect((index: number): void => { this.currentRank = this.orders[index]; this.fetchSection('ranking'); })
         }
-        Button(section === 'random' ? '换一批' : '查看全部', { buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(13).fontColor(PRIMARY).backgroundColor(Color.Transparent).enabled(!loading)
-          .onClick(() => { if (section === 'random') { this.fetchSection(section); } else { this.browse(section); } })
+        Button($$.section === 'random' ? '换一批' : '查看全部', { buttonStyle: ButtonStyleMode.NORMAL })
+          .fontSize(13).fontColor(PRIMARY).backgroundColor(Color.Transparent).enabled(!$$.loading)
+          .onClick(() => { if ($$.section === 'random') { this.fetchSection($$.section); } else { this.browse($$.section); } })
       }.width('100%')
-      if (error !== '') {
-        Text(error).fontSize(13).fontColor(DANGER).width('100%')
-        Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.fetchSection(section))
+      if ($$.error !== '') {
+        Text($$.error).fontSize(13).fontColor(DANGER).width('100%')
+        Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.fetchSection($$.section))
       }
-      if (loading && items.length === 0) { LoadingProgress().width(28).height(28) }
-      if (!loading && error === '' && items.length === 0) { Text('暂无内容').fontSize(13).fontColor(TEXT_SUB).width('100%') }
-      ComicGrid({ items: items, rows: 2, onOpen: (item: AlbumLite): void => {
+      if ($$.loading && $$.items.length === 0) { LoadingProgress().width(28).height(28) }
+      if (!$$.loading && $$.error === '' && $$.items.length === 0) { Text('暂无内容').fontSize(13).fontColor(TEXT_SUB).width('100%') }
+      ComicGrid({ items: $$.items, rows: 2, onOpen: (item: AlbumLite): void => {
         this.navPathStack.pushPathByName(ROUTE_ALBUM, { aid: item.id } as MangaRouteParams);
       } })
     }.width('100%').alignItems(HorizontalAlign.Start)
@@ -105,10 +113,10 @@ export struct ExplorePage {
     Refresh({ refreshing: $$this.refreshing }) {
       Scroll(this.scroller) {
         Column({ space: 28 }) {
-          this.Section('热门', 'ranking', this.rankItems, this.rankLoading, this.rankError)
-          this.Section('随机推荐', 'random', this.randomItems, this.randomLoading, this.randomError)
-          this.Section('最新上架', 'latest', this.latestItems, this.latestLoading, this.latestError)
-        }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 28 + this.bottomInset })
+          this.Section({ title: '热门', section: 'ranking', items: this.rankItems, loading: this.rankLoading, error: this.rankError })
+          this.Section({ title: '随机推荐', section: 'random', items: this.randomItems, loading: this.randomLoading, error: this.randomError })
+          this.Section({ title: '最新上架', section: 'latest', items: this.latestItems, loading: this.latestLoading, error: this.latestError })
+        }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: (this.embeddedInShell ? TAB_BAR_HEIGHT : 0) + 28 + this.bottomInset })
       }.width('100%').height('100%').align(Alignment.TopStart).scrollBar(BarState.Off).clip(false)
     }.width('100%').height('100%').onRefreshing(() => { this.refresh(); })
   }

@@ -11,6 +11,7 @@
 import { Album, AlbumLite, Chapter, CommentItem, CommentsResult, SearchResult, MetadataTerm } from '../models/Models';
 import { sourceKey } from './Sources';
 import { EhSettings } from './eh/EhSettings';
+import { EhSearchFilter } from './eh/EhSearchFilter';
 import {
   NativeEhClient,
   NativeGallerySummary,
@@ -97,7 +98,7 @@ export class EhSource {
   private previewPerPage: Map<string, number> = new Map();
   /** `${site}:${gid_token}` -> 已抓取过的缩略图分页下标。 */
   private previewLoaded: Map<string, Set<number>> = new Map();
-  /** 搜索游标链：key = `q:${site}:${query}`，value[i] = 第 i+1 页的请求 URL。 */
+  /** 搜索游标按完整首地址隔离，避免筛选变更后串用旧分页。 */
   private searchCursors: Map<string, Array<string>> = new Map();
 
   /** 站点进入缓存键：切换表/里站后自动取新键，避免复用旧站点的空壳与游标。 */
@@ -211,12 +212,13 @@ export class EhSource {
    * SourceAdapter.searchSource 的页码适配：每个 (站点, 查询词) 维护一条游标链。
    * 请求越过链尾时沿 nextUrl 顺序补齐（丢弃中间结果），链断或超上限时退回链尾页。
    */
-  public async searchSource(query: string, page: number): Promise<SearchResult> {
+  public async searchSource(query: string, page: number, filter: EhSearchFilter | null = null): Promise<SearchResult> {
     const site: string = EhSettings.effectiveSite();
-    const cacheKey: string = `q:${site}:${query}`;
+    const firstUrl: string = filter === null ? this.searchUrl(query) : filter.buildUrl(query);
+    const cacheKey: string = `q:${site}:${firstUrl}`;
     let cursors: Array<string> | undefined = this.searchCursors.get(cacheKey);
     if (cursors === undefined) {
-      cursors = [this.searchUrl(query)];
+      cursors = [firstUrl];
       this.searchCursors.set(cacheKey, cursors);
       if (this.searchCursors.size > 12) {
         for (const oldest of this.searchCursors.keys()) {

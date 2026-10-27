@@ -9,14 +9,15 @@ import { ehSource, EhListPage } from '../../data/EhSource';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { EhSearchFilter } from '../../data/eh/EhSearchFilter';
 import { EhFilterSheet } from './EhFilterSheet';
+import { SourceSettingsSheet } from '../sources/SourceSettingsSheet';
 import { GallerySite } from '../../data/eh/EhNative';
 import { RequestAbortGroup, isRequestCancelled } from '../../util/RequestAbort';
 import { AlbumLite, errorMessage } from '../../models/Models';
 import { ComicCard } from '../../common/ComicCard';
-import { IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL, HDS_TITLE_STYLE } from '../../common/ImmersiveMaterials';
+import { IMMERSIVE_SHEET_MATERIAL, HDS_TITLE_STYLE } from '../../common/ImmersiveMaterials';
 import { withoutBlockedAlbums } from '../../data/stores/FilterStores';
 import { BasicDataSource } from '../../common/DataSource';
-import { BG, comicColumns, CARD, PRIMARY, PRIMARY_SOFT, TEXT_SUB } from '../../common/Theme';
+import { BG, comicColumns, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_SUB } from '../../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 const COLUMN_GAP: number = 12;
@@ -52,9 +53,10 @@ export struct EhBrowsePage {
   @State loading: boolean = false;
   @State error: string = '';
   @State siteLabel: string = 'E-Hentai';
-  @State containerWidth: number = 0;
+  @State containerWidth: number = 360;
   @State filter: EhSearchFilter = new EhSearchFilter();
   @State filterSheet: boolean = false;
+  @State private settingsSheet: boolean = false;
   @State refreshing: boolean = false;
   private ticket: number = 0;
   private scroller: Scroller = new Scroller();
@@ -130,7 +132,7 @@ export struct EhBrowsePage {
       this.prevUrl = page.prevUrl;
       this.firstUrl = page.firstUrl;
       this.totalLabel = page.totalLabel;
-      this.siteLabel = EhSettings.site() === GallerySite.EX ? 'EXHENTAI' : 'E-HENTAI';
+      this.siteLabel = EhSettings.site() === GallerySite.EX ? 'ExHentai' : 'E-Hentai';
     } catch (e) {
       if (isRequestCancelled(e as Error) || ticket !== this.ticket) {
         return;
@@ -250,7 +252,7 @@ export struct EhBrowsePage {
           FlowItem() {
             this.GalleryCard(item)
           }
-          .width('100%')
+          .width((this.containerWidth - 32 - COLUMN_GAP * (this.columnCount() - 1)) / this.columnCount())
         }, (item: AlbumLite) => item.id)
       }
       .cachedCount(4)
@@ -271,6 +273,7 @@ export struct EhBrowsePage {
   private FilterSheetPanel() {
     EhFilterSheet({
       filter: this.filter,
+      searchFilters: false,
       apply: (next: EhSearchFilter): void => {
         this.filter = next;
         this.load('reset');
@@ -281,13 +284,38 @@ export struct EhBrowsePage {
     })
   }
 
+  @Builder
+  private SettingsPanel() {
+    SourceSettingsSheet({ token: 'eh.site', close: (): void => { this.settingsSheet = false; this.load('reset'); } })
+  }
+
+  @Builder
+  private TabChip(label: string, index: number) {
+    Button(label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+      .fontSize(13).fontWeight(this.tab === index ? FontWeight.Bold : FontWeight.Medium)
+      .fontColor(this.tab === index ? PRIMARY : TEXT_SUB)
+      .padding({ left: 14, right: 14 }).height(36)
+      .backgroundColor(this.tab === index ? PRIMARY_SOFT : SUB_CARD)
+      .onClick(() => {
+        if (this.tab !== index) { this.tab = index; this.query = ''; this.load('reset'); }
+      })
+  }
+
   build() {
     HdsNavDestination() {
       Column({ space: 12 }) {
-        Select([{ value: '最新' }, { value: '热门' }, { value: '关注' }, { value: '收藏' }])
-          .selected(this.tab).value(['最新', '热门', '关注', '收藏'][this.tab]).systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
-          .onSelect((index: number): void => { if (this.tab !== index) { this.tab = index; this.query = ''; this.load('reset'); } })
-          .margin({ left: 16, right: 16 })
+        Row({ space: 8 }) {
+          Scroll() {
+            Row({ space: 8 }) {
+              this.TabChip('最新', 0)
+              this.TabChip('热门', 1)
+              this.TabChip('关注', 2)
+              this.TabChip('收藏', 3)
+            }
+          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).align(Alignment.Start).layoutWeight(1)
+          Button('分类', { buttonStyle: ButtonStyleMode.NORMAL }).fontColor(PRIMARY).backgroundColor(Color.Transparent)
+            .onClick((): void => { this.filterSheet = true; })
+        }.width('100%').height(48).padding({ left: 16, right: 16 })
         if (EhSettings.exDowngraded()) { Text('里站未登录，已切换到表站').fontSize(13).fontColor(TEXT_SUB).padding({ left: 16, right: 16 }) }
         Refresh({ refreshing: $$this.refreshing }) {
           Column() { this.ListBody() }.width('100%').height('100%')
@@ -298,8 +326,9 @@ export struct EhBrowsePage {
       .bindSheet($$this.filterSheet, this.FilterSheetPanel(), { height: SheetSize.MEDIUM, dragBar: true, systemMaterial: IMMERSIVE_SHEET_MATERIAL })
     }.titleBar({ content: { title: { mainTitle: this.siteLabel }, menu: { value: [
       { content: { icon: $r('sys.symbol.magnifyingglass'), label: '搜索', action: (): void => { this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: 'eh', scope: 'source' } as MangaRouteParams); } } },
-      { content: { icon: $r('sys.symbol.slider_horizontal_2'), label: '筛选', action: (): void => { this.filterSheet = true; } } }
+      { content: { icon: $r('sys.symbol.gearshape'), label: '设置', action: (): void => { this.settingsSheet = true; } } }
     ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true }).titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller]).backgroundColor(BG)
+    .bindSheet($$this.settingsSheet, this.SettingsPanel(), { height: SheetSize.LARGE, dragBar: true, systemMaterial: IMMERSIVE_SHEET_MATERIAL })
   }
 }

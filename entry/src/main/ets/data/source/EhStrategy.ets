@@ -31,8 +31,8 @@ export class EhStrategy implements SourceStrategy {
     return page;
   }
 
-  search(_ctx: SourceRequestContext, query: string, page: number): Promise<SearchResult> {
-    return ehSource.searchSource(query, page);
+  search(ctx: SourceRequestContext, query: string, page: number): Promise<SearchResult> {
+    return ehSource.searchSource(query, page, ctx.searchOptions === null ? null : ctx.searchOptions.eh);
   }
 
   album(ctx: SourceRequestContext): Promise<Album> {
