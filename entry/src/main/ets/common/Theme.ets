@@ -1,6 +1,5 @@
 /**
- * common/Theme.ets —— 全局光学主题 token
- * 深空星耀黑 (#0E111A) / 云母宣纸白 (#F4F6FB) 双模自适应
+ * 全局中性深浅色主题。
  */
 export const PRIMARY: Resource = $r('app.color.primary');
 export const PRIMARY_SOFT: Resource = $r('app.color.primary_soft');
@@ -51,3 +50,8 @@ export const SPACE_XL: number = 24;
 
 export const MASK_DARK: string = 'rgba(8,10,16,0.68)';
 export const PRIVACY_MASK: string = '#0E111A';
+
+/** 同一内容宽度下，各图源保持相同的封面密度。 */
+export function comicColumns(width: number): number {
+  return Math.max(3, Math.floor((width + 12) / 116));
+}

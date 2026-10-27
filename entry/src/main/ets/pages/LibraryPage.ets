@@ -1,9 +1,10 @@
+import { HdsNavigation, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { LibraryContinueBanner } from './library/LibraryContinueBanner';
 import { LibraryCoverCard } from './library/LibraryCoverCard';
 import { LibraryCategorySheet } from './library/LibraryCategorySheet';
 import { LibraryFilterSheet } from './library/LibraryFilterSheet';
 import promptAction from '@ohos.promptAction';
-import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
+import { IMMERSIVE_SHEET_MATERIAL, IMMERSIVE_REGULAR_MATERIAL, HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
 import { library, LibraryWork } from '../data/Library';
 import { albumMatchesText } from '../data/SearchQuery';
@@ -13,9 +14,7 @@ import { sourceApi } from '../data/SourceApi';
 import { localSource } from '../data/LocalSource';
 import { readProgressStore } from '../data/Stores';
 import { Album, ReadingProgress, errorMessage } from '../models/Models';
-import { IconCircleButton } from '../common/Components';
-import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
-import { Prefs } from '../util/Prefs';
+import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER, TAB_BAR_HEIGHT, comicColumns } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -36,7 +35,8 @@ export struct LibraryPage {
   @State categories: Array<string> = [];
   @State selected: Array<string> = [];
   @State downloaded: Array<string> = [];
-  @State columns: number = 3;
+  @State private contentWidth: number = 328;
+  private scroller: Scroller = new Scroller();
   @State sort: number = 0;
   @State readFilter: number = 0;
   @State downloadFilter: number = 0;
@@ -69,7 +69,6 @@ export struct LibraryPage {
         }
       }
       this.categories = categories;
-      this.columns = await (await Prefs.getInstance()).getNumber('library_columns', 3);
       this.error = '';
     } catch (e) {
       this.error = errorMessage(e as Error);
@@ -159,7 +158,6 @@ export struct LibraryPage {
       readFilter: this.$readFilter,
       downloadFilter: this.$downloadFilter,
       sort: this.$sort,
-      columns: this.$columns,
       error: this.$error,
       sheet: this.$sheet
     })
@@ -185,91 +183,24 @@ export struct LibraryPage {
     })
   }
 
-  @Builder
-  private TopBar() {
-    Row({ space: 10 }) {
-      if (this.selected.length > 0) {
-        IconCircleButton({
-          glyph: $r('sys.symbol.xmark'),
-          bg: SUB_CARD,
-          onTap: (): void => {
-            this.selected = [];
-            AppStorage.setOrCreate('librarySelection', false);
-          }
-        })
-        Text(`已选 ${this.selected.length} 部`)
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .layoutWeight(1)
-        Text(this.selected.length >= this.filtered().length && this.filtered().length > 0 ? '清空' : '全选')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(PRIMARY)
-          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-          .borderRadius(18)
-          .backgroundColor(PRIMARY_SOFT)
-          .onClick(() => {
-            this.selectAllOrClear();
-          })
-      } else {
-        Row({ space: 8 }) {
-          Text('书架')
-            .fontSize(26)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(TEXT_MAIN)
-          if (this.works.length > 0) {
-            Text(`${this.filtered().length}`)
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(PRIMARY)
-              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-              .borderRadius(10)
-              .backgroundColor(PRIMARY_SOFT)
-          }
-        }
-        .alignItems(VerticalAlign.Center)
-        .layoutWeight(1)
-
-        IconCircleButton({
-          glyph: $r('sys.symbol.magnifyingglass'),
-          active: this.showSearch || this.query !== '',
-          onTap: (): void => {
-            this.showSearch = !this.showSearch;
-            if (!this.showSearch) {
-              this.query = '';
-            }
-          }
-        })
-
-        IconCircleButton({
-          glyph: $r('sys.symbol.slider_horizontal_2'),
-          active: this.readFilter !== 0 || this.downloadFilter !== 0 || this.sort !== 0,
-          onTap: (): void => {
-            this.sheet = true;
-          }
-        })
-      }
+  private headerMenus(): Array<HdsNavigationMenuItemOptions> {
+    if (this.selected.length > 0) {
+      return [
+        { content: { icon: $r('sys.symbol.xmark'), label: '取消选择', action: (): void => { this.selected = []; AppStorage.setOrCreate('librarySelection', false); } } },
+        { content: { icon: $r('sys.symbol.checkmark'), label: '全选', action: (): void => this.selectAllOrClear() } }
+      ];
     }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: this.topInset + 10, bottom: 6 })
-    .alignItems(VerticalAlign.Center)
+    return [
+      { content: { icon: $r('sys.symbol.magnifyingglass'), label: '搜索书架', action: (): void => { this.stack.pushPathByName(ROUTE_SEARCH, { scope: 'library' } as MangaRouteParams); } } },
+      { content: { icon: $r('sys.symbol.plus'), label: '导入漫画', action: (): void => { this.importLocalArchive(); } } },
+      { content: { icon: $r('sys.symbol.slider_horizontal_2'), label: '筛选', action: (): void => { this.sheet = true; } } }
+    ];
   }
 
-  @Builder
-  private CategoryCapsule(label: string, active: boolean, onTap: () => void) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(active ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(active ? Color.White : TEXT_SUB)
-      .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-      .borderRadius(16)
-      .backgroundColor(active ? PRIMARY : CARD)
-      .border({ width: 0.5, color: active ? PRIMARY : DIVIDER })
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-      .onClick(() => {
-        onTap();
-      })
+  private bottomPadding(): number {
+    if (this.selected.length > 0) { return 84 + this.bottomInset; }
+    const tabs: number = this.breakpoint === 'lg' ? 0 : TAB_BAR_HEIGHT + 10;
+    return 24 + tabs + this.bottomInset + (this.progress.length > 0 && !this.hideContinueBanner ? 88 : 0);
   }
 
   @Builder
@@ -301,72 +232,15 @@ export struct LibraryPage {
   }
 
   build() {
+    HdsNavigation() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column({ space: 10 }) {
-        Column() {
-          this.TopBar()
-        }
-        .bindSheet($$this.sheet, this.FilterSheet(), {
-          height: SheetSize.FIT_CONTENT,
-          dragBar: true,
-          systemMaterial: IMMERSIVE_SHEET_MATERIAL
-        })
-
-
-        if (this.showSearch || this.query !== '') {
-          Row({ space: 8 }) {
-            Search({ value: this.query, placeholder: '检索书架标题或作者…' })
-              .layoutWeight(1)
-              .height(40)
-              .backgroundColor(CARD)
-              .onChange((text: string) => {
-                this.query = text;
-              })
-            if (this.query.trim() !== '') {
-              Text('搜全源')
-                .fontSize(12)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(Color.White)
-                .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-                .borderRadius(18)
-                .backgroundColor(PRIMARY)
-                .onClick(() => {
-                  this.stack.pushPathByName(ROUTE_SEARCH, { query: this.query.trim() } as MangaRouteParams);
-                })
-            }
-          }
-          .padding({ left: 16, right: 16 })
-          .width('100%')
-        }
-
-        // Category & Quick Filter Capsule Rail
         if (this.works.length > 0) {
-          Scroll() {
-            Row({ space: 8 }) {
-              this.CategoryCapsule('全部', this.category === '' && this.readFilter === 0 && this.downloadFilter === 0, () => {
-                this.category = '';
-                this.readFilter = 0;
-                this.downloadFilter = 0;
-              })
-              this.CategoryCapsule('未读', this.readFilter === 2, () => {
-                this.readFilter = this.readFilter === 2 ? 0 : 2;
-              })
-              this.CategoryCapsule('已离线', this.downloadFilter === 1, () => {
-                this.downloadFilter = this.downloadFilter === 1 ? 0 : 1;
-              })
-              ForEach(this.categories, (c: string) => {
-                this.CategoryCapsule(c, this.category === c, () => {
-                  this.category = this.category === c ? '' : c;
-                })
-              }, (c: string) => c)
-            }
-            .padding({ left: 16, right: 16 })
-            .justifyContent(FlexAlign.Start)
-          }
-          .scrollable(ScrollDirection.Horizontal)
-          .scrollBar(BarState.Off)
-          .align(Alignment.Start)
-          .width('100%')
+          Select(['全部分类'].concat(this.categories).map((name: string): SelectOption => { return { value: name }; }))
+            .selected(this.categories.indexOf(this.category) + 1).value(this.category || '全部分类')
+            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+            .onSelect((index: number): void => { this.category = index === 0 ? '' : this.categories[index - 1]; })
+            .margin({ left: 16, right: 16 })
         }
 
         if (this.error !== '') {
@@ -408,7 +282,7 @@ export struct LibraryPage {
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
               .fontColor(TEXT_MAIN)
-            Text(this.works.length === 0 ? '去图源发现广场探索，或直接导入本地 CBZ/ZIP 漫画包' : '可以尝试切换分类胶囊或重置筛选条件')
+            Text(this.works.length === 0 ? '从图源添加作品或导入本地漫画' : '请调整筛选条件')
               .fontSize(12)
               .fontColor(TEXT_SUB)
               .textAlign(TextAlign.Center)
@@ -459,25 +333,26 @@ export struct LibraryPage {
           .width('100%')
           .padding({ bottom: TAB_BAR_HEIGHT + this.bottomInset })
         } else {
-          Grid() {
+          Grid(this.scroller) {
             ForEach(this.filtered(), (work: LibraryWork) => {
               GridItem() {
                 this.Cover(work)
               }
             }, (work: LibraryWork) => `${work.id}_${this.selected.includes(work.id)}_${work.newChapters}_${work.read}`)
           }
-          .columnsTemplate(`repeat(${this.columns}, 1fr)`)
+           .columnsTemplate(`repeat(${comicColumns(this.contentWidth)}, 1fr)`)
           .columnsGap(12)
           .rowsGap(16)
           .layoutWeight(1)
+          .clip(false)
           .scrollBar(BarState.Off)
           .padding({
             left: 16,
             right: 16,
             top: 4,
-            bottom: (this.breakpoint === 'lg' ? 88 : TAB_BAR_HEIGHT + 92) + this.bottomInset
+            bottom: this.bottomPadding()
           })
-          .width('100%')
+          .width('100%').onAreaChange((_old: Area, area: Area): void => { this.contentWidth = Number(area.width) - 32; })
         }
       }
       .width('100%')
@@ -530,6 +405,11 @@ export struct LibraryPage {
     .width('100%')
     .height('100%')
     .backgroundColor(BG)
+    }
+    .titleBar({ content: { title: { mainTitle: this.selected.length > 0 ? `已选 ${this.selected.length} 部` : '书架' }, menu: { value: this.headerMenus() } },
+      style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller]).width('100%').height('100%')
+    .bindSheet($$this.sheet, this.FilterSheet(), { height: SheetSize.FIT_CONTENT, dragBar: true, systemMaterial: IMMERSIVE_SHEET_MATERIAL })
     .bindSheet($$this.categorySheet, this.CategorySheet(), {
       height: SheetSize.FIT_CONTENT,
       dragBar: true,

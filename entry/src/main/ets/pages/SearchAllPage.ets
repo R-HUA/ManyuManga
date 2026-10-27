@@ -1,28 +1,17 @@
 import { sourceStore, SourceEntry } from '../data/Sources';
 import { capabilitiesFor } from '../data/source/SourceContracts';
-import { presentationFor } from '../data/source/SourceCatalog';
-import { MangaRouteParams, ROUTE_ALBUM, SearchScope, SearchSelection, searchSelectionFromObject } from '../common/Route';
+import { HdsNavDestination } from '@kit.UIDesignKit';
+import { IMMERSIVE_CONTROL_MATERIAL } from '../common/ImmersiveMaterials';
+import { ComicGrid } from '../common/ComicGrid';
+import { SearchHistory } from './search/SearchHistory';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, SearchScope, SearchSelection, searchSelectionFromObject } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
 import { library, LibraryWork } from '../data/Library';
 import { searchLibraryWorks } from '../data/SearchQuery';
 import { LibrarySearchResults } from './search/LibrarySearchResults';
 import { highConfidence } from '../data/Matching';
 import { Album, AlbumLite, SearchResult, asRecord, asString, errorMessage } from '../models/Models';
-import { SourceCover } from '../common/SourceCover';
-import { IconCircleButton } from '../common/Components';
-import {
-  BG,
-  CARD,
-  SUB_CARD,
-  PRIMARY,
-  PRIMARY_SOFT,
-  ACCENT,
-  ACCENT_SOFT,
-  DANGER,
-  TEXT_MAIN,
-  TEXT_SUB,
-  DIVIDER
-} from '../common/Theme';
+import { BG, SUB_CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { SearchSuggestField } from './search/SearchSuggestField';
 import { searchHistoryStore } from '../data/stores/FilterStores';
@@ -55,6 +44,7 @@ export struct SearchAllPage {
   @State libraryLoading: boolean = false;
   @State selection: SearchSelection | null = null;
 
+  @State private submitted: string = '';
   private ticket: number = 0;
   private onlySource: string = '';
   private matchAid: string = '';
@@ -82,6 +72,9 @@ export struct SearchAllPage {
   }
 
   private editQuery(): void {
+    this.submitted = '';
+    this.resumeSearch = false;
+    this.matching = false;
     this.selection = null;
     this.ticket++;
     this.pending = false;
@@ -93,6 +86,7 @@ export struct SearchAllPage {
 
   private sourcesChanged(): void {
     this.ticket++;
+    if (this.submitted === '') { return; }
     if (this.active) {
       this.search();
     } else {
@@ -101,8 +95,10 @@ export struct SearchAllPage {
   }
 
   private async search(): Promise<void> {
+    if (this.query.trim() === '') { this.editQuery(); return; }
     const ticket: number = ++this.ticket;
     const query: string = this.query.trim();
+    this.submitted = query;
     const selection: SearchSelection | null = this.selection;
     this.pending = true;
     try {
@@ -134,7 +130,7 @@ export struct SearchAllPage {
         return group;
       });
       this.sourceName = this.scope === 'source' ? sources[0].name : '';
-      this.error = sources.length === 0 ? '没有已启用的书源，请先在「书源」页启用' : '';
+      this.error = sources.length === 0 ? '没有已启用的图源' : '';
       let cursor: number = 0;
       const work = async (): Promise<void> => {
         while (ticket === this.ticket && cursor < sources.length) {
@@ -259,288 +255,73 @@ export struct SearchAllPage {
     return this.groups.filter((g: SearchGroup) => g.loading || g.items.length > 0 || g.error !== '');
   }
 
+  @Builder
+  private SearchTitle() {
+    Row({ space: 8 }) {
+      Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+        SymbolGlyph($r('sys.symbol.chevron_left')).fontSize(22).fontColor([$r('sys.color.font_primary')])
+      }.width(40).height(40).backgroundColor(Color.Transparent).systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
+      .accessibilityText('返回').onClick((): void => { this.stack.pop(); })
+      SearchSuggestField({ text: this.$query, sourceId: this.onlySource, selection: this.selection,
+        placeholder: this.scope === 'library' ? '搜索书架' : this.scope === 'source' ? `搜索${this.sourceName}` : '搜索全部图源',
+        onEdit: (): void => this.editQuery(),
+        onSubmit: (text: string, selection: SearchSelection | null): void => {
+          this.query = text; this.selection = selection; this.search();
+        } }).layoutWeight(1)
+    }.width('100%').height('100%').padding({ left: 16, right: 16 })
+  }
+
   build() {
-    NavDestination() {
-      Column({ space: 10 }) {
-        // Custom TopBar
-        Row({ space: 10 }) {
-          IconCircleButton({
-            glyph: $r('sys.symbol.chevron_left'),
-            onTap: (): void => {
-              this.stack.pop();
-            }
-          })
-
-          Text(this.matchAid !== '' ? '跨源比对与关联' : this.scope === 'library' ? '搜索书架' :
-            this.scope === 'source' ? `搜索「${this.sourceName}」` : '搜索全部')
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(TEXT_MAIN)
-            .layoutWeight(1)
-
-          if (this.groups.length > 1) {
-            Text(this.onlyHits ? '仅看有结果' : '全部图源')
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.onlyHits ? Color.White : PRIMARY)
-              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-              .borderRadius(14)
-              .backgroundColor(this.onlyHits ? PRIMARY : PRIMARY_SOFT)
-              .onClick(() => {
-                this.onlyHits = !this.onlyHits;
-              })
+    HdsNavDestination() {
+      Navigation() {
+      Scroll() {
+        Column({ space: 20 }) {
+          if (this.query.trim() === '') {
+            SearchHistory({ onSubmit: (text: string): void => { this.query = text; this.selection = null; this.search(); } })
           }
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 4 })
-        .alignItems(VerticalAlign.Center)
-
-        // Search Bar
-        Row({ space: 8 }) {
-          SearchSuggestField({
-            text: this.$query,
-            sourceId: this.onlySource,
-            selection: this.selection,
-            placeholder: this.matchAid === '' ? '输入书名、作者或标签…' : '查找同一作品的其他图源…',
-            onEdit: (_text: string): void => {
-              this.editQuery();
-            },
-            onSubmit: (text: string, selection: SearchSelection | null): void => {
-              this.query = text;
-              this.selection = selection;
-              this.search();
+          if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(13).width('100%') }
+          if (this.matching) { Text('正在核对关联作品').fontColor(TEXT_SUB).fontSize(13).width('100%') }
+          if (this.submitted !== '') {
+            if (this.groups.length > 1) {
+              Row({ space: 8 }) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.onlyHits })
+                  .onChange((value: boolean): void => { this.onlyHits = value; })
+                Text('仅看有结果').fontColor(TEXT_SUB).fontSize(13)
+              }.width('100%')
             }
-          })
-            .layoutWeight(1)
-
-          Button('检索', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(13)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .backgroundColor(PRIMARY)
-            .height(40)
-            .onClick(() => {
-              this.search();
-            })
-        }
-        .padding({ left: 16, right: 16 })
-        .width('100%')
-
-        if (this.error !== '') {
-          Text(this.error)
-            .fontColor(DANGER)
-            .fontSize(12)
-            .padding({ left: 16, right: 16 })
-            .width('100%')
-        }
-
-        if (this.matching) {
-          Row({ space: 8 }) {
-            LoadingProgress().width(16).height(16).color(PRIMARY)
-            Text('正在自动核对作者、语言与版本置信度…')
-              .fontColor(PRIMARY)
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-          }
-          .padding({ left: 16, right: 16, top: 4, bottom: 4 })
-          .width('100%')
-        }
-
-        Scroll() {
-          Column({ space: 16 }) {
-            if (this.scope === 'library') {
-              LibrarySearchResults({ works: this.libraryWorks, loading: this.libraryLoading })
-            }
-            ForEach(this.visibleGroups(), (group: SearchGroup, groupIndex: number) => {
-              Column({ space: 10 }) {
-                Row({ space: 8 }) {
-                  Text(presentationFor(group.source.kind).shortLabel)
-                    .fontSize(10)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor(presentationFor(group.source.kind).useAccent ? ACCENT : PRIMARY)
-                    .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-                    .borderRadius(8)
-                    .backgroundColor(presentationFor(group.source.kind).useAccent ? ACCENT_SOFT : PRIMARY_SOFT)
-
-                  Text(group.source.name)
-                    .fontSize(16)
-                    .fontWeight(FontWeight.Bold)
-                    .fontColor(TEXT_MAIN)
-                    .layoutWeight(1)
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-                  if (group.loading) {
-                    LoadingProgress().width(18).height(18).color(PRIMARY)
-                  } else if (group.items.length > 0) {
-                    Row({ space: 4 }) {
-                      Text(`${group.items.length} 部`)
-                        .fontSize(12)
-                        .fontColor(TEXT_SUB)
-                      if (group.more) {
-                        SymbolGlyph($r('sys.symbol.arrow_right'))
-                          .fontSize(14)
-                          .fontColor([PRIMARY])
-                      }
-                    }
-                    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
-                    .onClick(() => {
-                      if (group.more && !group.loading) {
-                        this.loadGroup(groupIndex, group.page + 1);
-                      }
-                    })
-                  }
-                }
-                .width('100%')
-                .alignItems(VerticalAlign.Center)
-
-                if (group.error !== '') {
-                  Row({ space: 10 }) {
-                    Text(group.error)
-                      .fontSize(12)
-                      .fontColor(TEXT_SUB)
-                      .layoutWeight(1)
-                      .maxLines(2)
-                    Text('重试')
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor(PRIMARY)
-                      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                      .borderRadius(14)
-                      .backgroundColor(PRIMARY_SOFT)
-                      .onClick(() => {
-                        this.loadGroup(groupIndex, Math.max(1, group.page));
+            if (this.scope === 'library') { LibrarySearchResults({ works: this.libraryWorks, loading: this.libraryLoading }) }
+            ForEach(this.visibleGroups(), (group: SearchGroup) => {
+              Column({ space: 12 }) {
+                Row() {
+                  Text(group.source.name).fontSize(18).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
+                  if (group.loading) { LoadingProgress().width(22).height(22) }
+                  if (this.scope === 'all' && group.items.length > 0) {
+                    Button('查看全部', { buttonStyle: ButtonStyleMode.NORMAL })
+                      .fontColor(PRIMARY).backgroundColor(SUB_CARD).onClick(() => {
+                        this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: group.source.id, scope: 'source',
+                          query: this.submitted, selection: this.selection === null ? undefined : this.selection } as MangaRouteParams);
                       })
                   }
-                  .width('100%')
-                  .padding(10)
-                  .borderRadius(12)
-                  .backgroundColor(SUB_CARD)
+                }.width('100%')
+                if (group.error !== '') {
+                  Text(group.error).fontColor(DANGER).fontSize(13).width('100%')
+                  Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.loadGroup(this.groups.indexOf(group), Math.max(1, group.page)))
                 } else if (!group.loading && group.items.length === 0) {
-                  Text('该图源未检索到相关漫画')
-                    .fontColor(TEXT_SUB)
-                    .fontSize(12)
-                    .padding({ top: 4, bottom: 4 })
+                  Text('没有搜索结果').fontColor(TEXT_SUB).fontSize(13).width('100%')
                 }
-
-                if (group.items.length > 0) {
-                  if (this.scope === 'all') {
-                    // 全源搜索：横向滑动画廊轨（一屏对比多源结果）
-                    List({ space: 10 }) {
-                      ForEach(group.items, (item: AlbumLite) => {
-                        ListItem() {
-                          Column({ space: 6 }) {
-                            Stack({ alignContent: Alignment.BottomStart }) {
-                              SourceCover({ url: item.coverUrl, sourceKey: item.id, radius: 10 })
-                              Text(item.title)
-                                .fontSize(11)
-                                .fontWeight(FontWeight.Medium)
-                                .fontColor(Color.White)
-                                .maxLines(2)
-                                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                                .width('100%')
-                                .padding({ left: 6, right: 6, top: 16, bottom: 6 })
-                                .linearGradient({
-                                  angle: 180,
-                                  colors: [['rgba(0,0,0,0.0)', 0.0], ['rgba(8,10,16,0.85)', 1.0]]
-                                })
-                            }
-                            .width(108)
-                            .aspectRatio(0.72)
-                            .borderRadius(10)
-                            .clip(true)
-
-                            if (item.author !== '') {
-                              Text(item.author)
-                                .fontSize(10)
-                                .fontColor(TEXT_SUB)
-                                .maxLines(1)
-                                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                                .width(108)
-                            }
-                          }
-                          .width(108)
-                          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-                          .onClick(() => {
-                            this.choose(item);
-                          })
-                        }
-                      }, (item: AlbumLite) => item.id)
-                    }
-                    .listDirection(Axis.Horizontal)
-                    .scrollBar(BarState.Off)
-                    .width('100%')
-                    .height(180)
-                  } else {
-                    // 单源搜索：纵向折行卡片网格
-                    Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
-                      ForEach(group.items, (item: AlbumLite) => {
-                        Column({ space: 6 }) {
-                          SourceCover({ url: item.coverUrl, sourceKey: item.id, radius: 10 })
-                          Text(item.title)
-                            .fontSize(12)
-                            .fontWeight(FontWeight.Medium)
-                            .fontColor(TEXT_MAIN)
-                            .maxLines(1)
-                            .textOverflow({ overflow: TextOverflow.Ellipsis })
-                            .width('100%')
-                          if (item.author !== '') {
-                            Text(item.author)
-                              .fontSize(10)
-                              .fontColor(TEXT_SUB)
-                              .maxLines(1)
-                              .textOverflow({ overflow: TextOverflow.Ellipsis })
-                              .width('100%')
-                          }
-                        }
-                        .width('31%')
-                        .margin({ right: '2%', bottom: 12 })
-                        .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-                        .onClick(() => {
-                          this.choose(item);
-                        })
-                      }, (item: AlbumLite) => item.id)
-                    }
-                    .width('100%')
-
-                    if (group.more && !group.loading) {
-                      Text('加载更多结果')
-                        .fontSize(13)
-                        .fontWeight(FontWeight.Medium)
-                        .fontColor(PRIMARY)
-                        .textAlign(TextAlign.Center)
-                        .width('100%')
-                        .padding({ top: 9, bottom: 9 })
-                        .borderRadius(14)
-                        .backgroundColor(SUB_CARD)
-                        .onClick(() => {
-                          this.loadGroup(groupIndex, group.page + 1);
-                        })
-                    }
-                  }
-                }
-              }
-              .padding(16)
-              .backgroundColor(CARD)
-              .borderRadius(20)
-              .border({ width: 0.5, color: DIVIDER })
-              .width('100%')
-              .alignItems(HorizontalAlign.Start)
-            }, (group: SearchGroup) => `${group.source.id}_${group.items.length}_${group.loading}_${group.error}`)
+                ComicGrid({ items: group.items, rows: this.scope === 'all' ? 2 : 0, onOpen: (item: AlbumLite): void => { this.choose(item); } })
+              }.width('100%').alignItems(HorizontalAlign.Start)
+            }, (group: SearchGroup) => group.source.id)
           }
-          .padding({ left: 16, right: 16, bottom: 32 + this.bottomInset })
-          .width('100%')
-        }
-        .layoutWeight(1)
-        .width('100%')
-        .scrollBar(BarState.Off)
-      }
-      .width('100%')
-      .height('100%')
-      .backgroundColor(BG)
-    }
-    .hideTitleBar(true)
-    .backgroundColor(BG)
+        }.width('100%').alignItems(HorizontalAlign.Start).padding({ left: 16, right: 16, bottom: 32 + this.bottomInset })
+      }.width('100%').height('100%').align(Alignment.TopStart).scrollBar(BarState.Off)
+      .onReachEnd(() => {
+        if (this.scope === 'source' && this.groups.length === 1 && this.groups[0].more && !this.groups[0].loading) { this.loadGroup(0, this.groups[0].page + 1); }
+      })
+      }.mode(NavigationMode.Stack).titleMode(NavigationTitleMode.Mini).hideBackButton(true)
+      .title({ builder: (): void => this.SearchTitle(), height: TitleHeight.MainOnly }, { backgroundColor: Color.Transparent })
+      .width('100%').height('100%')
+    }.hideTitleBar(true).backgroundColor(BG)
     .onReady((context: NavDestinationContext) => {
       const params: Record<string, Object> | null = asRecord(context.pathInfo.param as Object);
       this.query = params === null ? '' : asString(params['query']);
@@ -565,8 +346,15 @@ export struct SearchAllPage {
         }).catch((e: Error) => {
           if (ticket === this.ticket && this.active) { this.error = errorMessage(e); }
         });
-      } else {
+      } else if (this.query.trim() !== '') {
         this.search();
+      } else if (this.scope === 'source') {
+        const ticket: number = ++this.ticket;
+        sourceStore.get(this.onlySource).then((source: SourceEntry) => {
+          if (ticket === this.ticket && this.active) { this.sourceName = source.name; }
+        }).catch((e: Error) => {
+          if (ticket === this.ticket && this.active) { this.error = errorMessage(e); }
+        });
       }
     })
     .onHidden(() => {

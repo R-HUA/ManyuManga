@@ -3,8 +3,8 @@
  * 复用 HarmonyOS-EhViewer 的瀑布流卡片设计（按页数动态高度、10 大分类色标、星级），
  * 交互与视觉对齐漫语沉浸光感主题；列表数据全部经 EhSource 适配器（里站未登录自动回退表站）。
  */
-import { MangaRouteParams, ROUTE_ALBUM, SearchSelection } from '../../common/Route';
-import { ehTermQuery } from '../../data/eh/EhQuery';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../../common/Route';
 import { ehSource, EhListPage } from '../../data/EhSource';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { EhSearchFilter } from '../../data/eh/EhSearchFilter';
@@ -12,27 +12,14 @@ import { EhFilterSheet } from './EhFilterSheet';
 import { GallerySite } from '../../data/eh/EhNative';
 import { RequestAbortGroup, isRequestCancelled } from '../../util/RequestAbort';
 import { AlbumLite, errorMessage } from '../../models/Models';
-import { IconCircleButton } from '../../common/Components';
 import { ComicCard } from '../../common/ComicCard';
-import { SourceCover } from '../../common/SourceCover';
-import { IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../../common/ImmersiveMaterials';
-import { SearchSuggestField } from '../search/SearchSuggestField';
-import { searchHistoryStore, withoutBlockedAlbums } from '../../data/stores/FilterStores';
+import { IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL, HDS_TITLE_STYLE } from '../../common/ImmersiveMaterials';
+import { withoutBlockedAlbums } from '../../data/stores/FilterStores';
 import { BasicDataSource } from '../../common/DataSource';
-import {
-  BG,
-  CARD,
-  SUB_CARD,
-  PRIMARY,
-  PRIMARY_SOFT,
-  TEXT_MAIN,
-  TEXT_SUB,
-  DIVIDER,
-  BAR_LIGHT
-} from '../../common/Theme';
+import { BG, comicColumns, CARD, PRIMARY, PRIMARY_SOFT, TEXT_SUB } from '../../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
-const COLUMN_GAP: number = 10;
+const COLUMN_GAP: number = 12;
 const ROW_GAP: number = 12;
 const PREFERRED_ITEM_WIDTH: number = 176;
 
@@ -64,22 +51,23 @@ export struct EhBrowsePage {
   @State totalLabel: string = '';
   @State loading: boolean = false;
   @State error: string = '';
-  @State siteLabel: string = 'E-HENTAI';
+  @State siteLabel: string = 'E-Hentai';
   @State containerWidth: number = 0;
   @State filter: EhSearchFilter = new EhSearchFilter();
   @State filterSheet: boolean = false;
   @State refreshing: boolean = false;
   private ticket: number = 0;
+  private scroller: Scroller = new Scroller();
   private listGate: RequestAbortGroup = new RequestAbortGroup();
   private gallerySource: BasicDataSource<AlbumLite> = new BasicDataSource<AlbumLite>();
 
   aboutToAppear(): void {
-    this.siteLabel = EhSettings.site() === GallerySite.EX ? 'EXHENTAI' : 'E-HENTAI';
+    this.siteLabel = EhSettings.site() === GallerySite.EX ? 'ExHentai' : 'E-Hentai';
     this.bootstrap();
   }
 
   private async bootstrap(): Promise<void> {
-    this.filter = await EhSearchFilter.load();
+    this.filter = new EhSearchFilter();
     await this.load('reset');
   }
 
@@ -158,6 +146,7 @@ export struct EhBrowsePage {
     } finally {
       if (ticket === this.ticket) {
         this.loading = false;
+        this.refreshing = false;
       }
     }
   }
@@ -169,12 +158,7 @@ export struct EhBrowsePage {
   // ─────────────── 瀑布流布局（列数/高度确定性计算） ───────────────
 
   private columnCount(): number {
-    const width: number = this.containerWidth;
-    if (width <= 0) {
-      return 2;
-    }
-    const columns: number = Math.floor((width + COLUMN_GAP) / (PREFERRED_ITEM_WIDTH + COLUMN_GAP));
-    return Math.max(2, columns);
+    return comicColumns(this.containerWidth - 32);
   }
 
   private columnsTemplate(): string {
@@ -187,107 +171,9 @@ export struct EhBrowsePage {
   }
 
   @Builder
-  private TabChip(label: string, index: number) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(this.tab === index ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.tab === index ? PRIMARY : TEXT_SUB)
-      .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-      .borderRadius(16)
-      .backgroundColor(this.tab === index ? PRIMARY_SOFT : SUB_CARD)
-      .onClick(() => {
-        if (this.tab !== index) {
-          this.tab = index;
-          this.query = '';
-          this.searchMode = false;
-          this.load('reset');
-        }
-      })
-  }
-
-    /** 根据 EH 官方分类名映射对应色标 */
-  private categoryColor(cat: string): string {
-    const key: string = cat.toLowerCase();
-    if (key.includes('doujinshi') || key.includes('同人')) return '#E53935';
-    if (key.includes('manga') || key.includes('漫画')) return '#FB8C00';
-    if (key.includes('artist') || key.includes('画师')) return '#FDD835';
-    if (key.includes('game') || key.includes('游戏')) return '#43A047';
-    if (key.includes('non-h') || key.includes('非')) return '#1E88E5';
-    if (key.includes('image set') || key.includes('图集')) return '#3949AB';
-    if (key.includes('cosplay')) return '#8E24AA';
-    if (key.includes('asian') || key.includes('亚洲')) return '#D81B60';
-    return 'rgba(14,17,26,0.78)';
-  }
-
-  @Builder
   private GalleryCard(item: AlbumLite) {
-    Column({ space: 6 }) {
-      Stack({ alignContent: Alignment.TopEnd }) {
-        SourceCover({ url: item.coverUrl, sourceKey: item.id, radius: 12 })
-
-        // 右上角：EH 分类色标徽章
-        if (item.category !== '') {
-          Text(item.category)
-            .fontSize(10)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-            .backgroundColor(this.categoryColor(item.category))
-            .borderRadius(8)
-            .margin(6)
-        }
-
-        // 底部内嵌渐变层：评分与页数
-        if (item.categorySub !== '') {
-          Column() {
-            Blank()
-            Row() {
-              Text(item.categorySub)
-                .fontSize(10)
-                .fontWeight(FontWeight.Bold)
-                .fontColor('rgba(255,255,255,0.95)')
-                .maxLines(1)
-            }
-            .width('100%')
-            .padding({ left: 8, right: 8, top: 14, bottom: 6 })
-            .linearGradient({
-              angle: 180,
-              colors: [['rgba(0,0,0,0.0)', 0.0], ['rgba(8,10,16,0.84)', 1.0]]
-            })
-          }
-          .width('100%')
-          .height('100%')
-          .borderRadius(12)
-          .clip(true)
-          .hitTestBehavior(HitTestMode.None)
-        }
-      }
-      .width('100%')
-      .aspectRatio(0.72)
-
-      Text(item.title)
-        .fontSize(13)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(TEXT_MAIN)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-
-      if (item.author !== '') {
-        Text(item.author)
-          .fontSize(11)
-          .fontColor(TEXT_SUB)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-    .onClick(() => {
-      this.open(item);
-    })
+    ComicCard({ aid: item.id, coverUrl: item.coverUrl, title: item.title, author: item.author, badge: item.category,
+      onCardClick: (): void => this.open(item) })
   }
 
   @Builder
@@ -359,7 +245,7 @@ export struct EhBrowsePage {
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
     } else {
-      WaterFlow({ footer: (): void => this.FlowFooter() }) {
+      WaterFlow({ scroller: this.scroller, footer: (): void => this.FlowFooter() }) {
         LazyForEach(this.gallerySource, (item: AlbumLite) => {
           FlowItem() {
             this.GalleryCard(item)
@@ -368,6 +254,7 @@ export struct EhBrowsePage {
         }, (item: AlbumLite) => item.id)
       }
       .cachedCount(4)
+      .clip(false)
       .width('100%')
       .layoutWeight(1)
       .columnsTemplate(this.columnsTemplate())
@@ -395,123 +282,24 @@ export struct EhBrowsePage {
   }
 
   build() {
-    NavDestination() {
-      Column() {
-        // 单一沉浸顶栏：返回 + 站点/入口标题 + 搜索
-        Row({ space: 12 }) {
-          IconCircleButton({
-            symbol: $r('sys.symbol.chevron_left'),
-            onTap: (): void => {
-              this.stack.pop();
-            }
-          })
-
-          Column({ space: 2 }) {
-            Text(this.siteLabel === 'EXHENTAI' ? 'ExHentai' : 'E-Hentai')
-              .fontSize(17)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(TEXT_MAIN)
-              .maxLines(1)
-            if (EhSettings.exDowngraded()) {
-              Text('里站未登录，已临时回退表站')
-                .fontSize(11)
-                .fontColor(PRIMARY)
-                .maxLines(1)
-            }
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-
-          IconCircleButton({
-            symbol: $r('sys.symbol.slider_horizontal_2'),
-            active: this.filter.hasActiveFilter(),
-            onTap: (): void => {
-              this.filterSheet = true;
-            }
-          })
-
-          IconCircleButton({
-            symbol: $r('sys.symbol.magnifyingglass'),
-            active: this.searchMode,
-            onTap: (): void => {
-              this.searchMode = !this.searchMode;
-              if (!this.searchMode && this.query !== '') {
-                this.query = '';
-                this.load('reset');
-              }
-            }
-          })
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 8 })
-        .backgroundColor(BAR_LIGHT)
-        .backgroundBlurStyle(BlurStyle.Regular)
-        .border({ width: { bottom: 0.5 }, color: DIVIDER })
-
-        if (this.searchMode) {
-          SearchSuggestField({
-            text: this.$query,
-            sourceId: 'eh',
-            placeholder: '搜索画廊，支持 artist:xxx / language:chinese 语法…',
-            onSubmit: (val: string, selection: SearchSelection | null): void => {
-              this.query = selection === null ? val :
-                ehTermQuery(selection.term.namespace, selection.term.value, selection.field);
-              if (val.trim() !== '') {
-                searchHistoryStore.record(val.trim()).catch((): void => {});
-              }
-              this.load('reset');
-            }
-          })
-            .margin({ left: 16, right: 16, top: 8 })
-        }
-
-        // 入口页签
-        Row({ space: 8 }) {
-          this.TabChip('最新', 0)
-          this.TabChip('热门', 1)
-          this.TabChip('关注', 2)
-          this.TabChip('收藏', 3)
-          Blank()
-          if (this.totalLabel !== '') {
-            Text(`共 ${this.totalLabel} 个`)
-              .fontSize(11)
-              .fontColor(TEXT_SUB)
-              .maxLines(1)
-          }
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 10, bottom: 4 })
-
+    HdsNavDestination() {
+      Column({ space: 12 }) {
+        Select([{ value: '最新' }, { value: '热门' }, { value: '关注' }, { value: '收藏' }])
+          .selected(this.tab).value(['最新', '热门', '关注', '收藏'][this.tab]).systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+          .onSelect((index: number): void => { if (this.tab !== index) { this.tab = index; this.query = ''; this.load('reset'); } })
+          .margin({ left: 16, right: 16 })
+        if (EhSettings.exDowngraded()) { Text('里站未登录，已切换到表站').fontSize(13).fontColor(TEXT_SUB).padding({ left: 16, right: 16 }) }
         Refresh({ refreshing: $$this.refreshing }) {
-          Column() {
-            this.ListBody()
-          }
-          .width('100%')
-          .height('100%')
-        }
-        .layoutWeight(1)
-        .width('100%')
-        .padding({ left: 16, right: 16 })
-        .onRefreshing(() => {
-          this.load('reset');
-        })
-        .onAreaChange((_old: Area, newArea: Area) => {
-          const width: number = ehLengthToNumber(newArea.width);
-          if (width > 0 && Math.abs(width - this.containerWidth) >= 1) {
-            this.containerWidth = width;
-          }
-        })
-      }
-      .width('100%')
-      .height('100%')
-      .padding({ bottom: this.bottomInset })
-      .backgroundColor(BG)
-      .bindSheet($$this.filterSheet, this.FilterSheetPanel(), {
-        height: SheetSize.FIT_CONTENT,
-        dragBar: true,
-        systemMaterial: IMMERSIVE_SHEET_MATERIAL
-      })
-    }
-    .hideTitleBar(true)
+          Column() { this.ListBody() }.width('100%').height('100%')
+        }.layoutWeight(1).width('100%').padding({ left: 16, right: 16 })
+        .onRefreshing(() => { this.load('reset'); })
+        .onAreaChange((_old: Area, area: Area): void => { this.containerWidth = ehLengthToNumber(area.width); })
+      }.width('100%').height('100%').alignItems(HorizontalAlign.Start).padding({ bottom: this.bottomInset })
+      .bindSheet($$this.filterSheet, this.FilterSheetPanel(), { height: SheetSize.MEDIUM, dragBar: true, systemMaterial: IMMERSIVE_SHEET_MATERIAL })
+    }.titleBar({ content: { title: { mainTitle: this.siteLabel }, menu: { value: [
+      { content: { icon: $r('sys.symbol.magnifyingglass'), label: '搜索', action: (): void => { this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: 'eh', scope: 'source' } as MangaRouteParams); } } },
+      { content: { icon: $r('sys.symbol.slider_horizontal_2'), label: '筛选', action: (): void => { this.filterSheet = true; } } }
+    ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true }).titleMode(HdsNavDestinationTitleMode.MINI)
+    .bindToScrollable([this.scroller]).backgroundColor(BG)
   }
 }

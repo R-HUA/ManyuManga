@@ -1,16 +1,16 @@
 import { MetadataSearchChip } from '../search/MetadataSearchChip';
+import { WorkTags } from './WorkTags';
 import { Album, Chapter, ReadingProgress, MetadataTerm } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
-import { BG, CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 
 @Component
 export struct WorkHeroInfo {
   @Link album: Album | null;
-  @Link coverTint: string;
   @StorageProp('currentBreakpoint') breakpoint: string = 'sm';
   @Consume('navPathStack') stack: NavPathStack;
   @Link sourceName: string;
@@ -61,11 +61,7 @@ export struct WorkHeroInfo {
             SourceCover({
               url: this.album.coverUrl,
               sourceKey: this.aid,
-              radius: 14,
-              deriveColor: true,
-              onColor: (color: string): void => {
-                this.coverTint = color;
-              }
+              radius: 14
             })
           }
           .width(this.breakpoint === 'sm' ? 118 : 148)
@@ -101,7 +97,7 @@ export struct WorkHeroInfo {
 
               Text(this.work !== null && this.work.albums.length > 1
                 ? `已关联 ${this.work.albums.length} 个书源`
-                : '查看更多书源')
+                : '')
                 .fontSize(11)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(TEXT_MAIN)
@@ -110,10 +106,6 @@ export struct WorkHeroInfo {
             .borderRadius(12)
             .backgroundColor(CARD)
             .border({ width: 0.5, color: DIVIDER })
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-            .onClick(() => {
-              this.sourceSheet = true;
-            })
 
             Row({ space: 12 }) {
               Text(`共 ${this.album.episodes.length} 话`)
@@ -147,7 +139,6 @@ export struct WorkHeroInfo {
             .layoutWeight(1)
             .height(46)
             .borderRadius(23)
-            .shadow({ radius: 16, color: 'rgba(10, 89, 247, 0.22)', offsetY: 4 })
             .onClick(() => { this.read(); })
 
           // 1. 收藏/在架切换
@@ -238,21 +229,12 @@ export struct WorkHeroInfo {
 
         // Clickable Tags
         if (this.album.tags.length > 0) {
-          Flex({ wrap: FlexWrap.Wrap }) {
-            ForEach(this.album.tags, (tag: MetadataTerm) => {
-              MetadataSearchChip({ term: tag, sourceId: sourceId(this.aid), sourceName: this.sourceName })
-            }, (tag: MetadataTerm) => JSON.stringify([tag.namespace, tag.value]))
-          }
-          .width('100%')
+          WorkTags({ aid: this.aid, terms: this.album.tags, sourceId: sourceId(this.aid), sourceName: this.sourceName })
         }
       }
       .padding({ left: 16, right: 16, top: 12, bottom: 16 })
       .alignItems(HorizontalAlign.Start)
       .width('100%')
-      .linearGradient({
-        angle: 180,
-        colors: [[this.coverTint, 0.0], [BG, 1.0]]
-      })
     }
   }
 }

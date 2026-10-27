@@ -1,4 +1,5 @@
 import { ReaderController } from './reader/ReaderController';
+import { HdsNavDestination } from '@kit.UIDesignKit';
 import { ReaderHud } from './reader/ReaderHud';
 import { ReaderChapterSheet } from './reader/ReaderChapterSheet';
 import { ReaderImageItem } from './reader/ReaderImageItem';
@@ -38,7 +39,7 @@ export struct ReaderPage {
   @State currentPage: number = 0;
   @State mode: ReaderMode = 'vertical';
   @State @Watch('onHudIdle') hudVisible: boolean = false;
-  @State @Watch('onHudIdle') panel: 'none' | 'mode' | 'display' | 'settings' = 'none';
+  @State @Watch('onHudIdle') panel: 'none' | 'mode' | 'display' | 'settings' | 'thumbnails' = 'none';
   @State @Watch('onHudIdle') sheetVisible: boolean = false;
   @State brightnessValue: number = 100;
   @State bgPaper: boolean = false;
@@ -52,6 +53,7 @@ export struct ReaderPage {
   @State zoomScale: number = 1;
   @State zoomOffsetX: number = 0;
   @State zoomOffsetY: number = 0;
+  @State private readerActive: boolean = true;
   private controller: ReaderController = new ReaderController(this);
 
   aboutToAppear(): void { this.controller.aboutToAppear(); }
@@ -80,6 +82,8 @@ export struct ReaderPage {
             targetWidth: this.controller.targetWidthPx,
             fitScreen: false,
             cropWhite: this.options.cropWhite,
+            active: this.readerActive && !this.inBackground,
+            onDisplayed: (chapter: string, filename: string, visible: boolean): void => { this.controller.pageDisplayed(chapter, filename, visible); },
             onFailure: (filename: string, error: Error): void => { this.controller.pageFailed(filename, error); }
           })
         }
@@ -136,7 +140,6 @@ export struct ReaderPage {
         this.controller.scheduleProgressSave();
       }
     })
-    .gesture(this.readingGesture())
   }
 
   /** 横向翻页（评审 Step4）：跨页序列渲染——horizontal 单页顺排 / rtl 倒排右起 / double 双页并排 */
@@ -154,6 +157,8 @@ export struct ReaderPage {
                 targetWidth: this.controller.targetWidthPx,
                 fitScreen: true,
                 cropWhite: this.options.cropWhite,
+                active: this.readerActive && !this.inBackground,
+                onDisplayed: (chapter: string, filename: string, visible: boolean): void => { this.controller.pageDisplayed(chapter, filename, visible); },
                 onFailure: (filename: string, error: Error): void => { this.controller.pageFailed(filename, error); },
                 onMeasured: (filename: string, aspect: number): void => { this.controller.measuredPage(filename, aspect); }
               })
@@ -182,7 +187,6 @@ export struct ReaderPage {
       this.controller.prefetchAhead(page);
       this.controller.scheduleProgressSave();
     })
-    .gesture(this.readingGesture())
   }
 
   // ───────────────────────── 全屏状态（四态）─────────────────────────
@@ -345,9 +349,9 @@ export struct ReaderPage {
   // ───────────────────────── 页面 ─────────────────────────
 
   build() {
-    NavDestination() {
+    HdsNavDestination() {
       Stack() {
-        // 缩放画布：外层平移（父坐标系）+ 内层缩放 + 双指手势（不拦截单指滚动/翻页）
+        // 手势统一由未变换的画布识别，图片单独缩放和平移。
         Column() {
           Stack() {
             if (this.loadState === 'loading') {
@@ -365,8 +369,13 @@ export struct ReaderPage {
           .width('100%')
           .height('100%')
           .scale({ x: this.zoomScale, y: this.zoomScale })
-          .gesture(
+          .translate({ x: this.zoomOffsetX, y: this.zoomOffsetY })
+        }
+        .width('100%')
+        .height('100%')
+        .gesture(
             GestureGroup(GestureMode.Parallel,
+              this.readingGesture(),
               PinchGesture({ fingers: 2 })
                 .onActionStart((event: GestureEvent): void => {
                   this.controller.onPinchStart(event);
@@ -389,10 +398,6 @@ export struct ReaderPage {
                 })
             )
           )
-        }
-        .width('100%')
-        .height('100%')
-        .translate({ x: this.zoomOffsetX, y: this.zoomOffsetY })
         if (this.options.eyeComfort) {
           Column().width('100%').height('100%').backgroundColor('rgba(255,185,85,0.16)').hitTestBehavior(HitTestMode.None)
         }
@@ -458,13 +463,14 @@ export struct ReaderPage {
     })
     .onShown(() => {
       this.controller.readerVisible = true;
+      this.readerActive = true;
       if (this.controller.paramReady && this.controller.readingResolved && this.loadState === 'loading') { this.controller.retryLoad(); }
-      if (this.loadState === 'ready' && !this.inBackground) { this.controller.activitySince = Date.now(); }
       // 阅读器画布恒深色（米黄除外）：进入即白字/米黄深字（评审 Step2 状态栏联动）
       this.controller.applySystemBarDarkText(this.bgPaper).catch((e: Error): void => {
       });
     })
     .onHidden(() => {
+      this.readerActive = false;
       this.controller.flushProgress();
       this.controller.activitySince = 0; this.controller.readerVisible = false; this.controller.chapterToken++;
     })

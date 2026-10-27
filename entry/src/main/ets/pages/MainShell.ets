@@ -1,4 +1,8 @@
-import { HdsNavigation } from '@kit.UIDesignKit';
+import { HdsNavigation, HdsTabs } from '@kit.UIDesignKit';
+import { SymbolGlyphModifier } from '@ohos.arkui.modifier';
+import { JmBrowsePage } from './jm/JmBrowsePage';
+import { SourceBrowsePage } from './SourceBrowsePage';
+import { ReadingStatsPage } from './ReadingStatsPage';
 import { LibraryPage } from './LibraryPage';
 import { UpdatesPage } from './UpdatesPage';
 import { SourcesPage } from './SourcesPage';
@@ -7,38 +11,13 @@ import { SearchAllPage } from './SearchAllPage';
 import { WorkDetailPage } from './WorkDetailPage';
 import { ReaderPage } from './ReaderPage';
 import { DownloadsPage } from './DownloadsPage';
-import { ExplorePage } from './ExplorePage';
-import { CategoryPage } from './CategoryPage';
 import { ChapterPreviewPage } from './ChapterPreviewPage';
 import { JmSourceSettingsPage } from './JmSourceSettingsPage';
 import { EhBrowsePage } from './eh/EhBrowsePage';
 import { BlockRulesPage } from './settings/BlockRulesPage';
-import { IconCircleButton } from '../common/Components';
-import { IMMERSIVE_TAB_BAR_MATERIAL } from '../common/ImmersiveMaterials';
-import {
-  ROUTE_SEARCH,
-  ROUTE_ALBUM,
-  ROUTE_READER,
-  ROUTE_DOWNLOADS,
-  ROUTE_PREVIEW,
-  ROUTE_JM_SETTINGS,
-  ROUTE_JM_BROWSE,
-  ROUTE_EH_BROWSE,
-  ROUTE_BLOCK_RULES,
-  NAV_STACK_DEPTH_KEY,
-  MangaRouteParams
-} from '../common/Route';
-import {
-  BG,
-  CARD,
-  SUB_CARD,
-  DIVIDER,
-  TEXT_MAIN,
-  TEXT_SUB,
-  PRIMARY,
-  PRIMARY_SOFT,
-  BAR_LIGHT
-} from '../common/Theme';
+import { HDS_NATIVE_MATERIAL } from '../common/ImmersiveMaterials';
+import { ROUTE_SEARCH, ROUTE_ALBUM, ROUTE_READER, ROUTE_DOWNLOADS, ROUTE_PREVIEW, ROUTE_JM_SETTINGS, ROUTE_JM_BROWSE, ROUTE_EH_BROWSE, ROUTE_BLOCK_RULES, ROUTE_STATS, ROUTE_SOURCE_BROWSE, NAV_STACK_DEPTH_KEY } from '../common/Route';
+import { BG, CARD, SUB_CARD, DIVIDER, TEXT_SUB, PRIMARY, PRIMARY_SOFT } from '../common/Theme';
 
 @Component
 export struct MainShell {
@@ -49,7 +28,6 @@ export struct MainShell {
   @StorageProp('bottomRectHeight') bottom: number = 0;
   @StorageProp('librarySelection') selecting: boolean = false;
   @State visible: boolean = true;
-  @State jmTab: number = 0;
   @StorageProp('crashErrorMessage') @Watch('showError') crash: string = '';
 
   private showError(): void {
@@ -68,100 +46,6 @@ export struct MainShell {
   }
 
   @Builder
-  private JmTabLabel(title: string, icon: Resource, index: number) {
-    Column({ space: 3 }) {
-      SymbolGlyph(icon)
-        .fontSize(21)
-        .fontColor([this.jmTab === index ? PRIMARY : $r('sys.color.font_secondary')])
-        .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.jmTab === index)
-      Text(title)
-        .fontSize(11)
-        .fontWeight(this.jmTab === index ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.jmTab === index ? PRIMARY : $r('sys.color.font_secondary'))
-        .lineHeight(13)
-    }
-    .width('100%')
-    .height(48)
-    .padding({ top: 4, bottom: 6 })
-    .borderRadius(24)
-    .backgroundColor(this.jmTab === index ? PRIMARY_SOFT : Color.Transparent)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-  }
-
-  @Builder
-  private JmBrowseDestination() {
-    NavDestination() {
-      Column() {
-        Row({ space: 10 }) {
-          IconCircleButton({
-            symbol: $r('sys.symbol.chevron_left'),
-            onTap: (): void => {
-              this.stack.pop();
-            }
-          })
-
-          Text('禁漫天堂')
-            .fontSize(17)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(TEXT_MAIN)
-            .layoutWeight(1)
-
-          IconCircleButton({
-            symbol: $r('sys.symbol.magnifyingglass'),
-            onTap: (): void => {
-              this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: 'jm' } as MangaRouteParams);
-            }
-          })
-
-          IconCircleButton({
-            symbol: $r('sys.symbol.slider_horizontal_2'),
-            onTap: (): void => {
-              this.stack.pushPathByName(ROUTE_JM_SETTINGS, {} as MangaRouteParams);
-            }
-          })
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 8 })
-        .backgroundColor(BAR_LIGHT)
-        .backgroundBlurStyle(BlurStyle.Regular)
-        .border({ width: { bottom: 0.5 }, color: DIVIDER })
-
-        Tabs({ barPosition: BarPosition.End, index: this.jmTab }) {
-          TabContent() {
-            ExplorePage({ embeddedInShell: true, sourceIdValue: 'jm' })
-          }
-          .tabBar(this.JmTabLabel('精选', $r('sys.symbol.star'), 0))
-
-          TabContent() {
-            CategoryPage({ embeddedInShell: true, sourceIdValue: 'jm' })
-          }
-          .tabBar(this.JmTabLabel('分类', $r('sys.symbol.square_grid_2x2'), 1))
-        }
-        .scrollable(false)
-        .barMode(BarMode.Fixed)
-        .barHeight(60)
-        .barOverlap(true)
-        .barBackgroundColor(Color.Transparent)
-        .barFloatingStyle({
-          barSideMargin: this.breakpoint === 'lg' ? 240 : 104,
-          barBottomMargin: Math.max(10, this.bottom),
-          systemMaterial: IMMERSIVE_TAB_BAR_MATERIAL
-        })
-        .onChange((idx: number) => {
-          this.jmTab = idx;
-        })
-        .width('100%')
-        .layoutWeight(1)
-      }
-      .width('100%')
-      .height('100%')
-      .backgroundColor(BG)
-    }
-    .hideTitleBar(true)
-  }
-
-  @Builder
   private PageMap(name: string) {
     if (name === ROUTE_SEARCH) {
       SearchAllPage()
@@ -174,32 +58,22 @@ export struct MainShell {
     } else if (name === ROUTE_PREVIEW) {
       ChapterPreviewPage()
     } else if (name === ROUTE_JM_BROWSE) {
-      this.JmBrowseDestination()
+      JmBrowsePage()
     } else if (name === ROUTE_EH_BROWSE) {
       EhBrowsePage()
     } else if (name === 'jmSettings' || name === ROUTE_JM_SETTINGS) {
       JmSourceSettingsPage()
+    } else if (name === ROUTE_STATS) {
+      ReadingStatsPage()
+    } else if (name === ROUTE_SOURCE_BROWSE) {
+      SourceBrowsePage()
     } else if (name === ROUTE_BLOCK_RULES) {
       BlockRulesPage()
     }
   }
 
-  @Builder
-  private Label(title: string, icon: Resource, index: number) {
-    Column({ space: 3 }) {
-      SymbolGlyph(icon)
-        .fontSize(21)
-        .fontColor([this.tab === index ? PRIMARY : $r('sys.color.font_secondary')])
-        .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.tab === index)
-      Text(title)
-        .fontSize(11)
-        .fontWeight(this.tab === index ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.tab === index ? PRIMARY : $r('sys.color.font_secondary'))
-    }
-    .width('100%')
-    .height(56)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
+  private tabStyle(title: string, icon: Resource): BottomTabBarStyle {
+    return BottomTabBarStyle.of({ normal: new SymbolGlyphModifier(icon), selected: new SymbolGlyphModifier(icon) }, title);
   }
 
   @Builder
@@ -238,7 +112,7 @@ export struct MainShell {
 
       this.RailItem('书架', $r('sys.symbol.books_vertical_fill'), 0)
       this.RailItem('动态', $r('sys.symbol.clock'), 1)
-      this.RailItem('图源', $r('sys.symbol.compass'), 2)
+      this.RailItem('图源', $r('sys.symbol.square_grid_2x2'), 2)
       this.RailItem('我的', $r('sys.symbol.person'), 3)
       Blank()
     }
@@ -255,12 +129,13 @@ export struct MainShell {
         this.Rail()
       }
       HdsNavigation(this.stack) {
-        Tabs({ barPosition: BarPosition.End, index: this.tab }) {
-          TabContent() { LibraryPage() }.tabBar(this.Label('书架', $r('sys.symbol.books_vertical_fill'), 0))
-          TabContent() { UpdatesPage() }.tabBar(this.Label('动态', $r('sys.symbol.clock'), 1))
-          TabContent() { SourcesPage() }.tabBar(this.Label('图源', $r('sys.symbol.compass'), 2))
-          TabContent() { ProfilePage() }.tabBar(this.Label('我的', $r('sys.symbol.person'), 3))
+        HdsTabs({ index: this.tab }) {
+          TabContent() { LibraryPage() }.tabBar(this.tabStyle('书架', $r('sys.symbol.books_vertical_fill')))
+          TabContent() { UpdatesPage() }.tabBar(this.tabStyle('动态', $r('sys.symbol.clock')))
+          TabContent() { SourcesPage() }.tabBar(this.tabStyle('图源', $r('sys.symbol.square_grid_2x2')))
+          TabContent() { ProfilePage() }.tabBar(this.tabStyle('我的', $r('sys.symbol.person')))
         }
+        .barPosition(BarPosition.End)
         .scrollable(false)
         .barMode(BarMode.Fixed)
         .barHeight(this.breakpoint === 'lg' || this.selecting ? 0 : 60)
@@ -268,8 +143,8 @@ export struct MainShell {
         .barBackgroundColor(Color.Transparent)
         .barFloatingStyle({
           barSideMargin: 36,
-          barBottomMargin: Math.max(10, this.bottom),
-          systemMaterial: IMMERSIVE_TAB_BAR_MATERIAL
+          barBottomMargin: 10 + this.bottom,
+          systemMaterialEffect: HDS_NATIVE_MATERIAL
         })
         .onChange((index: number) => {
           this.tab = index;

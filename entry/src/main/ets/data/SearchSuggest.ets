@@ -28,7 +28,7 @@ export async function suggestLocal(text: string, onlySource: string): Promise<Ar
   const historyRest: Array<string> = [];
   for (const query of history) {
     const lower: string = query.toLowerCase();
-    if (lower.indexOf(needle) < 0) {
+    if (lower.trim() === needle || lower.indexOf(needle) < 0) {
       continue;
     }
     if (lower.indexOf(needle) === 0) {
@@ -55,6 +55,9 @@ export async function suggestLocal(text: string, onlySource: string): Promise<Ar
     }
     for (const tag of album.tags) {
       const suggestion: SearchSuggestion = tagSuggestion(owner, tag);
+      if (suggestion.label.trim().toLowerCase() === needle || suggestion.value.trim().toLowerCase() === needle) {
+        continue;
+      }
       if (`${suggestion.label} ${suggestion.namespace}:${suggestion.value}`.toLowerCase().indexOf(needle) < 0) {
         continue;
       }
@@ -66,6 +69,7 @@ export async function suggestLocal(text: string, onlySource: string): Promise<Ar
   }
   const tags: Array<AlbumTagRow> = await searchAlbumTags(needle, onlySource, SUGGEST_LIMIT * 3);
   for (const tag of tags) {
+    if (tag.label.trim().toLowerCase() === needle || tag.value.trim().toLowerCase() === needle) { continue; }
     pushSuggestion(items, seen, tagSuggestion(sourceId(tag.albumId),
       new MetadataTerm(tag.value, tag.label, tag.namespace)), onlySource);
     if (items.length >= SUGGEST_LIMIT) { return items; }
@@ -73,7 +77,7 @@ export async function suggestLocal(text: string, onlySource: string): Promise<Ar
   const favorites: Array<string> = await favStore.searchTags(needle, SUGGEST_LIMIT);
   for (const tag of favorites) {
     const suggestion: SearchSuggestion = tagSuggestion('', new MetadataTerm(tag));
-    if (suggestion.label.toLowerCase().indexOf(needle) < 0) {
+    if (suggestion.label.trim().toLowerCase() === needle || suggestion.label.toLowerCase().indexOf(needle) < 0) {
       continue;
     }
     pushSuggestion(items, seen, suggestion, onlySource);

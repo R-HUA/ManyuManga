@@ -1,7 +1,7 @@
 import { ComicCard } from '../../common/ComicCard';
 import promptAction from '@ohos.promptAction';
 import { EmptyView } from '../../common/Components';
-import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { comicColumns, BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { ROUTE_READER, MangaRouteParams } from '../../common/Route';
 import { Album, MetadataTerm, errorMessage } from '../../models/Models';
 import { downloadManager, DownloadTask } from '../../data/DownloadManager';
@@ -28,6 +28,7 @@ class OfflineItem {
 
 @Component
 export struct DownloadedPane {
+  @State private contentWidth: number = 328;
   @Consume('navPathStack') stack: NavPathStack;
   @State managing: boolean = false;
   @State items: Array<OfflineItem> = [];
@@ -303,9 +304,10 @@ export struct DownloadedPane {
             }
           }, (item: OfflineItem) => item.albumId)
         }
-        .columnsTemplate('1fr 1fr 1fr')
+        .columnsTemplate('1fr '.repeat(comicColumns(this.contentWidth)))
         .columnsGap(12)
         .rowsGap(12)
+        .onAreaChange((_old: Area, area: Area): void => { this.contentWidth = Number(area.width); })
         .width('100%')
         .layoutWeight(1)
         .padding({ left: 16, right: 16, top: 4, bottom: 8 })

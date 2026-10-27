@@ -1,11 +1,13 @@
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
-import { IconCircleButton, EmptyView } from '../common/Components';
-import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
+import { EmptyView } from '../common/Components';
+import { BG, SUB_CARD, PRIMARY, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 
@@ -84,49 +86,8 @@ export struct ChapterPreviewPage {
   }
 
   build() {
-    NavDestination() {
+    HdsNavDestination() {
       Column() {
-        // 顶部导航栏
-        Row({ space: 10 }) {
-          IconCircleButton({
-            symbol: $r('sys.symbol.chevron_left'),
-            onTap: (): void => {
-              this.stack.pop();
-            }
-          })
-
-          Column({ space: 2 }) {
-            Text(this.chapterTitle || '章节速览')
-              .fontSize(16)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(TEXT_MAIN)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-            if (this.allPages.length > 0) {
-              Text(`共 ${this.allPages.length} 页`)
-                .fontSize(11)
-                .fontColor(TEXT_SUB)
-            }
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-
-          Button('从头阅读', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(13)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(PRIMARY)
-            .backgroundColor(PRIMARY_SOFT)
-            .height(36)
-            .onClick(() => {
-              this.openReaderAt(0);
-            })
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 10 })
-        .backgroundColor(CARD)
-        .border({ width: { bottom: 0.5 }, color: DIVIDER })
-
-        // 主体内容区
         if (this.loading) {
           Column({ space: 12 }) {
             LoadingProgress().width(36).height(36).color(PRIMARY)
@@ -206,7 +167,8 @@ export struct ChapterPreviewPage {
       .height('100%')
       .backgroundColor(BG)
     }
-    .hideTitleBar(true)
+    .titleBar({ content: { title: { mainTitle: this.chapterTitle || '章节速览' }, menu: { value: [{ content: { label: '从头阅读', isEnabled: this.allPages.length > 0, action: (): void => this.openReaderAt(0) } }] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleMode(HdsNavDestinationTitleMode.MINI)
     .onHidden((): void => { this.cancelLoad(); })
     .onShown((): void => {
       if (this.loading && this.loadSignal.aborted()) { this.load(); }

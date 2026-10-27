@@ -27,10 +27,14 @@ export struct MetadataSearchChip {
   }
 
   build() {
-    Button(this.term.label, { type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL })
-      .fontSize(12)
-      .fontColor(this.field === 'author' ? PRIMARY : TEXT_MAIN)
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+    Button({ type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL }) {
+      Text(this.term.label).fontSize(12).fontColor(this.field === 'author' ? PRIMARY : TEXT_MAIN)
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+      .height(32)
+      .width('auto')
+      .constraintSize({ maxWidth: '100%' })
+      .padding({ left: 12, right: 12 })
       .margin({ right: 8, bottom: 8 })
       .backgroundColor(this.field === 'author' ? PRIMARY_SOFT : CARD)
       .borderRadius(14)

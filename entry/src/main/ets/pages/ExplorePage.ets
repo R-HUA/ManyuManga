@@ -1,937 +1,115 @@
-import { ExploreRandomSection } from './jm/ExploreRandomSection';
-import { ExploreRankingSection } from './jm/ExploreRankingSection';
-import { SectionErrorRow } from './jm/SectionErrorRow';
-import { BasicDataSource } from '../common/DataSource';
-import { badgeForAlbum as badgeFor } from '../common/ComicBadge';
-import { PageJumpDialog } from './jm/PageJumpDialog';
-import { ROUTE_SEARCH, ROUTE_ALBUM } from '../common/Route';
-import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } from '../entryability/EntryAbility';
-import { PRIMARY, TEXT_MAIN, TEXT_SUB, CHIP_BG, TAB_INACTIVE, BAR_LIGHT, STATUS_OK, TAB_BAR_HEIGHT, CHIP_R, FONT_TITLE, FONT_CAPTION, FONT_BADGE, SPACE_XS, SPACE_S, SPACE_M, SPACE_L, SPACE_XL } from '../common/Theme';
-import { ComicCard, EmptyView, SkeletonGrid } from '../common/Components';
-import { AlbumLite, RankingType, DomainSpeed, errorMessage } from '../models/Models';
+import { ComicGrid } from '../common/ComicGrid';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SOURCE_BROWSE } from '../common/Route';
+import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
+import { PRIMARY, TEXT_MAIN, TEXT_SUB, DANGER } from '../common/Theme';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
+import { AlbumLite, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
-import { sourceId } from '../data/Sources';
-import { homeCacheStore, blockTagsStore, HomeCacheData } from '../data/Stores';
-/* ── 奖牌/状态灯语义色已切换 Theme token；
-     仅银色角标上的深色数字保留本地常量（Theme 无对应文本色 token，保证对比度）── */
-/** 银色角标上的深色数字（保证对比度） */
-const MEDAL_SILVER_TEXT: string = '#2F3A45';
 
-/** 吸顶光感栏高度 vp */
-const TOP_BAR_H: number = 52;
-/** 榜单横滑卡片宽度 vp（3:4 封面 + 两行标题 + 作者行） */
-const RANK_CARD_W: number = 108;
-
-/* ── 语言/全彩徽章启发式 ── */
-/** Fisher–Yates 洗牌  */
-function shuffle(list: Array<AlbumLite>): Array<AlbumLite> {
-  const out: Array<AlbumLite> = list.slice();
-  for (let i: number = out.length - 1; i > 0; i--) {
-    const j: number = Math.floor(Math.random() * (i + 1));
-    const tmp: AlbumLite = out[i];
-    out[i] = out[j];
-    out[j] = tmp;
-  }
-  return out;
-}
-
-/** 榜单分段定义  */
-class RankTab {
-  order: RankingType;
-  label: string;
-
-  constructor(order: RankingType, label: string) {
-    this.order = order;
-    this.label = label;
-  }
-}
-
-/** 路由参数  */
-class SearchRouteParam {
-  query: string = '';
-  sourceId: string = '';
-}
-
-class AlbumRouteParam {
-  aid: string = '';
-}
-
-/** 「最新更新」网格的一行（断点列数卡片 + 稳定 key） */
-class AlbumRow {
-  rowKey: string = '';
-  cards: Array<AlbumLite> = [];
-}
-
-/** LazyForEach 数据源：最新更新按断点列数分行的行集合 */
-class LatestRowSource extends BasicDataSource<AlbumRow> {
-  reload(items: Array<AlbumLite>, columns: number): void {
-    const newRows: Array<AlbumRow> = [];
-    for (let i: number = 0; i < items.length; i += columns) {
-      const row: AlbumRow = new AlbumRow();
-      row.rowKey = `lat_row_${Math.floor(i / columns)}_${items[i].id}`;
-      row.cards = items.slice(i, i + columns);
-      newRows.push(row);
-    }
-    this.setList(newRows);
-  }
-}
+type HomeSection = 'ranking' | 'random' | 'latest';
 
 @Component
 export struct ExplorePage {
-  /** 全局路由栈 */
   @Consume('navPathStack') navPathStack: NavPathStack;
   @Prop embeddedInShell: boolean = false;
   @Prop sourceIdValue: string = '';
-
-  /* ── 安全区/断点契约 ── */
-  @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
-  @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 16;
-  @StorageProp(CURRENT_BREAKPOINT_KEY) @Watch('onBreakpointChanged') bp: string = 'sm';
-  /* ── 实时联动：屏蔽词变更重过滤 / 双击发现 Tab 滚顶刷新 ── */
-  @StorageProp('blockTagsVersion') @Watch('onBlockTagsChanged') blockVer: number = 0;
-  @StorageProp('exploreRefreshTick') @Watch('onExploreRefreshTick') refreshTick: number = 0;
-
-  /* ── 榜单区── */
-  @State currentRank: RankingType = 'mv_t';
+  scroller: Scroller = new Scroller();
+  @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
+  @StorageProp('blockTagsVersion') @Watch('refresh') blockVersion: number = 0;
+  @State currentRank: string = 'mv_t';
   @State rankItems: Array<AlbumLite> = [];
-  @State rankLoading: boolean = false;
-  @State rankError: string = '';
-
-  /* ── 随机推荐区 ── */
   @State randomItems: Array<AlbumLite> = [];
-  @State randomLoading: boolean = false;
-  @State randomError: string = '';
-  /** 洗牌批次号：进入 ForEach key，换一批后重建卡片以重放交错淡入 */
-  @State randomSeed: number = 0;
-  @State refreshAngle: number = 0;
-
-  /* ── 最新更新区 ── */
   @State latestItems: Array<AlbumLite> = [];
-  @State latestPage: number = 1;
+  @State rankLoading: boolean = false;
+  @State randomLoading: boolean = false;
   @State latestLoading: boolean = false;
-  @State latestMoreLoading: boolean = false;
-  @State latestMoreError: boolean = false;
-  @State latestHasMore: boolean = true;
+  @State rankError: string = '';
+  @State randomError: string = '';
   @State latestError: string = '';
-
-  /* ── 页面级 ── */
-  @State pageLoading: boolean = false;
-  @State pageError: string = '';
   @State refreshing: boolean = false;
+  private generation: number = 0;
+  private rankGeneration: number = 0;
+  private readonly orders: Array<string> = ['mv_t', 'mv_w', 'mv_m', 'mv'];
+  private readonly labels: Array<string> = ['日榜', '周榜', '月榜', '总榜'];
 
-  /* ── 节点延迟灯 ── */
-  @State latencyMs: number = -1;
-  @State latencyDomain: string = '';
+  aboutToAppear(): void { this.refresh(); }
+  aboutToDisappear(): void { this.generation++; this.rankGeneration++; }
 
-  /* ── 非渲染成员 ── */
-  /** 三区未经屏蔽过滤的原始列表 */
-  private rankRaw: Array<AlbumLite> = [];
-  private randomRaw: Array<AlbumLite> = [];
-  private latestRaw: Array<AlbumLite> = [];
-  private randomPool: Array<AlbumLite> = [];
-  private rankCache: Map<string, Array<AlbumLite>> = new Map<string, Array<AlbumLite>>();
-  private rankSeq: number = 0;
-  private latestSource: LatestRowSource = new LatestRowSource();
-  private scroller: Scroller = new Scroller();
-  /** 跳页弹窗 */
-  private pageDialogCtrl: CustomDialogController = new CustomDialogController({
-    builder: PageJumpDialog({
-      current: (): number => this.latestPage,
-      onConfirm: (page: number): void => {
-        this.onPageJumpConfirm(page);
-      }
-    })
-  });
-  private rankTabs: Array<RankTab> = [
-    new RankTab('mv_t', '日榜'),
-    new RankTab('mv_w', '周榜'),
-    new RankTab('mv_m', '月榜'),
-    new RankTab('mv', '总榜')
-  ];
-
-  aboutToAppear(): void {
-    this.initFlow().catch((e: Error) => {
-      console.info(`[ExplorePage] 初始化失败: ${errorMessage(e)}`);
-    });
-  }
-
-  /* ───────────────────────── 数据流（缓存优先 → 网络刷新 → 失败保留） ───────────────────────── */
-
-  private async initFlow(): Promise<void> {
-    try {
-      const cached: HomeCacheData | null = await homeCacheStore.load();
-      if (cached !== null) {
-        if (cached.ranking.length > 0) {
-          this.rankItems = cached.ranking;
-          // 秒开缓存保存前已过滤，写入 raw 供屏蔽词变更后重复过滤（幂等）
-          this.rankRaw = cached.ranking;
-          this.rankCache.set('mv_t', cached.ranking);
-        }
-        if (cached.random.length > 0) {
-          this.randomPool = cached.random;
-          this.randomRaw = cached.random;
-          this.applyRandomBatch();
-        }
-        if (cached.latest.length > 0) {
-          this.latestRaw = cached.latest;
-          this.setLatestItems(cached.latest);
-        }
-      }
-    } catch (e) {
-      console.info(`[ExplorePage] 首页缓存读取失败: ${errorMessage(e as Error)}`);
-    }
-    this.rankLoading = this.rankItems.length === 0;
-    this.randomLoading = this.randomItems.length === 0;
-    this.latestLoading = this.latestItems.length === 0;
-    this.pageLoading = this.rankItems.length === 0
-      && this.randomItems.length === 0 && this.latestItems.length === 0;
-    this.measureLatency().catch((e: Error) => {
-      console.info(`[ExplorePage] 测速失败: ${errorMessage(e)}`);
-    });
-    await this.refreshAll(false);
-  }
-
-  /** 三区并发刷新；每区自行捕获错误 */
-  private async refreshAll(manual: boolean): Promise<void> {
-    const tasks: Array<Promise<boolean>> = [
-      this.fetchRanking(this.currentRank, true),
-      this.fetchRandom(manual),
-      this.fetchLatestPage(1, false)
-    ];
-    const ok: Array<boolean> = await Promise.all(tasks);
-    const allEmpty: boolean = this.rankItems.length === 0
-      && this.randomItems.length === 0 && this.latestItems.length === 0;
-    if (allEmpty && (this.rankError !== '' || this.randomError !== '' || this.latestError !== '')) {
-      // 空 + 失败 → 整页错误态 + 重试
-      this.pageError = this.rankError !== '' ? this.rankError
-        : (this.randomError !== '' ? this.randomError : this.latestError);
-    } else if (!allEmpty && (ok[0] || ok[1] || ok[2])) {
-      try {
-        await homeCacheStore.save(this.randomPool.slice(0, 12), this.rankItems.slice(0, 30),
-          this.latestItems.slice(0, 60));
-      } catch (e) {
-        console.info(`[ExplorePage] 首页缓存写入失败: ${errorMessage(e as Error)}`);
-      }
-    }
-    this.pageLoading = false;
+  private async refresh(): Promise<void> {
+    const ticket: number = ++this.generation;
+    await Promise.all([this.fetchSection('ranking'), this.fetchSection('random'), this.fetchSection('latest')]);
+    if (ticket !== this.generation) { return; }
     this.refreshing = false;
   }
 
-  private async fetchRanking(order: RankingType, skeleton: boolean): Promise<boolean> {
-    const seq: number = ++this.rankSeq;
-    const cached: Array<AlbumLite> | undefined = this.rankCache.get(order);
-    if (cached !== undefined && cached.length > 0 && this.rankItems.length === 0) {
-      this.rankItems = cached;
-    }
-    if (skeleton && this.rankItems.length === 0) {
-      this.rankLoading = true;
-    }
-    this.rankError = '';
+  private async fetchSection(section: HomeSection): Promise<void> {
+    const ticket: number = this.generation;
+    const rankTicket: number = section === 'ranking' ? ++this.rankGeneration : this.rankGeneration;
+    if (section === 'ranking') { this.rankLoading = true; this.rankError = ''; }
+    else if (section === 'random') { this.randomLoading = true; this.randomError = ''; }
+    else { this.latestLoading = true; this.latestError = ''; }
     try {
-      const list: Array<AlbumLite> = await sourceApi.ranking(this.sourceIdValue, '0', order, 1);
-      if (seq !== this.rankSeq) {
-        return false;
-      }
-      this.rankRaw = list;
-      const filtered: Array<AlbumLite> = await this.filterBlocked(list);
-      this.rankCache.set(order, filtered);
-      this.rankItems = filtered;
-      return true;
+      const items: Array<AlbumLite> = section === 'ranking' ?
+        await sourceApi.ranking(this.sourceIdValue, '', this.currentRank, 1) :
+        section === 'random' ? await sourceApi.random(this.sourceIdValue) : await sourceApi.latest(this.sourceIdValue, 1);
+      if (ticket !== this.generation || (section === 'ranking' && rankTicket !== this.rankGeneration)) { return; }
+      if (section === 'ranking') { this.rankItems = items; }
+      else if (section === 'random') { this.randomItems = items; }
+      else { this.latestItems = items; }
     } catch (e) {
-      if (seq !== this.rankSeq) {
-        return false;
-      }
-      const msg: string = errorMessage(e as Error);
-      if (this.rankItems.length === 0) {
-        this.rankError = msg;
-      } else {
-        this.toast(`榜单刷新失败，已保留旧内容：${msg}`);
-      }
-      return false;
+      if (ticket !== this.generation || (section === 'ranking' && rankTicket !== this.rankGeneration)) { return; }
+      if (section === 'ranking') { this.rankError = errorMessage(e as Error); }
+      else if (section === 'random') { this.randomError = errorMessage(e as Error); }
+      else { this.latestError = errorMessage(e as Error); }
     } finally {
-      if (seq === this.rankSeq) {
-        this.rankLoading = false;
+      if (ticket === this.generation) {
+        if (section === 'ranking' && rankTicket === this.rankGeneration) { this.rankLoading = false; }
+        else if (section === 'random') { this.randomLoading = false; }
+        else if (section === 'latest') { this.latestLoading = false; }
       }
     }
   }
 
-  private async fetchRandom(manual: boolean): Promise<boolean> {
-    this.randomLoading = true;
-    try {
-      const list: Array<AlbumLite> = await sourceApi.random(this.sourceIdValue);
-      this.randomRaw = list;
-      const filtered: Array<AlbumLite> = await this.filterBlocked(list);
-      if (filtered.length > 0) {
-        this.randomPool = filtered;
-        this.applyRandomBatch();
-        this.randomError = '';
-      } else {
-        this.randomPool = [];
-        this.randomItems = [];
-      }
-      return true;
-    } catch (e) {
-      const msg: string = errorMessage(e as Error);
-      if (this.randomItems.length === 0) {
-        this.randomError = msg;
-      } else {
-        // 失败 Toast 提示且保留旧内容
-        this.toast(manual ? `换一批失败，已保留旧内容：${msg}` : `随机推荐刷新失败，已保留旧内容：${msg}`);
-      }
-      return false;
-    } finally {
-      this.randomLoading = false;
-    }
+  private browse(mode: string): void {
+    this.navPathStack.pushPathByName(ROUTE_SOURCE_BROWSE, { sourceId: this.sourceIdValue, browseMode: mode, order: this.currentRank } as MangaRouteParams);
   }
 
-  /** isJump=true 为跳页直达 */
-  private async fetchLatestPage(page: number, isMore: boolean, isJump: boolean = false): Promise<boolean> {
-    if (isMore) {
-      this.latestMoreLoading = true;
-      this.latestMoreError = false;
-    } else if (isJump && this.latestItems.length > 0) {
-      // 跳页替换期间复用页脚加载指示
-      this.latestMoreLoading = true;
-    } else if (this.latestItems.length === 0) {
-      this.latestLoading = true;
-    }
-    try {
-      const list: Array<AlbumLite> = await sourceApi.latest(this.sourceIdValue, page);
-      const filtered: Array<AlbumLite> = await this.filterBlocked(list);
-      if (page === 1) {
-        this.latestRaw = list.slice();
-        this.setLatestItems(filtered);
-        this.latestPage = 1;
-      } else if (isJump) {
-        if (list.length > 0) {
-          this.latestRaw = list.slice();
-          this.setLatestItems(filtered);
-          this.latestPage = page;
-        } else {
-          // 跳页超出末页：保留原内容仅提示
-          this.toast(`第 ${page} 页没有内容`);
+  @Builder
+  private Section(title: string, section: HomeSection, items: Array<AlbumLite>, loading: boolean, error: string) {
+    Column({ space: 12 }) {
+      Row({ space: 8 }) {
+        Text(title).fontSize(20).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
+        if (section === 'ranking') {
+          Select(this.labels.map((label: string): SelectOption => { return { value: label }; }))
+            .selected(this.orders.indexOf(this.currentRank)).value(this.labels[this.orders.indexOf(this.currentRank)])
+            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+            .onSelect((index: number): void => { this.currentRank = this.orders[index]; this.fetchSection('ranking'); })
         }
-      } else if (filtered.length > 0) {
-        this.appendLatestRaw(list);
-        this.appendLatest(filtered);
-        this.latestPage = page;
-      } else if (list.length > 0) {
-        // 整页被屏蔽：原始数据留下（取消屏蔽后能回来），页码照样前进，避免反复请求同一页
-        this.appendLatestRaw(list);
-        this.latestPage = page;
+        Button(section === 'random' ? '换一批' : '查看全部', { buttonStyle: ButtonStyleMode.NORMAL })
+          .fontSize(13).fontColor(PRIMARY).backgroundColor(Color.Transparent).enabled(!loading)
+          .onClick(() => { if (section === 'random') { this.fetchSection(section); } else { this.browse(section); } })
+      }.width('100%')
+      if (error !== '') {
+        Text(error).fontSize(13).fontColor(DANGER).width('100%')
+        Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.fetchSection(section))
       }
-      this.latestHasMore = list.length > 0;
-      return true;
-    } catch (e) {
-      const msg: string = errorMessage(e as Error);
-      if (this.latestItems.length === 0) {
-        this.latestError = msg;
-      } else if (isMore) {
-        this.latestMoreError = true;
-      } else {
-        this.toast(`最新更新刷新失败，已保留旧内容：${msg}`);
-      }
-      return false;
-    } finally {
-      this.latestLoading = false;
-      this.latestMoreLoading = false;
-    }
-  }
-
-  /** 屏蔽词过滤 */
-  private async filterBlocked(list: Array<AlbumLite>): Promise<Array<AlbumLite>> {
-    const out: Array<AlbumLite> = [];
-    for (const it of list) {
-      const owner: string = it.id.indexOf('~') > 0 ? sourceId(it.id) : '';
-      const blocked: boolean = await blockTagsStore.isBlocked(
-        it.title, it.author, it.category, it.categorySub, owner);
-      if (!blocked) {
-        out.push(it);
-      }
-    }
-    return out;
-  }
-
-  private setLatestItems(items: Array<AlbumLite>): void {
-    this.latestItems = items.slice();
-    this.latestSource.reload(this.latestItems, this.gridColumns());
-  }
-
-  private appendLatest(adds: Array<AlbumLite>): void {
-    const ids: Array<string> = [];
-    for (const it of this.latestItems) {
-      ids.push(it.id);
-    }
-    const merged: Array<AlbumLite> = this.latestItems.slice();
-    for (const it of adds) {
-      if (ids.indexOf(it.id) < 0) {
-        merged.push(it);
-        ids.push(it.id);
-      }
-    }
-    this.latestItems = merged;
-    this.latestSource.reload(this.latestItems, this.gridColumns());
-  }
-
-  /** 合并原始分页数据 */
-  private appendLatestRaw(adds: Array<AlbumLite>): void {
-    const ids: Array<string> = [];
-    for (const it of this.latestRaw) {
-      ids.push(it.id);
-    }
-    const merged: Array<AlbumLite> = this.latestRaw.slice();
-    for (const it of adds) {
-      if (ids.indexOf(it.id) < 0) {
-        merged.push(it);
-        ids.push(it.id);
-      }
-    }
-    this.latestRaw = merged;
-  }
-
-  private loadMoreLatest(): void {
-    if (this.pageLoading || this.latestLoading || this.latestMoreLoading) {
-      return;
-    }
-    if (!this.latestHasMore || this.latestItems.length === 0) {
-      return;
-    }
-    this.fetchLatestPage(this.latestPage + 1, true).catch((e: Error) => {
-      console.info(`[ExplorePage] 加载更多失败: ${errorMessage(e)}`);
-    });
-  }
-
-  /** 随机推荐本地洗牌出固定数量展示：数量 = 2 行 × 当前列数（sm 6 / md 8 / lg 10），其余留在本地池供洗牌 */
-  private applyRandomBatch(): void {
-    const pool: Array<AlbumLite> = shuffle(this.randomPool);
-    this.randomSeed++;
-    this.randomItems = pool.slice(0, this.gridColumns() * 2);
-  }
-
-  /** 节点测速 */
-  private async measureLatency(): Promise<void> {
-    try {
-      const list: Array<DomainSpeed> = await sourceApi.testDomains(this.sourceIdValue);
-      if (list.length > 0) {
-        this.latencyDomain = list[0].domain;
-        this.latencyMs = list[0].ok ? list[0].ms : -1;
-      }
-    } catch (e) {
-      this.latencyMs = -1;
-    }
-  }
-
-  /* ───────────────────────── 交互 ───────────────────────── */
-
-  /** 评审 Step3：屏蔽词变更（Stores 递增 blockTagsVersion）→ 三区按原始数据重新过滤刷新 UI */
-  private onBlockTagsChanged(): void {
-    this.refilterBlocked().catch((e: Error) => {
-      console.info(`[ExplorePage] 屏蔽词重过滤失败: ${errorMessage(e)}`);
-    });
-  }
-
-  private async refilterBlocked(): Promise<void> {
-    // 其余榜单分段的旧过滤缓存一并失效，切换分段时按新屏蔽词重新拉取
-    this.rankCache.clear();
-    if (this.rankRaw.length > 0) {
-      const filteredRank: Array<AlbumLite> = await this.filterBlocked(this.rankRaw);
-      this.rankCache.set(this.currentRank, filteredRank);
-      this.rankItems = filteredRank;
-    }
-    if (this.randomRaw.length > 0) {
-      const filteredRandom: Array<AlbumLite> = await this.filterBlocked(this.randomRaw);
-      this.randomPool = filteredRandom;
-      this.applyRandomBatch();
-    }
-    if (this.latestRaw.length > 0) {
-      const filteredLatest: Array<AlbumLite> = await this.filterBlocked(this.latestRaw);
-      this.setLatestItems(filteredLatest);
-    }
-  }
-
-  /** 双击「发现」Tab（MainShell 写入 exploreRefreshTick）→ 滚回顶部并刷新 */
-  private onExploreRefreshTick(): void {
-    if (this.pageError !== '') {
-      this.retryPage();
-      return;
-    }
-    this.scroller.scrollToIndex(0, true, ScrollAlign.START);
-    this.refreshAll(true).catch((e: Error) => {
-      console.info(`[ExplorePage] 双击刷新失败: ${errorMessage(e)}`);
-    });
-  }
-
-  /** 断点切换 → 最新更新按新列数重新分行；随机推荐只补足或截断行数，不重洗 */
-  private onBreakpointChanged(): void {
-    if (this.latestItems.length > 0) {
-      this.latestSource.reload(this.latestItems, this.gridColumns());
-    }
-    this.refitRandomToColumns();
-  }
-
-  /** 断点变化时保持当前这批，列数变多则从池里补未展示的，变少则截断。不递增 randomSeed */
-  private refitRandomToColumns(): void {
-    const want: number = this.gridColumns() * 2;
-    if (this.randomItems.length === want) {
-      return;
-    }
-    if (this.randomItems.length > want) {
-      this.randomItems = this.randomItems.slice(0, want);
-      return;
-    }
-    if (this.randomPool.length === 0) {
-      return;
-    }
-    const have: Set<string> = new Set<string>();
-    for (const it of this.randomItems) {
-      if (it.id !== '') {
-        have.add(it.id);
-      }
-    }
-    const more: Array<AlbumLite> = [];
-    const need: number = want - this.randomItems.length;
-    for (const it of this.randomPool) {
-      if (more.length >= need) {
-        break;
-      }
-      if (it.id !== '' && have.has(it.id)) {
-        continue;
-      }
-      more.push(it);
-      if (it.id !== '') {
-        have.add(it.id);
-      }
-    }
-    if (more.length > 0) {
-      this.randomItems = this.randomItems.concat(more);
-    }
-  }
-
-  private openSearch(): void {
-    const param: SearchRouteParam = new SearchRouteParam();
-    param.sourceId = this.sourceIdValue;
-    this.navPathStack.pushPathByName(ROUTE_SEARCH, param);
-  }
-
-  private openAlbum(aid: string): void {
-    const param: AlbumRouteParam = new AlbumRouteParam();
-    param.aid = aid;
-    this.navPathStack.pushPathByName(ROUTE_ALBUM, param);
-  }
-
-  /** 跳页确认（无效输入 Toast；有效页码整页替换直达，超末页保留原内容） */
-  private onPageJumpConfirm(page: number): void {
-    if (page < 1) {
-      this.toast('请输入有效的页码');
-      return;
-    }
-    this.fetchLatestPage(page, false, true).catch((e: Error) => {
-      console.info(`[ExplorePage] 跳页失败: ${errorMessage(e)}`);
-    });
-  }
-
-  /** 顶栏「榜单」入口：平滑滚动回榜单区 */
-  private scrollToRanking(): void {
-    this.scroller.scrollToIndex(0, true, ScrollAlign.START);
-  }
-
-  private onRankTabTap(order: RankingType): void {
-    if (this.currentRank === order) {
-      return;
-    }
-    this.currentRank = order;
-    const cached: Array<AlbumLite> | undefined = this.rankCache.get(order);
-    if (cached !== undefined && cached.length > 0) {
-      this.rankItems = cached;
-      this.rankLoading = false;
-      this.rankError = '';
-    } else {
-      this.rankItems = [];
-      this.rankLoading = true;
-      this.rankError = '';
-    }
-    this.fetchRanking(order, false).catch((e: Error) => {
-      console.info(`[ExplorePage] 榜单切换加载失败: ${errorMessage(e)}`);
-    });
-  }
-
-  private onShuffleTap(): void {
-    if (this.randomLoading) {
-      return;
-    }
-    // 换一批：图标旋转动效 + 重新请求并洗牌
-    this.getUIContext().animateTo({ duration: 450, curve: Curve.EaseInOut }, () => {
-      this.refreshAngle += 360;
-    });
-    this.fetchRandom(true).catch((e: Error) => {
-      console.info(`[ExplorePage] 换一批失败: ${errorMessage(e)}`);
-    });
-  }
-
-  private showNodeInfo(): void {
-    const message: string = this.latencyMs >= 0
-      ? `镜像域名：${this.latencyDomain}\n最近测速：${this.latencyMs} ms`
-      : '正在测速或测速失败，可点击「重新测速」';
-    this.getUIContext().showAlertDialog({
-      title: '当前节点',
-      message: message,
-      alignment: DialogAlignment.Default,
-      buttons: [
-        {
-          value: '重新测速',
-          action: (): void => {
-            this.measureLatency().catch((e: Error) => {
-              console.info(`[ExplorePage] 重新测速失败: ${errorMessage(e)}`);
-            });
-          }
-        },
-        {
-          value: '知道了',
-          action: (): void => {
-          }
-        }
-      ]
-    });
-  }
-
-  private retryPage(): void {
-    this.pageError = '';
-    this.rankError = '';
-    this.randomError = '';
-    this.latestError = '';
-    this.rankLoading = this.rankItems.length === 0;
-    this.randomLoading = this.randomItems.length === 0;
-    this.latestLoading = this.latestItems.length === 0;
-    this.refreshAll(true).catch((e: Error) => {
-      console.info(`[ExplorePage] 重试失败: ${errorMessage(e)}`);
-    });
-  }
-
-  private retryRanking(): void {
-    this.rankError = '';
-    this.rankLoading = this.rankItems.length === 0;
-    this.fetchRanking(this.currentRank, true).catch((e: Error) => {
-      console.info(`[ExplorePage] 榜单重试失败: ${errorMessage(e)}`);
-    });
-  }
-
-  private retryRandom(): void {
-    this.randomError = '';
-    this.randomLoading = this.randomItems.length === 0;
-    this.fetchRandom(true).catch((e: Error) => {
-      console.info(`[ExplorePage] 随机重试失败: ${errorMessage(e)}`);
-    });
-  }
-
-  private retryLatestInitial(): void {
-    this.latestError = '';
-    this.latestLoading = this.latestItems.length === 0;
-    this.fetchLatestPage(1, false).catch((e: Error) => {
-      console.info(`[ExplorePage] 最新重试失败: ${errorMessage(e)}`);
-    });
-  }
-
-  private toast(message: string): void {
-    try {
-      this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000, bottom: '38%' });
-    } catch (e) {
-      console.info(`[ExplorePage] Toast 显示失败: ${errorMessage(e as Error)}`);
-    }
-  }
-
-  /* ───────────────────────── 布局辅助 ───────────────────────── */
-
-    private gridColumns(): number {
-    return this.bp === 'sm' ? 3 : (this.bp === 'md' ? 4 : 5);
-  }
-
-  private fillerIndexes(count: number): Array<number> {
-    const list: Array<number> = [];
-    for (let i: number = 0; i < count; i++) {
-      list.push(i);
-    }
-    return list;
-  }
-
-  /* ───────────────────────── Builders ───────────────────────── */
-
-  /** 品牌 + 延迟灯+ 胶囊搜索入口 + 榜单入口 */
-  @Builder
-  TopBar() {
-    Row({ space: SPACE_M }) {
-      Column({ space: 2 }) {
-        Text('JMcomic')
-          .fontSize(FONT_TITLE)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .maxLines(1)
-        Row({ space: 4 }) {
-          Row()
-            .width(7)
-            .height(7)
-            .borderRadius(4)
-            .backgroundColor(this.latencyMs >= 0 ? STATUS_OK : TAB_INACTIVE)
-          Text(this.latencyMs >= 0 ? `${this.latencyMs} ms` : '测速中…')
-            .fontSize(FONT_BADGE)
-            .fontColor(TEXT_SUB)
-            .maxLines(1)
-        }
-        .alignItems(VerticalAlign.Center)
-        .onClick(() => {
-          this.showNodeInfo();
-        })
-      }
-      .alignItems(HorizontalAlign.Start)
-
-      Row({ space: SPACE_S }) {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(14)
-          .fontColor([TEXT_SUB])
-        Text('搜索漫画名、作者或编号直达')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-      }
-      .layoutWeight(1)
-      .height(34)
-      .padding({ left: 12, right: 12 })
-      .backgroundColor(CHIP_BG)
-      .borderRadius(CHIP_R)
-      .alignItems(VerticalAlign.Center)
-      .onClick(() => {
-        this.openSearch();
-      })
-
-      Text('榜单')
-        .fontSize(12)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(PRIMARY)
-        .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-        .backgroundColor(CHIP_BG)
-        .borderRadius(CHIP_R)
-        .maxLines(1)
-        .onClick(() => {
-          this.scrollToRanking();
-        })
-    }
-    .width('100%')
-    .height(TOP_BAR_H + (this.embeddedInShell ? 0 : this.topInset))
-    .padding({ top: this.embeddedInShell ? 0 : this.topInset, left: SPACE_L, right: SPACE_M })
-    .alignItems(VerticalAlign.Center)
-    .backgroundColor(BAR_LIGHT)
-    .backgroundBlurStyle(BlurStyle.Regular)
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP])
-  }
-
-            /** 热门榜单区 */
-  @Builder
-  private RankingSection() {
-    ExploreRankingSection({
-      rankLoading: this.$rankLoading,
-      rankItems: this.$rankItems,
-      rankError: this.$rankError,
-      retryRanking: (): void => this.retryRanking(),
-      rankTabs: this.rankTabs,
-      currentRank: this.$currentRank,
-      onRankTabTap: (order: RankingType): void => this.onRankTabTap(order),
-      openAlbum: (aid: string): void => this.openAlbum(aid),
-    })
-  }
-
-      /** 随机推荐区 */
-  @Builder
-  private RandomSection() {
-    ExploreRandomSection({
-      randomLoading: this.$randomLoading,
-      onShuffleTap: (): void => this.onShuffleTap(),
-      randomItems: this.$randomItems,
-      randomError: this.$randomError,
-      retryRandom: (): void => this.retryRandom(),
-      openAlbum: (aid: string): void => this.openAlbum(aid),
-      randomSeed: this.$randomSeed,
-    })
-  }
-
-  /** 最新更新区头：标题 + 页码胶囊+ 首屏骨架/错误/空态 */
-  @Builder
-  LatestHeader() {
-    Column({ space: SPACE_M }) {
-      Row() {
-        Text('最新更新')
-          .fontSize(FONT_TITLE)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .layoutWeight(1)
-        Text(`第 ${this.latestPage} 页`)
-          .fontSize(FONT_CAPTION)
-          .fontColor(PRIMARY)
-          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-          .backgroundColor(CHIP_BG)
-          .borderRadius(CHIP_R)
-          .onClick(() => {
-            this.pageDialogCtrl.open();
-          })
-      }
-      .width('100%')
-      .padding({ left: SPACE_L, right: SPACE_L })
-
-      if (this.latestLoading && this.latestItems.length === 0) {
-        SkeletonGrid({ columns: this.gridColumns(), rows: 3 })
-          .padding({ left: SPACE_L, right: SPACE_L })
-      } else if (this.latestError !== '' && this.latestItems.length === 0) {
-        SectionErrorRow(this.latestError, (): void => {
-          this.retryLatestInitial();
-        })
-      } else if (this.latestItems.length === 0) {
-        Text('暂无更新，下拉刷新试试')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
-          .padding({ left: SPACE_L })
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-  }
-
-  /** 最新更新网格的一行（断点列数，不足位补空白占位） */
-  @Builder
-  LatestRow(row: AlbumRow) {
-    Row({ space: SPACE_L }) {
-      ForEach(row.cards, (it: AlbumLite) => {
-        Column() {
-          ComicCard({
-            aid: it.id,
-            coverUrl: it.coverUrl,
-            title: it.title,
-            author: it.author,
-            badge: badgeFor(it),
-            onCardClick: (): void => {
-              this.openAlbum(it.id);
-            }
-          })
-        }
-        .layoutWeight(1)
-      }, (it: AlbumLite) => 'lat_' + it.id)
-      ForEach(this.fillerIndexes(this.gridColumns() - row.cards.length), (k: number) => {
-        Column()
-          .layoutWeight(1)
-      }, (k: number) => `lf_${row.rowKey}_${k}`)
-    }
-    .width('100%')
-    .padding({ left: SPACE_L, right: SPACE_L, top: SPACE_S, bottom: SPACE_S })
-  }
-
-  /** 底部页脚：加载更多 / 失败重试 / 没有更多了 */
-  @Builder
-  LatestFooter() {
-    Column({ space: SPACE_XS }) {
-      if (this.latestMoreLoading) {
-        Row({ space: SPACE_S }) {
-          LoadingProgress()
-            .width(18)
-            .height(18)
-            .color(PRIMARY)
-          Text('加载中…')
-            .fontSize(FONT_CAPTION)
-            .fontColor(TEXT_SUB)
-        }
-        .alignItems(VerticalAlign.Center)
-      } else if (this.latestMoreError) {
-        Text('加载失败，点击重试')
-          .fontSize(FONT_CAPTION)
-          .fontColor(PRIMARY)
-          .padding({ top: SPACE_S, bottom: SPACE_S })
-          .onClick(() => {
-            this.loadMoreLatest();
-          })
-      } else if (this.latestItems.length > 0 && !this.latestHasMore) {
-        Text('— 没有更多了 —')
-          .fontSize(FONT_CAPTION)
-          .fontColor(TEXT_SUB)
-        Text(`已加载 ${this.latestItems.length} 部作品`)
-          .fontSize(FONT_BADGE)
-          .fontColor(TEXT_SUB)
-      } else if (this.latestItems.length > 0 && this.latestHasMore) {
-        Text('上拉加载更多')
-          .fontSize(FONT_BADGE)
-          .fontColor(TEXT_SUB)
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Center)
-    // 评审 Step2/Step4：sm 避开自绘底栏+导航条；md/lg 无底栏仅避导航条
-    .padding({
-      top: SPACE_S,
-      bottom: (this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset : this.bottomInset) + SPACE_XL
-    })
+      if (loading && items.length === 0) { LoadingProgress().width(28).height(28) }
+      if (!loading && error === '' && items.length === 0) { Text('暂无内容').fontSize(13).fontColor(TEXT_SUB).width('100%') }
+      ComicGrid({ items: items, rows: 2, onOpen: (item: AlbumLite): void => {
+        this.navPathStack.pushPathByName(ROUTE_ALBUM, { aid: item.id } as MangaRouteParams);
+      } })
+    }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   build() {
-    Stack({ alignContent: Alignment.Top }) {
-      if (this.pageError !== '') {
-        Column() {
-          EmptyView({
-            message: this.pageError,
-            retryText: '重试',
-            showRetry: true,
-            onRetry: (): void => {
-              this.retryPage();
-            }
-          })
-        }
-        .width('100%')
-        .height('100%')
-        .justifyContent(FlexAlign.Center)
-        .padding({ bottom: this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset : this.bottomInset })
-      } else {
-        Refresh({ refreshing: $$this.refreshing, offset: 14, friction: 42 }) {
-          List({ space: SPACE_M, scroller: this.scroller }) {
-            ListItem() {
-              Column()
-                .height(this.embeddedInShell ? SPACE_S : TOP_BAR_H + this.topInset + SPACE_S)
-            }
-            ListItem() {
-              this.RankingSection()
-            }
-            ListItem() {
-              this.RandomSection()
-            }
-            ListItem() {
-              this.LatestHeader()
-            }
-            LazyForEach(this.latestSource, (row: AlbumRow) => {
-              ListItem() {
-                this.LatestRow(row)
-              }
-            }, (row: AlbumRow) => row.rowKey)
-            ListItem() {
-              this.LatestFooter()
-            }
-          }
-          .width('100%')
-          .height('100%')
-          .cachedCount(4)
-          .scrollBar(BarState.Off)
-          .onReachEnd(() => {
-            this.loadMoreLatest();
-          })
-        }
-        .width('100%')
-        .height('100%')
-        .onRefreshing(() => {
-          this.refreshAll(true).catch((e: Error) => {
-            console.info(`[ExplorePage] 下拉刷新失败: ${errorMessage(e)}`);
-            this.refreshing = false;
-          });
-        })
-      }
-      if (!this.embeddedInShell) {
-        this.TopBar()
-      }
-    }
-    .width('100%')
-    .height('100%')
+    Refresh({ refreshing: $$this.refreshing }) {
+      Scroll(this.scroller) {
+        Column({ space: 28 }) {
+          this.Section('热门', 'ranking', this.rankItems, this.rankLoading, this.rankError)
+          this.Section('随机推荐', 'random', this.randomItems, this.randomLoading, this.randomError)
+          this.Section('最新上架', 'latest', this.latestItems, this.latestLoading, this.latestError)
+        }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 28 + this.bottomInset })
+      }.width('100%').height('100%').align(Alignment.TopStart).scrollBar(BarState.Off).clip(false)
+    }.width('100%').height('100%').onRefreshing(() => { this.refresh(); })
   }
 }

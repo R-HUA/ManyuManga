@@ -1,10 +1,12 @@
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { saveDownload } from './downloads/DownloadFileExporter';
 import { DownloadedPane } from './downloads/DownloadedPane';
 import { BasicDataSource } from '../common/DataSource';
 import { DownloadTaskCard } from './downloads/DownloadTaskCard';
 import { DownloadSummary } from './downloads/DownloadSummary';
 import { PRIMARY, PRIMARY_SOFT, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK } from '../common/Theme';
-import { EmptyView, IconCircleButton } from '../common/Components';
+import { EmptyView } from '../common/Components';
 import { errorMessage } from '../models/Models';
 import { downloadManager, DownloadTask } from '../data/DownloadManager';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
@@ -228,49 +230,10 @@ export struct DownloadsPage {
 
   /* ===== UI 构建 ===== */
 
-  /** 评审 Step2：自绘顶栏（返回 + 标题），替代系统 .title()——全屏布局下需自行避让状态栏 */
-  @Builder
-  private TopBar() {
-    Row({ space: 10 }) {
-      IconCircleButton({
-        glyph: $r('sys.symbol.chevron_left'),
-        onTap: (): void => {
-          this.navPathStack.pop();
-        }
-      })
-      Text('离线下载与 CBZ 导出')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-        .layoutWeight(1)
-      if (this.section === 'tasks' && this.tasks.length > 0) {
-        Text(this.selectMode ? '完成' : '批量管理')
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.selectMode ? Color.White : PRIMARY)
-          .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-          .borderRadius(16)
-          .backgroundColor(this.selectMode ? PRIMARY : PRIMARY_SOFT)
-          .onClick(() => {
-            if (this.selectMode) {
-              this.exitSelect();
-            } else {
-              this.selectMode = true;
-              this.selectedIds = [];
-            }
-          })
-      }
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 8 })
-    .alignItems(VerticalAlign.Center)
-  }
-
   build() {
-    NavDestination() {
+    HdsNavDestination() {
       Stack() {
         Column() {
-          this.TopBar()
           this.SectionBar()
 
           if (this.section === 'offline') {
@@ -335,7 +298,8 @@ export struct DownloadsPage {
       .width('100%')
       .height('100%')
     }
-    .hideTitleBar(true)
+    .titleBar({ content: { title: { mainTitle: '离线下载' }, menu: { value: [{ content: { label: this.selectMode ? '完成' : '批量管理', isEnabled: this.section === 'tasks' && this.tasks.length > 0, action: (): void => { if (this.selectMode) { this.exitSelect(); } else { this.selectMode = true; this.selectedIds = []; } } } }] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleMode(HdsNavDestinationTitleMode.MINI)
     .backgroundColor(BG)
   }
 

@@ -5,12 +5,12 @@ import { BasicDataSource } from '../common/DataSource';
 import { formatCount, langBadgeFor } from '../common/ComicBadge';
 import { AlbumCard } from './jm/AlbumCard';
 import { AddCatDialog } from './jm/AddCatDialog';
-import { FONT_CAPTION, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TAB_BAR_HEIGHT, TEXT_SUB } from '../common/Theme';
+import { FONT_CAPTION, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TEXT_SUB, comicColumns } from '../common/Theme';
 import { EmptyView, SkeletonGrid } from '../common/Components';
 import { ROUTE_ALBUM } from '../common/Route';
 import { AlbumLite, CategoryItem, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
-import { sourceId } from '../data/Sources';
+import { sourceId, sourceStore } from '../data/Sources';
 import { blockTagsStore, customCatStore } from '../data/Stores';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } from '../entryability/EntryAbility';
 export { formatCount, langBadgeFor } from '../common/ComicBadge';
@@ -102,9 +102,12 @@ export struct CategoryPage {
   @State finished: boolean = false;
   @State loadedCount: number = 0;
   @State headerHeight: number = CATEGORY_BAR_HEIGHT;
+  @State private contentWidth: number = 328;
+  @State private refreshing: boolean = false;
+  private customQuery: string = '';
 
   private source: AlbumSource = new AlbumSource();
-  private scroller: Scroller = new Scroller();
+  scroller: Scroller = new Scroller();
   private page: number = 1;
   private requestSeq: number = 0;
   /** 未经屏蔽过滤的合并原始列表（评审 Step3：屏蔽词变更时重复过滤整体替换） */
@@ -125,8 +128,6 @@ export struct CategoryPage {
   });
 
   aboutToAppear(): void {
-    // 评审 Step2：首帧头部高度估算补上状态栏避让（onAreaChange 随后校准为实际值，缓解首帧重叠）
-    this.headerHeight = (this.embeddedInShell ? 0 : this.topInset) + CATEGORY_BAR_HEIGHT;
     sourceApi.init().catch((e: Error) => {
       console.info(`[CategoryPage] sourceApi.init: ${errorMessage(e)}`);
     });
@@ -136,6 +137,8 @@ export struct CategoryPage {
     });
     this.reload();
   }
+
+  aboutToDisappear(): void { this.requestSeq++; }
 
   // ── 数据 ──
 
@@ -202,6 +205,8 @@ export struct CategoryPage {
   }
 
   private async reload(): Promise<void> {
+    if (this.loadedCount > 0) { this.scroller.scrollTo({ xOffset: 0, yOffset: 0 }); }
+    this.loadingMore = false;
     this.page = 1;
     this.finished = false;
     this.moreError = false;
@@ -260,8 +265,11 @@ export struct CategoryPage {
   private async fetchPage(target: number): Promise<void> {
     const seq: number = ++this.requestSeq;
     const slug: string = this.currentSlug();
+    const query: string = this.customQuery;
+    const order: string = this.order;
     try {
-      const raw: Array<AlbumLite> = await sourceApi.ranking(this.sourceIdValue, slug, this.order, target);
+      const raw: Array<AlbumLite> = query === '' ? await sourceApi.ranking(this.sourceIdValue, slug, order, target) :
+        (await sourceApi.searchSource(await sourceStore.get(this.sourceIdValue), query, target)).list;
       if (seq !== this.requestSeq) {
         return;
       }
@@ -308,6 +316,7 @@ export struct CategoryPage {
       if (seq === this.requestSeq) {
         this.firstLoading = false;
         this.loadingMore = false;
+        this.refreshing = false;
       }
     }
   }
@@ -321,6 +330,7 @@ export struct CategoryPage {
     this.selectedCatId = '';
     this.selectedCatName = '';
     this.selectedCatSlug = '';
+    this.customQuery = '';
     this.applyOrderDefaultAndReload();
   }
 
@@ -331,7 +341,17 @@ export struct CategoryPage {
     this.selectedCatId = cat.id;
     this.selectedCatName = cat.name;
     this.selectedCatSlug = cat.slug;
+    this.customQuery = '';
     this.applyOrderDefaultAndReload();
+  }
+
+  private selectCustom(term: string): void {
+    this.selectedCatId = `custom:${term}`;
+    this.selectedCatName = term;
+    this.selectedCatSlug = '';
+    this.customQuery = term;
+    this.order = 'mr';
+    this.reload();
   }
 
   /** 联动：无 slug 分类（含全部）默认最新 mr，有 slug 默认总榜 mv（CategoryScreen.kt:240-242） */
@@ -350,7 +370,7 @@ export struct CategoryPage {
 
     /** 响应式网格列数（评审 Step4：sm 3 / md 4 / lg 5） */
   private gridColumns(): number {
-    return this.bp === 'sm' ? 3 : (this.bp === 'md' ? 4 : 5);
+    return comicColumns(this.contentWidth);
   }
 
   /** WaterFlow 列模板串（如 '1fr 1fr 1fr'），随断点联动 */
@@ -381,6 +401,7 @@ export struct CategoryPage {
         fontColor: PRIMARY,
         action: (): void => {
           customCatStore.remove(term).then((): void => {
+            if (this.customQuery === term) { this.selectAll(); }
             this.refreshCustomCats();
           }).catch((e: Error) => {
             console.info(`[CategoryPage] 自定义分类删除失败: ${errorMessage(e)}`);
@@ -402,6 +423,7 @@ export struct CategoryPage {
       selectAll: (): void => this.selectAll(),
       categories: this.$categories,
       selectCategory: (cat: CategoryItem): void => this.selectCategory(cat),
+      selectCustom: (term: string): void => this.selectCustom(term),
       customCats: this.$customCats,
       catDrawerVisible: this.$catDrawerVisible,
       selectedCatName: this.$selectedCatName,
@@ -511,12 +533,16 @@ export struct CategoryPage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Top }) {
+    Refresh({ refreshing: $$this.refreshing }) {
+      Stack({ alignContent: Alignment.Top }) {
       this.Content()
       this.FilterHeader()
+      }.width('100%').height('100%')
     }
     .width('100%')
     .height('100%')
-    .padding({ bottom: this.bp === 'sm' ? TAB_BAR_HEIGHT + this.bottomInset + SPACE_S : this.bottomInset + SPACE_S })
+    .padding({ bottom: this.bottomInset + SPACE_S })
+    .onRefreshing(() => { this.reload(); })
+    .onAreaChange((_old: Area, area: Area): void => { this.contentWidth = Number(area.width) - 32; })
   }
 }

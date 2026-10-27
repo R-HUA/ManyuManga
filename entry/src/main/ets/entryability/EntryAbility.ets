@@ -3,9 +3,10 @@ import { window } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import fs from '@ohos.file.fs';
+import promptAction from '@ohos.promptAction';
 import { sourceApi } from '../data/SourceApi';
 import { openDatabase } from '../data/db/AppDatabase';
-import { setAppContext } from '../util/Prefs';
+import { Prefs, setAppContext } from '../util/Prefs';
 
 const DOMAIN: number = 0x0000;
 const TAG: string = 'EntryAbility';
@@ -21,7 +22,7 @@ export const BOTTOM_RECT_HEIGHT_KEY: string = 'bottomRectHeight';
 export const CURRENT_BREAKPOINT_KEY: string = 'currentBreakpoint';
 /** 当前是否深色模式（setColorMode 生效后经 onConfigurationUpdate 同步） */
 export const IS_DARK_MODE_KEY: string = 'isDarkMode';
-/** 应用处于后台/多任务（Index 防窥遮罩消费） */
+/** 阅读计时与应用锁使用的后台状态。 */
 export const APP_IN_BACKGROUND_KEY: string = 'appInBackground';
 
 /** 浅色页面下的状态栏文字色（深色文字配浅色背景，修复白底白字） */
@@ -53,6 +54,7 @@ export default class EntryAbility extends UIAbility {
   /** errorManager.on('error') 返回的观察者 id，off 时必须回传该 number */
   private observerId: number = -1;
   private mainWindow: window.Window | null = null;
+  private privacyError: string = '';
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     this.observerId = errorManager.on('error', this.errorObserver);
@@ -81,19 +83,24 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    // 多任务/后台切换信号：Index 消费 APP_IN_BACKGROUND_KEY 叠加防窥遮罩（评审 Step1）
+    // 阅读计时与应用锁共用系统窗口生命周期信号。
     windowStage.on('windowStageEvent', (stageEvent: window.WindowStageEventType) => {
       const inBg: boolean = stageEvent === window.WindowStageEventType.INACTIVE
         || stageEvent === window.WindowStageEventType.PAUSED
         || stageEvent === window.WindowStageEventType.HIDDEN;
       AppStorage.setOrCreate(APP_IN_BACKGROUND_KEY, inBg);
     });
-    windowStage.loadContent('pages/Index', (err: BusinessError<void>) => {
+    this.setupImmersiveWindow(windowStage).then((): void => {
+      windowStage.loadContent('pages/Index', (err: BusinessError<void>) => {
       if (err.code) {
         hilog.error(DOMAIN, TAG, 'loadContent failed, cause: %{public}s', JSON.stringify(err));
         return;
       }
-      this.setupImmersiveWindow(windowStage);
+      if (this.privacyError !== '') {
+        promptAction.showToast({ message: this.privacyError });
+        this.privacyError = '';
+      }
+      });
     });
   }
 
@@ -107,6 +114,12 @@ export default class EntryAbility extends UIAbility {
     try {
       const win: window.Window = await windowStage.getMainWindow();
       this.mainWindow = win;
+      try {
+        const prefs: Prefs = await Prefs.getInstance();
+        await win.setWindowPrivacyMode(await prefs.previewProtection());
+      } catch (e) {
+        this.privacyError = `隐私保护设置失败：${errorMessageText(e as Error)}`;
+      }
       await win.setWindowLayoutFullScreen(true);
       const isDark: boolean = AppStorage.get<boolean>(IS_DARK_MODE_KEY) ?? false;
       await this.updateStatusBarText(isDark);

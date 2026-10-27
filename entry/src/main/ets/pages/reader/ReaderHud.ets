@@ -2,8 +2,8 @@ import { ReaderOptions } from '../../data/ReaderOptions';
 import { ReaderSettingsPanel } from './ReaderSettingsPanel';
 import { ReaderDisplayPanel } from './ReaderDisplayPanel';
 import { ReaderModePanel } from './ReaderModePanel';
-import { HudButton } from './ReaderControls';
 import { ReaderThumbStrip } from './ReaderThumbStrip';
+import { HudButton } from './ReaderControls';
 import { PageThumbItem } from './ReaderImageItem';
 import display from '@ohos.display';
 import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
@@ -18,7 +18,7 @@ export struct ReaderHud {
   @Link brightnessValue: number;
   @Link bgPaper: boolean;
   @Link preloadCount: number;
-  @Link panel: 'none' | 'mode' | 'display' | 'settings';
+  @Link panel: 'none' | 'mode' | 'display' | 'settings' | 'thumbnails';
   @Link hudVisible: boolean;
   goBack: () => void = (): void => {};
   @Link pages: Array<string>;
@@ -59,6 +59,7 @@ export struct ReaderHud {
       Column()
         .width('100%')
         .layoutWeight(1)
+        .hitTestBehavior(HitTestMode.Block)
         .onClick(() => {
           this.panel = 'none';
           this.hudVisible = false;
@@ -159,9 +160,12 @@ export struct ReaderHud {
         this.DisplayPanel()
       } else if (this.panel === 'settings') {
         this.SettingsPanel()
+      } else if (this.panel === 'thumbnails' && !this.sliderDragging && !this.sheetVisible && this.pages.length > 0) {
+        ReaderThumbStrip({ pages: this.pages, currentPage: this.currentPage, photoId: this.currentChapterId(),
+          scrambleId: this.scrambleId, jumpToPage: (page: number): void => this.jumpToPage(page) })
       }
       // 拖动进度条时显示目标页缩略图预览小窗
-      if (this.sliderDragging && this.pages.length > 0) {
+      if (this.sliderDragging && this.panel === 'none' && this.pages.length > 0) {
         Column({ space: 4 }) {
           PageThumbItem({
             photoId: this.currentChapterId(),
@@ -180,17 +184,6 @@ export struct ReaderHud {
         .backgroundColor(PANEL_BG)
         .border({ width: 0.5, color: 'rgba(255,255,255,0.16)' })
         .alignItems(HorizontalAlign.Center)
-      }
-      if (this.sliderDragging && this.panel === 'none' && this.pages.length > 0) {
-        ReaderThumbStrip({
-          pages: this.pages,
-          currentPage: this.currentPage,
-          photoId: this.chapterId(),
-          scrambleId: this.scrambleId,
-          jumpToPage: (page: number): void => {
-            this.jumpToPage(page);
-          }
-        })
       }
       // 进度滑动条 + 上一话/下一话
       if (this.pages.length > 0) {
@@ -223,6 +216,7 @@ export struct ReaderHud {
               .height(28)
               .onChange((value: number, mode: SliderChangeMode) => {
                 if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+                  this.panel = 'none';
                   this.sliderDragging = true;
                   this.sliderValue = value;
                 } else {
@@ -261,8 +255,16 @@ export struct ReaderHud {
           symbol: $r('sys.symbol.list_bullet'),
           label: '目录',
           onTap: (): void => {
+            this.panel = 'none';
+            this.sliderDragging = false;
             this.sheetVisible = true;
           }
+        })
+        HudButton({
+          symbol: $r('sys.symbol.square_grid_2x2'),
+          label: '缩略图',
+          active: this.panel === 'thumbnails',
+          onTap: (): void => { this.panel = this.panel === 'thumbnails' ? 'none' : 'thumbnails'; }
         })
         HudButton({
           symbol: $r('sys.symbol.rectangle_on_rectangle'),

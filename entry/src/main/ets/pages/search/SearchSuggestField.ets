@@ -1,5 +1,6 @@
 import { BasicDataSource } from '../../common/DataSource';
-import { CARD, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { IMMERSIVE_CONTROL_MATERIAL, IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
+import { TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { SearchSelection } from '../../common/Route';
 import { MetadataTerm, errorMessage } from '../../models/Models';
 import { SearchSuggestion, suggestLocal } from '../../data/SearchSuggest';
@@ -10,10 +11,12 @@ class SuggestSource extends BasicDataSource<SearchSuggestion> {
   }
 }
 
+interface SuggestPopupState { isVisible: boolean; }
+
 @Component
 export struct SearchSuggestField {
   @Link text: string;
-  @Prop sourceId: string = '';
+  @Prop @Watch('reset') sourceId: string = '';
   @Prop placeholder: string = '';
   @Prop selection: SearchSelection | null = null;
   onEdit: (text: string) => void = (_text: string): void => {};
@@ -21,13 +24,21 @@ export struct SearchSuggestField {
     (_text: string, _selection: SearchSelection | null): void => {};
   @State open: boolean = false;
   @State error: string = '';
+  @State contentWidth: number = 280;
   private source: SuggestSource = new SuggestSource();
   private generation: number = 0;
   private timer: number = -1;
 
   aboutToDisappear(): void {
+    this.reset();
+  }
+
+  private reset(): void {
     this.generation++;
     this.clearTimer();
+    this.open = false;
+    this.error = '';
+    this.source.reload([]);
   }
 
   private clearTimer(): void {
@@ -38,7 +49,8 @@ export struct SearchSuggestField {
   }
 
   private schedule(value: string): void {
-    this.clearTimer();
+    this.reset();
+    if (value.trim() === '') { return; }
     const ticket: number = ++this.generation;
     this.timer = setTimeout((): void => {
       this.timer = -1;
@@ -55,7 +67,7 @@ export struct SearchSuggestField {
       this.error = '';
     } catch (e) {
       if (ticket !== this.generation) { return; }
-      this.open = false;
+      this.open = true;
       this.error = errorMessage(e as Error);
     }
   }
@@ -72,12 +84,39 @@ export struct SearchSuggestField {
     this.onSubmit(next, selection);
   }
 
+  @Builder
+  private Suggestions() {
+    List({ space: 4 }) {
+      if (this.error !== '') {
+        ListItem() { Text(this.error).fontSize(12).fontColor(TEXT_SUB).padding(12) }
+      }
+      LazyForEach(this.source, (item: SearchSuggestion) => {
+        ListItem() {
+          Button(item.label, { type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL })
+            .fontSize(14)
+            .fontColor(item.kind === 'history' ? TEXT_SUB : TEXT_MAIN)
+            .backgroundColor(Color.Transparent)
+            .width('100%')
+            .height(44)
+            .onClick(() => this.choose(item))
+        }
+      }, (item: SearchSuggestion) => `${item.kind}_${item.sourceId}_${item.namespace}_${item.value}`)
+    }
+    .width(this.contentWidth)
+    .constraintSize({ maxHeight: 264 })
+    .padding(8)
+    .scrollBar(BarState.Off)
+  }
+
   build() {
-    Column({ space: 6 }) {
       Search({ value: this.text, placeholder: this.placeholder })
         .width('100%')
-        .height(40)
-        .backgroundColor(CARD)
+        .height(48)
+        .fontColor($r('sys.color.font_primary'))
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
+        .searchButton('搜索', { autoDisable: true })
+        .cancelButton({ style: CancelButtonStyle.INPUT })
         .onChange((value: string) => {
           this.text = value;
           this.selection = null;
@@ -90,35 +129,11 @@ export struct SearchSuggestField {
           this.open = false;
           this.onSubmit(value, this.selection);
         })
-      if (this.error !== '') {
-        Text(this.error).fontSize(12).fontColor(TEXT_SUB)
-      }
-      if (this.open) {
-        List({ space: 6 }) {
-          LazyForEach(this.source, (item: SearchSuggestion) => {
-            ListItem() {
-              Button(item.label, {
-                type: ButtonType.Normal,
-                buttonStyle: ButtonStyleMode.NORMAL
-              })
-                .fontSize(13)
-                .fontColor(item.kind === 'history' ? TEXT_SUB : TEXT_MAIN)
-                .backgroundColor(SUB_CARD)
-                .width('100%')
-                .height(36)
-                .borderRadius(12)
-                .onClick(() => {
-                  this.choose(item);
-                })
-            }
-          }, (item: SearchSuggestion) => `${item.kind}_${item.sourceId}_${item.label}`)
-        }
-        .width('100%')
-        .constraintSize({ maxHeight: 220 })
-        .scrollBar(BarState.Off)
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
+        .onAreaChange((_old: Area, area: Area) => { this.contentWidth = Number(area.width); })
+        .bindPopup(this.open, {
+          builder: this.Suggestions(), placement: Placement.Bottom, enableArrow: false,
+          systemMaterial: IMMERSIVE_REGULAR_MATERIAL,
+          onStateChange: (event: SuggestPopupState): void => { if (!event.isVisible) { this.open = false; } }
+        })
   }
 }

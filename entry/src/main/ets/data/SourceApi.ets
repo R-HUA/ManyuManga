@@ -57,6 +57,13 @@ class SourceApi {
     return result;
   }
 
+  /** 本地目录与扩展的热门入口独立于关键词搜索；远端请求格式保持原有约定。 */
+  async browseSource(id: string, page: number = 1): Promise<SearchResult> {
+    const source: SourceEntry = await sourceStore.get(id);
+    if (source.kind !== 'local' && source.kind !== 'suwayomi') { throw new Error('该图源应使用专属浏览入口'); }
+    return this.searchSource(source, '', page);
+  }
+
   async album(key: string, refresh: boolean = false, signal: RequestAbortGroup | null = null): Promise<Album> {
     const offline: Album | null = refresh ? null : await offlineStore.album(key);
     if (offline !== null) {

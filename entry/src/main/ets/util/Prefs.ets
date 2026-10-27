@@ -4,6 +4,7 @@
 
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
+import window from '@ohos.window';
 
 /** 全部偏好 key 常量（集中定义，页面层只读引用） */
 export class PrefKeys {
@@ -31,7 +32,7 @@ export class PrefKeys {
   static readonly PRELOAD_PAGES: string = 'preload_pages';
   static readonly BRIGHTNESS: string = 'reader_brightness';
   static readonly SECURITY_LOCK: string = 'security_lock';
-  /** 后台预览遮罩。缺省视为开启，和已开启的应用锁互不覆盖。 */
+  /** 系统窗口隐私保护；沿用既有偏好键。 */
   static readonly PREVIEW_PROTECTION: string = 'preview_protection';
   // ── 鸿蒙版新增（api-spec §3.3 [M] 第 2 条：图片解码并发，0=自动；对应 PageLoader.kt:31-44）──
   static readonly DECODE_CONCURRENCY: string = 'decode_concurrency';
@@ -255,13 +256,21 @@ export class Prefs {
     return this.putBool(PrefKeys.SECURITY_LOCK, v);
   }
 
-  /** 后台预览保护（默认开）。与应用锁分开保存。 */
+  /** 系统隐私保护默认开启，与应用锁分开保存。 */
   async previewProtection(): Promise<boolean> {
     return this.getBool(PrefKeys.PREVIEW_PROTECTION, true);
   }
 
-  async setPreviewProtection(v: boolean): Promise<void> {
-    return this.putBool(PrefKeys.PREVIEW_PROTECTION, v);
+  async setPreviewProtection(v: boolean, windowName: string): Promise<void> {
+    const previous: boolean = await this.previewProtection();
+    const win: window.Window = window.findWindow(windowName);
+    await win.setWindowPrivacyMode(v);
+    try { await this.putBool(PrefKeys.PREVIEW_PROTECTION, v); }
+    catch (e) {
+      await win.setWindowPrivacyMode(previous);
+      await this.putBool(PrefKeys.PREVIEW_PROTECTION, previous);
+      throw e as Error;
+    }
   }
 
   /** 收藏排序：time_desc / time_asc / title_asc / title_desc */

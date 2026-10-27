@@ -70,7 +70,7 @@ export async function searchTests(test) {
     const plain = new Album('jm~10', '普通标签'); plain.tags = [new MetadataTerm('name:part')];
     await env.load('data/stores/CacheStores').albumCacheStore.put(plain);
     const plainSuggestions = await env.load('data/SearchSuggest').suggestLocal('name:part', 'jm');
-    assert.equal(plainSuggestions[0].namespace, ''); assert.equal(plainSuggestions[0].value, 'name:part');
+    assert.deepEqual(plainSuggestions, []);
   });
 
   await test('元数据按钮的三个搜索目标保留复合图源身份与原词', async env => {
@@ -109,7 +109,7 @@ export async function searchTests(test) {
     const page = new (env.load('pages/SearchAllPage').SearchAllPage)();
     env.load('data/Library').library.list = async () => works;
     env.load('data/SourceApi').sourceApi.searchSource = () => { throw new Error('书架不能发网络搜索'); };
-    page.scope = 'library'; page.selection = selection; await page.search();
+    page.scope = 'library'; page.query = selection.term.value; page.selection = selection; await page.search();
     assert.equal(page.libraryWorks.length, 1); assert.equal(page.groups.length, 0);
   });
 

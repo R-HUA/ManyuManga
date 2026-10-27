@@ -4,10 +4,10 @@ export function sourceGlyph(token: string): Resource {
     return $r('sys.symbol.folder');
   }
   if (token === 'gallery') {
-    return $r('sys.symbol.rectangle_on_rectangle');
+    return $r('sys.symbol.website');
   }
   if (token === 'drive') {
     return $r('sys.symbol.externaldrive');
   }
-  return $r('sys.symbol.cloud');
+  return $r('sys.symbol.website');
 }

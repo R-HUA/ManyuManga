@@ -1,26 +1,13 @@
+import { HdsNavigation } from '@kit.UIDesignKit';
+import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import promptAction from '@ohos.promptAction';
 import { library, LibraryWork } from '../data/Library';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_READER, ROUTE_DOWNLOADS } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
-import { sourceId } from '../data/Sources';
-import { capabilitiesForSourceId } from '../data/source/SourceContracts';
-import { presentationFor } from '../data/source/SourceCatalog';
 import { readProgressStore, historyStore } from '../data/Stores';
 import { ReadingProgress, HistoryItem, Album, errorMessage } from '../models/Models';
 import { SourceCover } from '../common/SourceCover';
-import { IconCircleButton } from '../common/Components';
-import {
-  BG,
-  CARD,
-  SUB_CARD,
-  TEXT_MAIN,
-  TEXT_SUB,
-  PRIMARY,
-  PRIMARY_SOFT,
-  DANGER,
-  DIVIDER,
-  TAB_BAR_HEIGHT
-} from '../common/Theme';
+import { BG, TEXT_MAIN, TEXT_SUB, PRIMARY, PRIMARY_SOFT, DANGER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -39,7 +26,9 @@ export struct UpdatesPage {
   @State busy: boolean = false;
   @State section: number = 0;
 
+  private scroller: Scroller = new Scroller();
   private generation: number = 0;
+  private loadGeneration: number = 0;
 
   aboutToAppear(): void {
     this.load();
@@ -47,6 +36,7 @@ export struct UpdatesPage {
 
   aboutToDisappear(): void {
     this.generation++;
+    this.loadGeneration++;
   }
 
   private tabChanged(): void {
@@ -59,12 +49,16 @@ export struct UpdatesPage {
   }
 
   private async load(): Promise<void> {
+    const ticket: number = ++this.loadGeneration;
     try {
-      this.works = await library.list();
-      this.recent = await readProgressStore.list();
-      this.history = await historyStore.getList();
+      const works: Array<LibraryWork> = await library.list();
+      const recent: Array<ReadingProgress> = await readProgressStore.list();
+      const history: Array<HistoryItem> = (await historyStore.getList()).filter((h: HistoryItem): boolean =>
+        recent.some((p: ReadingProgress): boolean => p.aid === h.id && p.chapterId !== '' && p.totalPages > 0 && p.page >= 0 && p.page < p.totalPages));
+      if (ticket !== this.loadGeneration) { return; }
+      this.works = works; this.recent = recent; this.history = history;
     } catch (e) {
-      this.errors = [errorMessage(e as Error)];
+      if (ticket === this.loadGeneration) { this.errors = [errorMessage(e as Error)]; }
     }
   }
 
@@ -113,300 +107,73 @@ export struct UpdatesPage {
     return this.works.filter((w: LibraryWork) => w.newChapters > 0);
   }
 
-  private safeSourceBadge(key: string): string {
-    try {
-      return presentationFor(capabilitiesForSourceId(sourceId(key)).kind).shortLabel;
-    } catch (e) {
-      return '';
-    }
+  private clearHistory(): void {
+    this.getUIContext().showAlertDialog({
+      title: '清空阅读历史', message: '确定清空全部阅读历史？续读进度将保留。',
+      primaryButton: { value: '取消', action: (): void => {} },
+      secondaryButton: { value: '清空', fontColor: DANGER, action: (): void => {
+        historyStore.clear().then((): void => { this.loadGeneration++; this.history = []; }).catch((e: Error): void => { this.errors = [errorMessage(e)]; });
+      } }
+    });
+  }
+
+  private historySubtitle(item: HistoryItem): string {
+    const progress: ReadingProgress | undefined = this.recent.find((p: ReadingProgress): boolean => p.aid === item.id);
+    return progress === undefined ? '' : `第 ${progress.page + 1} / ${progress.totalPages} 页`;
   }
 
   @Builder
-  private SegmentPill(label: string, count: number, idx: number) {
-    Row({ space: 6 }) {
-      Text(label)
-        .fontSize(13)
-        .fontWeight(this.section === idx ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.section === idx ? Color.White : TEXT_SUB)
-      if (count > 0) {
-        Text(`${count}`)
-          .fontSize(10)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.section === idx ? PRIMARY : TEXT_SUB)
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .borderRadius(8)
-          .backgroundColor(this.section === idx ? Color.White : SUB_CARD)
-      }
-    }
-    .justifyContent(FlexAlign.Center)
-    .layoutWeight(1)
-    .height(36)
-    .borderRadius(18)
-    .backgroundColor(this.section === idx ? PRIMARY : 'transparent')
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-    .onClick(() => {
-      this.section = idx;
-    })
-  }
-
-  @Builder
-  private Entry(title: string, cover: string, subtitle: string, badge: string, key: string, reading: boolean) {
+  private Entry(title: string, cover: string, subtitle: string, key: string, reading: boolean) {
     Row({ space: 14 }) {
-      Column() {
-        SourceCover({ url: cover, sourceKey: key, radius: 10 })
-      }
-      .width(56)
-      .height(74)
-
+      Row({ space: 14 }) {
+      Column() { SourceCover({ url: cover, sourceKey: key, radius: 10 }) }.width(56).aspectRatio(0.75)
       Column({ space: 6 }) {
-        Row({ space: 6 }) {
-          Text(this.safeSourceBadge(key))
-            .fontSize(10)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(PRIMARY)
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .borderRadius(6)
-            .backgroundColor(PRIMARY_SOFT)
-          Text(title)
-            .fontColor(TEXT_MAIN)
-            .fontSize(15)
-            .fontWeight(FontWeight.Bold)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-        }
-        .width('100%')
-
-        Text(subtitle)
-          .fontColor(TEXT_SUB)
-          .fontSize(12)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Text(badge)
-        .fontSize(12)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(reading ? Color.White : PRIMARY)
-        .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-        .borderRadius(16)
-        .backgroundColor(reading ? PRIMARY : PRIMARY_SOFT)
-    }
-    .padding(12)
-    .width('100%')
-    .backgroundColor(CARD)
-    .borderRadius(18)
-    .border({ width: 0.5, color: DIVIDER })
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
-    .onClick(() => {
-      this.stack.pushPathByName(reading ? ROUTE_READER : ROUTE_ALBUM, { aid: key } as MangaRouteParams);
-    })
-  }
-
-  @Builder
-  private EmptySection(title: string, desc: string, actionLabel: string, onTap: () => void) {
-    Column({ space: 12 }) {
-      Stack({ alignContent: Alignment.Center }) {
-        SymbolGlyph($r('sys.symbol.clock'))
-          .fontSize(28)
-          .fontColor([PRIMARY])
-      }
-      .width(60)
-      .height(60)
-      .borderRadius(30)
-      .backgroundColor(PRIMARY_SOFT)
-
-      Text(title)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-      Text(desc)
-        .fontSize(12)
-        .fontColor(TEXT_SUB)
-        .textAlign(TextAlign.Center)
-        .padding({ left: 32, right: 32 })
-
-      if (actionLabel !== '') {
-        Text(actionLabel)
-          .fontSize(13)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .padding({ left: 18, right: 18, top: 9, bottom: 9 })
-          .borderRadius(18)
-          .backgroundColor(PRIMARY)
-          .onClick(() => {
-            onTap();
+        Text(title).fontColor(TEXT_MAIN).fontSize(15).fontWeight(FontWeight.Bold)
+          .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+        Text(subtitle).fontColor(TEXT_SUB).fontSize(12).maxLines(1).width('100%')
+      }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+      }.layoutWeight(1)
+      .onClick(() => this.stack.pushPathByName(ROUTE_ALBUM, { aid: key } as MangaRouteParams))
+      if (reading) {
+        Button('继续阅读', { buttonStyle: ButtonStyleMode.NORMAL }).fontSize(13).fontColor(PRIMARY).backgroundColor(PRIMARY_SOFT)
+          .onClick((): void => {
+            this.stack.pushPathByName(ROUTE_READER, { aid: key } as MangaRouteParams);
           })
       }
-    }
-    .padding({ top: 64, bottom: 48 })
-    .width('100%')
-    .alignItems(HorizontalAlign.Center)
+    }.padding({ top: 12, bottom: 12 }).width('100%')
   }
 
   build() {
-    Column({ space: 12 }) {
-      // Top Header
-      Row({ space: 10 }) {
-        Column({ space: 2 }) {
-          Text('动态')
-            .fontSize(26)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(TEXT_MAIN)
-          if (this.busy) {
-            Text('正在检查书架更新…')
-              .fontSize(11)
-              .fontColor(PRIMARY)
-          }
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-
-        if (this.section === 2 && this.history.length > 0) {
-          IconCircleButton({
-            glyph: $r('sys.symbol.trash'),
-            onTap: (): void => {
-              this.getUIContext().showAlertDialog({
-                title: '清空浏览历史',
-                message: '确定清空所有浏览历史记录吗？书架与阅读进度不受影响。',
-                primaryButton: { value: '取消', action: () => {} },
-                secondaryButton: {
-                  value: '清空',
-                  fontColor: DANGER,
-                  action: () => {
-                    historyStore.clear().then(() => {
-                      this.load();
-                      promptAction.showToast({ message: '已清空浏览历史' });
-                    });
-                  }
-                }
-              });
+    HdsNavigation() {
+      Column() {
+        Select([{ value: '更新' }, { value: '阅读历史' }]).selected(this.section).value(this.section === 0 ? '更新' : '阅读历史')
+          .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+          .onSelect((index: number): void => { this.section = index; }).margin({ left: 16, right: 16, bottom: 12 })
+        Scroll(this.scroller) {
+          Column({ space: 8 }) {
+            if (this.busy) { Text('正在检查更新').fontSize(13).fontColor(TEXT_SUB) }
+            ForEach(this.errors, (error: string) => { Text(error).fontSize(13).fontColor(DANGER).width('100%') }, (error: string) => error)
+            if (this.section === 0) {
+              ForEach(this.updatedWorks(), (work: LibraryWork) => {
+                this.Entry(work.title, work.cover, `发现 ${work.newChapters} 个新章节`, work.activeKey, false)
+              }, (work: LibraryWork) => work.id)
+              if (this.updatedWorks().length === 0) { Text('暂无新章节').fontSize(14).fontColor(TEXT_SUB).padding({ top: 36 }).width('100%') }
+            } else {
+              ForEach(this.history, (item: HistoryItem) => {
+                this.Entry(item.title, item.coverUrl, this.historySubtitle(item), item.id, true)
+              }, (item: HistoryItem) => item.id)
+              if (this.history.length === 0) { Text('暂无阅读历史').fontSize(14).fontColor(TEXT_SUB).padding({ top: 36 }).width('100%') }
             }
-          })
-        }
-
-        IconCircleButton({
-          glyph: $r('sys.symbol.arrow_clockwise'),
-          active: this.busy,
-          onTap: (): void => {
-            this.refresh();
-          }
-        })
-
-        IconCircleButton({
-          glyph: $r('sys.symbol.arrow_down_circle'),
-          onTap: (): void => {
-            this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams);
-          }
-        })
-      }
-      .padding({ left: 16, right: 16, top: this.topInset + 10, bottom: 4 })
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      // 3-Segment Switcher
-      Row({ space: 4 }) {
-        this.SegmentPill('更新', this.updatedWorks().length, 0)
-        this.SegmentPill('最近阅读', this.recent.length, 1)
-        this.SegmentPill('浏览历史', this.history.length, 2)
-      }
-      .padding(3)
-      .margin({ left: 16, right: 16 })
-      .borderRadius(19)
-      .backgroundColor(SUB_CARD)
-      .border({ width: 0.5, color: DIVIDER })
-
-      Scroll() {
-        Column({ space: 10 }) {
-          if (this.errors.length > 0) {
-            Column({ space: 4 }) {
-              ForEach(this.errors, (err: string) => {
-                Text(err)
-                  .fontSize(11)
-                  .fontColor(TEXT_SUB)
-                  .width('100%')
-              }, (err: string) => err)
-            }
-            .padding(12)
-            .borderRadius(14)
-            .backgroundColor(CARD)
-            .width('100%')
-          }
-
-          if (this.section === 0) {
-            ForEach(this.updatedWorks(), (w: LibraryWork) => {
-              this.Entry(w.title, w.cover, `发现 ${w.newChapters} 个新章节`, `+${w.newChapters} 话`, w.activeKey, false)
-            }, (w: LibraryWork) => `${w.id}_${w.newChapters}`)
-
-            if (this.updatedWorks().length === 0) {
-              this.EmptySection(
-                '暂无新章节提醒',
-                '书架作品均为最新状态',
-                this.busy ? '检查中…' : '检查更新',
-                () => {
-                  this.refresh();
-                }
-              )
-            }
-          } else if (this.section === 1) {
-            ForEach(this.recent, (p: ReadingProgress) => {
-              this.Entry(
-                p.title,
-                p.coverUrl,
-                `${new Date(p.at).toLocaleDateString()} 读至第 ${p.page + 1} / ${Math.max(1, p.totalPages)} 页`,
-                '继续读',
-                p.aid,
-                true
-              )
-            }, (p: ReadingProgress) => `${p.aid}_${p.at}`)
-
-            if (this.recent.length === 0) {
-              this.EmptySection(
-                '还没有阅读进度',
-                '翻阅任意漫画章节后，系统会自动记录精确到页码的阅读位置',
-                '去书架看看',
-                () => {
-                  AppStorage.setOrCreate('mainTabIndex', 0);
-                }
-              )
-            }
-          } else {
-            ForEach(this.history, (h: HistoryItem) => {
-              this.Entry(
-                h.title,
-                h.coverUrl,
-                `浏览于 ${new Date(h.viewedAt).toLocaleDateString()}${h.author ? '  ' + h.author : ''}`,
-                '查看',
-                h.id,
-                false
-              )
-            }, (h: HistoryItem) => `${h.id}_${h.viewedAt}`)
-
-            if (this.history.length === 0) {
-              this.EmptySection(
-                '暂无浏览历史',
-                '浏览过的作品会自动留存在这里，方便随时找回',
-                '',
-                () => {}
-              )
-            }
-          }
-        }
-        .padding({
-          left: 16,
-          right: 16,
-          bottom: (this.breakpoint === 'lg' ? 28 : TAB_BAR_HEIGHT + 28) + this.bottomInset
-        })
-        .width('100%')
-      }
-      .layoutWeight(1)
-      .width('100%')
-      .scrollBar(BarState.Off)
+          }.padding({ left: 16, right: 16, bottom: (this.breakpoint === 'lg' ? 28 : TAB_BAR_HEIGHT + 28) + this.bottomInset })
+          .width('100%').alignItems(HorizontalAlign.Start)
+        }.layoutWeight(1).width('100%').align(Alignment.TopStart).scrollBar(BarState.Off).clip(false)
+      }.width('100%').height('100%').alignItems(HorizontalAlign.Start)
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(BG)
+    .titleBar({ content: { title: { mainTitle: '动态' }, menu: { value: [
+      { content: { icon: $r('sys.symbol.arrow_clockwise'), label: '检查更新', action: (): void => { this.refresh(); } } },
+      { content: { icon: $r('sys.symbol.arrow_down_circle'), label: '下载', action: (): void => { this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams); } } },
+      { content: { icon: $r('sys.symbol.trash'), label: '清空阅读历史', action: (): void => this.clearHistory() } }
+    ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller]).width('100%').height('100%').backgroundColor(BG)
   }
 }

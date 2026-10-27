@@ -11,6 +11,7 @@ export struct ComicCard {
   @Prop author: string = '';
   @Prop badge: string = '';
   @Prop loading: boolean = false;
+  @Prop progressLabel: string = '';
   onCardClick: () => void = () => {};
 
   @State skelAlpha: number = 1.0;
@@ -99,6 +100,13 @@ export struct ComicCard {
             this.Badge()
           }
         }
+        if (this.progressLabel !== '') {
+          Column() {
+            Blank()
+            Text(this.progressLabel).fontSize(10).fontColor(Color.White).maxLines(1)
+              .width('100%').padding(6).backgroundColor('rgba(0,0,0,0.6)')
+          }.width('100%').height('100%').hitTestBehavior(HitTestMode.None)
+        }
       }
       .width('100%')
       .aspectRatio(COVER_ASPECT_RATIO)
@@ -128,16 +136,16 @@ export struct ComicCard {
           .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_MAIN)
           .maxLines(2)
+          .constraintSize({ minHeight: 36 })
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
-        if (this.author !== '') {
           Text(this.author)
             .fontSize(11)
             .fontColor(TEXT_SUB)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
-        }
+            .constraintSize({ minHeight: 16 })
       }
     }
     .width('100%')

@@ -8,11 +8,11 @@ import { sourceApi as jmApi } from '../../data/SourceApi';
 import { library } from '../../data/Library';
 import { readerPreferences, ReaderOptions } from '../../data/ReaderOptions';
 import { readingActivity } from '../../data/ReadingActivity';
-import { fallbackSource, SourceSwitchResult, switchedProgress } from '../../data/SourceSwitch';
+import { fallbackSource, SourceSwitchResult } from '../../data/SourceSwitch';
 import { makeSpreads, spreadForPage, lastPageInSpread } from '../../data/ReaderLayout';
 import { loadPagePixelMap, releasePagePixelMap } from '../../data/ImageDecode';
 import { isRequestCancelled, RequestAbortGroup } from '../../util/RequestAbort';
-import { albumCacheStore, pagesCacheStore, readProgressStore } from '../../data/Stores';
+import { albumCacheStore, pagesCacheStore, readProgressStore, historyStore } from '../../data/Stores';
 import { Prefs, getAppContext } from '../../util/Prefs';
 import { IS_DARK_MODE_KEY } from '../../entryability/EntryAbility';
 
@@ -42,7 +42,7 @@ interface ReaderHost {
   currentPage: number;
   mode: ReaderMode;
   hudVisible: boolean;
-  panel: 'none' | 'mode' | 'display' | 'settings';
+  panel: 'none' | 'mode' | 'display' | 'settings' | 'thumbnails';
   sheetVisible: boolean;
   brightnessValue: number;
   bgPaper: boolean;
@@ -67,6 +67,9 @@ export class ReaderController {
   private widePages: Set<string> = new Set();
   private switchingSource: boolean = false;
   activitySince: number = 0;
+  private visiblePages: Set<string> = new Set();
+  private displayedProgress: ReadingProgress | null = null;
+  private activityPage: string = '';
   private visible: boolean = true;
 
   get readerVisible(): boolean { return this.visible; }
@@ -75,6 +78,9 @@ export class ReaderController {
     const wasVisible: boolean = this.visible;
     this.visible = value;
     if (!value) {
+      this.flushProgress();
+      this.activitySince = 0;
+      this.visiblePages.clear();
       this.albumToken++;
       if (!this.readingResolved) { this.readingStarted = false; }
       this.albumSignal.abortAll();
@@ -141,7 +147,7 @@ export class ReaderController {
 
   backgroundChanged(): void {
     if (this.host.inBackground) { this.flushProgress(); this.activitySince = 0; }
-    else if (this.readerVisible && this.host.loadState === 'ready') { this.activitySince = Date.now(); }
+    else if (this.readerVisible && this.visiblePages.size > 0) { this.activitySince = Date.now(); }
   }
 
   async persistOptions(): Promise<void> {
@@ -188,8 +194,9 @@ export class ReaderController {
         this.attemptedSources, (): boolean => token === this.chapterToken && !this.destroyed && this.readerVisible);
       if (token !== this.chapterToken || this.destroyed) { return false; }
       this.flushProgress();
-      await readProgressStore.save(switchedProgress(result));
-      if (token !== this.chapterToken || this.destroyed || !this.readerVisible) { return false; }
+      this.activitySince = 0;
+      this.visiblePages.clear();
+      this.displayedProgress = null;
       await library.activate(result.album.id);
       if (token !== this.chapterToken || this.destroyed || !this.readerVisible) { return false; }
       this.albumToken++;
@@ -412,6 +419,8 @@ export class ReaderController {
     // 先落盘当前话进度，再清空 pages。否则节流中的保存会看到空列表直接返回，目录切章/加载中返回会丢进度
     this.flushProgress();
     this.activitySince = 0;
+    this.visiblePages.clear();
+    this.displayedProgress = null;
     if (!preserveAttempts) { this.attemptedSources.clear(); }
     this.widePages.clear();
     this.host.chapterIndex = chapterIdx;
@@ -512,9 +521,7 @@ export class ReaderController {
     // 4) 预加载下一章（目录 + 前 5 页）
     this.preloadNextChapter(token, preloadSignal).catch((e: Error): void => {
     });
-    this.saveProgressNow();
     library.activate(this.host.aid).catch((e: Error) => { this.toastMsg(`保存当前书源失败：${errorMessage(e)}`); });
-    if (!this.host.inBackground && this.readerVisible) { this.activitySince = Date.now(); }
   }
 
   retryLoad(): void {
@@ -627,16 +634,44 @@ export class ReaderController {
   }
 
   private saveProgressNow(): void {
-    if (this.host.aid === '' || this.host.pages.length === 0) {
+    if (this.displayedProgress === null) {
       return;
     }
     const now: number = Date.now();
     const elapsed: number = this.activitySince > 0 ? Math.max(0, now - this.activitySince) : 0;
     if (this.activitySince > 0) { this.activitySince = now; }
-    readingActivity.record(this.activityBookKey || this.host.aid, `${this.currentChapterId()}~${this.host.currentPage}`, elapsed)
-      .catch((e: Error) => { this.toastMsg(`统计保存失败：${errorMessage(e)}`); });
-    readProgressStore.save(this.buildProgress()).catch((e: Error): void => { this.toastMsg(`进度保存失败：${errorMessage(e)}`); });
-    this.lastSavedAt = Date.now();
+    if (elapsed > 0) {
+      readingActivity.record(this.activityBookKey || this.displayedProgress.aid, this.activityPage, elapsed)
+        .catch((e: Error) => { this.toastMsg(`统计保存失败：${errorMessage(e)}`); });
+    }
+    if (elapsed > 0) { this.lastSavedAt = now; }
+  }
+
+  /** 只有真实显示的当前章节页面才能推进记录；预加载与迟到回调不属于阅读。 */
+  pageDisplayed(chapter: string, filename: string, visible: boolean): void {
+    if (chapter !== this.currentChapterId()) { return; }
+    const page: number = this.host.pages.indexOf(filename);
+    if (page < 0) { return; }
+    if (!visible) {
+      this.visiblePages.delete(filename);
+      if (this.visiblePages.size === 0) { this.flushProgress(); this.activitySince = 0; }
+      return;
+    }
+    if (this.destroyed || !this.readerVisible || this.host.inBackground || this.host.loadState !== 'ready' || this.visiblePages.has(filename)) { return; }
+    this.flushProgress();
+    this.visiblePages.add(filename);
+    const progress: ReadingProgress = this.buildProgress();
+    progress.page = page;
+    this.displayedProgress = progress;
+    this.activityPage = `${chapter}~${page}`;
+    this.activitySince = Date.now();
+    readingActivity.record(this.activityBookKey || this.host.aid, this.activityPage, 0)
+      .catch((e: Error): void => { this.toastMsg(`统计保存失败：${errorMessage(e)}`); });
+    const album: Album | null = this.currentAlbum;
+    readProgressStore.save(progress).catch((e: Error): void => { this.toastMsg(`进度保存失败：${errorMessage(e)}`); });
+    if (album !== null) {
+      historyStore.record(album, album.coverUrl).catch((e: Error): void => { this.toastMsg(`阅读历史保存失败：${errorMessage(e)}`); });
+    }
   }
 
   flushProgress(): void {
@@ -670,6 +705,7 @@ export class ReaderController {
       return;
     }
     const col: number = Math.max(0, Math.min(2, Math.floor(x / (w / 3))));
+    if (col === 1) { this.toggleHud(); return; }
     const row: number = Math.max(0, Math.min(2, Math.floor(y / (this.host.canvasHeightVp / 3))));
     const action: number = this.host.options.taps[row * 3 + col];
     if (action === 0) { this.toggleHud(); }

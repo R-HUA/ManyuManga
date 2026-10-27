@@ -11,10 +11,7 @@ import { sourceGlyph } from '../../common/SourceGlyph';
 import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS, ROUTE_SEARCH } from '../../common/Route';
 import { errorMessage } from '../../models/Models';
 import { IconCircleButton } from '../../common/Components';
-import {
-  CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, ACCENT, ACCENT_SOFT, DANGER,
-  STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER
-} from '../../common/Theme';
+import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 
 @Component
 export struct SourceEntryCard {
@@ -110,16 +107,17 @@ export struct SourceEntryCard {
 
   build() {
     Row({ space: 14 }) {
+      Row({ space: 14 }) {
       // 左侧图源光感图标
       Stack({ alignContent: Alignment.Center }) {
         SymbolGlyph(sourceGlyph(this.presentation().iconToken))
           .fontSize(22)
-          .fontColor([!this.source.enabled ? TEXT_SUB : (this.presentation().useAccent ? ACCENT : PRIMARY)])
+          .fontColor([this.source.enabled ? TEXT_MAIN : TEXT_SUB])
       }
       .width(46)
       .height(46)
       .borderRadius(14)
-      .backgroundColor(!this.source.enabled ? SUB_CARD : (this.presentation().useAccent ? ACCENT_SOFT : PRIMARY_SOFT))
+      .backgroundColor(SUB_CARD)
 
       // 中间名称与精简状态
       Column({ space: 4 }) {
@@ -133,8 +131,7 @@ export struct SourceEntryCard {
           Circle({ width: 6, height: 6 })
             .fill(this.source.enabled ? STATUS_OK : DIVIDER)
         }
-        Text(this.source.kind === 'suwayomi' ? (this.source.endpoint || '点击连接服务')
-          : (this.source.enabled ? '点击进入广场浏览' : '已停用'))
+        Text(this.source.enabled ? (this.source.kind === 'local' ? '本地文件' : this.source.kind === 'suwayomi' ? '扩展图源' : '在线画廊') : '已停用')
           .fontColor(TEXT_SUB)
           .fontSize(12)
           .maxLines(1)
@@ -142,10 +139,13 @@ export struct SourceEntryCard {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
+      }.layoutWeight(1)
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
+      .onClick(() => this.onPrimaryBrowse())
 
       // 本地漫画专属快捷导入按钮
       if (this.source.kind === 'local' && this.source.enabled) {
-        Text('导入')
+        Button('导入', { buttonStyle: ButtonStyleMode.NORMAL })
           .fontSize(12)
           .fontWeight(FontWeight.Bold)
           .fontColor(PRIMARY)
@@ -186,9 +186,5 @@ export struct SourceEntryCard {
     .backgroundColor(CARD)
     .borderRadius(18)
     .border({ width: 0.5, color: DIVIDER })
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
-    .onClick(() => {
-      this.onPrimaryBrowse();
-    })
   }
 }

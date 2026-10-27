@@ -1,8 +1,10 @@
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import promptAction from '@ohos.promptAction';
 import { jmApi } from '../data/JmApi';
 import { DomainSpeed } from '../models/Models';
 import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../common/Route';
-import { IconCircleButton, EmptyView } from '../common/Components';
+import { EmptyView } from '../common/Components';
 import {
   BG,
   CARD,
@@ -71,35 +73,8 @@ export struct JmSourceSettingsPage {
   }
 
   build() {
-    NavDestination() {
+    HdsNavDestination() {
       Column() {
-        // 顶栏
-        Row({ space: 12 }) {
-          IconCircleButton({
-            symbol: $r('sys.symbol.chevron_left'),
-            onTap: (): void => {
-              this.stack.pop();
-            }
-          })
-
-          Column({ space: 2 }) {
-            Text('节点与过滤设置')
-              .fontSize(17)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(TEXT_MAIN)
-              .maxLines(1)
-            Text('配置线路镜像节点与内容过滤')
-              .fontSize(11)
-              .fontColor(TEXT_SUB)
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 10 })
-        .backgroundColor(CARD)
-        .border({ width: { bottom: 0.5 }, color: DIVIDER })
-
         Scroll() {
           Column({ space: 16 }) {
             // 1. 镜像节点测速与切换
@@ -203,11 +178,13 @@ export struct JmSourceSettingsPage {
         .layoutWeight(1)
         .width('100%')
         .scrollBar(BarState.Off)
+        .align(Alignment.TopStart)
       }
       .width('100%')
       .height('100%')
       .backgroundColor(BG)
     }
-    .hideTitleBar(true)
+    .titleBar({ content: { title: { mainTitle: '节点与过滤设置' } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleMode(HdsNavDestinationTitleMode.MINI)
   }
 }

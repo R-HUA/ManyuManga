@@ -5,7 +5,7 @@ import { jmStrategy } from './JmStrategy';
 import { ehStrategy } from './EhStrategy';
 import { localStrategy } from './LocalStrategy';
 import { suwayomiStrategy } from './SuwayomiStrategy';
-import { ROUTE_EH_BROWSE, ROUTE_JM_BROWSE, ROUTE_JM_SETTINGS, ROUTE_BLOCK_RULES } from '../../common/Route';
+import { ROUTE_EH_BROWSE, ROUTE_JM_BROWSE, ROUTE_JM_SETTINGS, ROUTE_BLOCK_RULES, ROUTE_SOURCE_BROWSE } from '../../common/Route';
 
 export class SourceDefinition {
   kind: SourceKind;
@@ -36,7 +36,7 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   jm.capabilities.ranking = true;
   jm.capabilities.categories = true;
   jm.capabilities.domainTest = true;
-  jm.presentation.shortLabel = 'JM';
+  jm.presentation.shortLabel = '禁漫天堂';
   jm.presentation.description = '精选推荐、分类检索与镜像测速';
   jm.presentation.useAccent = true;
   jm.presentation.idJumpPlaceholder = '输入 JM 纯数字车号直达详情…';
@@ -50,7 +50,7 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   eh.capabilities.comments = true;
   eh.capabilities.idJump = true;
   eh.capabilities.signedCover = true;
-  eh.presentation.shortLabel = 'EH';
+  eh.presentation.shortLabel = 'E-Hentai';
   eh.presentation.description = '画廊广场、排行榜与标签汉化';
   eh.presentation.iconToken = 'gallery';
   eh.presentation.useAccent = true;
@@ -69,8 +69,8 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   local.presentation.description = '本地 CBZ / ZIP 归档与目录';
   local.presentation.iconToken = 'folder';
   local.presentation.defaultName = '本地漫画';
-  local.actions = [new SourceAction('导入漫画包', 'import', '', true, false, true),
-    new SourceAction('已导入列表', 'search'), new SourceAction('本源屏蔽规则', 'route', ROUTE_BLOCK_RULES)];
+  local.actions = [new SourceAction('本地漫画', 'route', ROUTE_SOURCE_BROWSE, true, false, true),
+    new SourceAction('导入漫画包', 'import'), new SourceAction('本源屏蔽规则', 'route', ROUTE_BLOCK_RULES)];
   definitions.set(local.kind, local);
 
   const remote: SourceDefinition = new SourceDefinition('suwayomi', suwayomiStrategy);
@@ -80,7 +80,7 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   remote.presentation.iconToken = 'drive';
   remote.presentation.registrable = true;
   remote.presentation.defaultName = 'Suwayomi';
-  remote.actions = [new SourceAction('检索此源', 'search', '', true, false, true),
+  remote.actions = [new SourceAction('浏览漫画', 'route', ROUTE_SOURCE_BROWSE, true, false, true),
     new SourceAction('连接配置', 'connect'), new SourceAction('移除', 'remove', '', false, true),
     new SourceAction('本源屏蔽规则', 'route', ROUTE_BLOCK_RULES)];
   definitions.set(remote.kind, remote);

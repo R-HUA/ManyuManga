@@ -1,4 +1,19 @@
 import uiMaterial from '@ohos.arkui.uiMaterial';
+import { hdsMaterial, ScrollEffectType, SystemMaterialParams, TitleBarStyleOptions } from '@kit.UIDesignKit';
+import { LengthMetrics } from '@kit.ArkUI';
+
+export const HDS_NATIVE_MATERIAL: SystemMaterialParams = {
+  materialType: hdsMaterial.MaterialType.ADAPTIVE, materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+};
+export const HDS_TITLE_STYLE: TitleBarStyleOptions = {
+  scrollEffectOpts: {
+    enableScrollEffect: true,
+    scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
+    blurEffectiveStartOffset: LengthMetrics.vp(0),
+    blurEffectiveEndOffset: LengthMetrics.vp(20)
+  },
+  systemMaterialEffect: HDS_NATIVE_MATERIAL
+};
 
 /** 沉浸材质只使用这四档。Toggle / Select / Slider 用 REGULAR。 */
 export const IMMERSIVE_CONTROL_MATERIAL: uiMaterial.ImmersiveMaterial =

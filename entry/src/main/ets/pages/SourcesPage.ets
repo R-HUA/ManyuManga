@@ -1,19 +1,19 @@
+import { HdsNavigation } from '@kit.UIDesignKit';
 import { SuwayomiConnectSheet } from './sources/SuwayomiConnectSheet';
 import { SourceSettingsSheet } from './sources/SourceSettingsSheet';
 import promptAction from '@ohos.promptAction';
-import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
+import { IMMERSIVE_SHEET_MATERIAL, HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { SourceEntry, SourceAuth, SourceInstance, sourceStore } from '../data/Sources';
 import { localSource } from '../data/LocalSource';
 import { suwayomi } from '../data/Suwayomi';
-import { sourceApi } from '../data/SourceApi';
 import { library } from '../data/Library';
 import { Album, errorMessage } from '../models/Models';
 import { presentationFor, registrablePresentation, SourcePresentation } from '../data/source/SourceCatalog';
 import { SourceEntryCard } from './sources/SourceEntryCard';
 import { IconCircleButton } from '../common/Components';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, SearchSelection } from '../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
 import { SearchSuggestField } from './search/SearchSuggestField';
-import { BG, CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT } from '../common/Theme';
+import { BG, CARD, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -35,7 +35,8 @@ export struct SourcesPage {
   @State busy: boolean = false;
   @State settingsForm: boolean = false;
   @State settingsToken: string = '';
-  @State globalQuery: string = '';
+  @State private connectionLabel: string = '未连接';
+  private scroller: Scroller = new Scroller();
   private instance: string = '';
 
   aboutToAppear(): void {
@@ -45,6 +46,8 @@ export struct SourcesPage {
   private async load(): Promise<void> {
     try {
       this.sources = await sourceStore.list();
+      const connection: SourceInstance | null = await sourceStore.connection();
+      this.connectionLabel = connection === null ? '未连接' : connection.name;
       this.error = '';
     } catch (e) {
       this.error = errorMessage(e as Error);
@@ -105,6 +108,7 @@ export struct SourcesPage {
   }
 
   private async openConnect(_source: SourceEntry, _fresh: boolean): Promise<void> {
+    try {
     const current: SourceInstance | null = await sourceStore.connection();
     this.instance = current === null ? '' : current.id;
     this.endpoint = current === null ? '' : current.endpoint;
@@ -114,29 +118,7 @@ export struct SourcesPage {
     this.password = '';
     this.error = '';
     this.form = true;
-  }
-
-  private submitGlobalSearch(val: string, selection: SearchSelection | null = null): void {
-    const trimmed: string = val.trim();
-    if (trimmed === '') {
-      return;
-    }
-    for (const s of this.sources.filter((entry: SourceEntry) => entry.enabled)) {
-      try {
-        const directKey: string = sourceApi.resolveDirectKey(s, trimmed);
-        if (directKey !== '') {
-          this.stack.pushPathByName(ROUTE_ALBUM, { aid: directKey } as MangaRouteParams);
-          return;
-        }
-      } catch (_e) {
-        // continue
-      }
-    }
-    this.stack.pushPathByName(ROUTE_SEARCH, {
-      query: trimmed,
-      scope: 'all',
-      selection: selection === null ? undefined : selection
-    } as MangaRouteParams);
+    } catch (e) { this.error = errorMessage(e as Error); }
   }
 
   @Builder
@@ -165,61 +147,8 @@ export struct SourcesPage {
   }
 
   build() {
-    Column({ space: 12 }) {
-      Row({ space: 10 }) {
-        Row({ space: 8 }) {
-          Text('图源')
-            .fontSize(26)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(TEXT_MAIN)
-          Text(`${this.sources.filter((s: SourceEntry) => s.enabled).length} 启用`)
-            .fontSize(12)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(PRIMARY)
-            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-            .borderRadius(10)
-            .backgroundColor(PRIMARY_SOFT)
-        }
-        .alignItems(VerticalAlign.Center)
-        .layoutWeight(1)
-
-
-        if (registrablePresentation() !== null) {
-          IconCircleButton({
-            glyph: $r('sys.symbol.plus'),
-            onTap: (): void => {
-              this.openConnect(new SourceEntry(), true);
-            }
-          })
-        }
-      }
-      .padding({ left: 16, right: 16, top: this.topInset + 10, bottom: 4 })
-      .width('100%')
-
-      Row({ space: 8 }) {
-        SearchSuggestField({
-          text: this.$globalQuery,
-          placeholder: '搜索全源漫画，或输入车号/链接直达…',
-          onSubmit: (val: string, selection: SearchSelection | null): void => {
-            this.submitGlobalSearch(val, selection);
-          }
-        })
-          .layoutWeight(1)
-
-        Button('搜全源', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(13)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(PRIMARY)
-          .backgroundColor(PRIMARY_SOFT)
-          .height(38)
-          .padding({ left: 16, right: 16 })
-          .onClick(() => {
-            this.submitGlobalSearch(this.globalQuery);
-          })
-      }
-      .padding({ left: 16, right: 16 })
-      .width('100%')
-
+    HdsNavigation() {
+      Column({ space: 12 }) {
       if (this.error !== '' && !this.form) {
         Row({ space: 8 }) {
           SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
@@ -236,8 +165,17 @@ export struct SourcesPage {
         .backgroundColor(CARD)
       }
 
-      Scroll() {
+      Scroll(this.scroller) {
         Column({ space: 12 }) {
+          Row({ space: 14 }) {
+            SymbolGlyph($r('sys.symbol.externaldrive')).fontSize(22).fontColor([TEXT_MAIN]).width(46).height(46)
+            Column({ space: 4 }) {
+              Text('Suwayomi').fontSize(16).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN)
+              Text(this.connectionLabel).fontSize(12).fontColor(TEXT_SUB).maxLines(1)
+            }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+            IconCircleButton({ glyph: $r('sys.symbol.gearshape'), onTap: (): void => { this.openConnect(new SourceEntry(), false); } })
+          }.width('100%').padding(16).backgroundColor(CARD).borderRadius(18)
+          .onClick(() => { this.openConnect(new SourceEntry(), false); })
           ForEach(this.sources, (source: SourceEntry) => {
             SourceEntryCard({
               source: source,
@@ -270,8 +208,13 @@ export struct SourcesPage {
       }
       .layoutWeight(1)
       .width('100%')
-      .scrollBar(BarState.Off)
+      .scrollBar(BarState.Off).align(Alignment.TopStart).clip(false)
+      }.width('100%').height('100%')
     }
+    .titleBar({ content: { title: { mainTitle: '图源' }, menu: { value: [
+      { content: { icon: $r('sys.symbol.magnifyingglass'), label: '搜索全部图源', action: (): void => { this.stack.pushPathByName(ROUTE_SEARCH, { scope: 'all' } as MangaRouteParams); } } }
+    ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller])
     .width('100%')
     .height('100%')
     .backgroundColor(BG)

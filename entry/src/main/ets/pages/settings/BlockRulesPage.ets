@@ -1,5 +1,6 @@
-import { IconCircleButton } from '../../common/Components';
-import { BG, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { HDS_TITLE_STYLE } from '../../common/ImmersiveMaterials';
+import { BG } from '../../common/Theme';
 import { asRecord, asString } from '../../models/Models';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 import { BlockRuleEditor } from './BlockRuleEditor';
@@ -12,31 +13,8 @@ export struct BlockRulesPage {
   @State sourceId: string = '';
 
   build() {
-    NavDestination() {
+    HdsNavDestination() {
       Column() {
-        Row({ space: 10 }) {
-          IconCircleButton({
-            glyph: $r('sys.symbol.chevron_left'),
-            onTap: (): void => {
-              this.stack.pop();
-            }
-          })
-          Column({ space: 2 }) {
-            Text(this.sourceId === '' ? '全局屏蔽规则' : '本源屏蔽规则')
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(TEXT_MAIN)
-            if (this.sourceId !== '') {
-              Text(this.sourceId)
-                .fontSize(12)
-                .fontColor(TEXT_SUB)
-            }
-          }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 8 })
         Scroll() {
           Column() {
             BlockRuleEditor({ sourceId: this.sourceId })
@@ -47,12 +25,14 @@ export struct BlockRulesPage {
         .layoutWeight(1)
         .width('100%')
         .scrollBar(BarState.Off)
+        .align(Alignment.TopStart)
       }
       .width('100%')
       .height('100%')
       .backgroundColor(BG)
     }
-    .hideTitleBar(true)
+    .titleBar({ content: { title: { mainTitle: this.sourceId === '' ? '全局屏蔽规则' : '本源屏蔽规则' } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleMode(HdsNavDestinationTitleMode.MINI)
     .backgroundColor(BG)
     .onReady((context: NavDestinationContext) => {
       const params: Record<string, Object> | null = asRecord(context.pathInfo.param as Object);

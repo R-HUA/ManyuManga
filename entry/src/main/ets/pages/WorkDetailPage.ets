@@ -1,3 +1,5 @@
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { WorkSourceSheet } from './detail/WorkSourceSheet';
 import { WorkChapterList } from './detail/WorkChapterList';
 import { WorkHeroInfo } from './detail/WorkHeroInfo';
@@ -8,12 +10,11 @@ import { Album, Chapter, ReadingProgress, CommentItem, CommentsResult, asRecord,
 import { sourceApi } from '../data/SourceApi';
 import { sourceId, sourceStore } from '../data/Sources';
 import { library, LibraryWork } from '../data/Library';
-import { readProgressStore, historyStore, albumCacheStore } from '../data/Stores';
+import { readProgressStore, albumCacheStore } from '../data/Stores';
 import { downloadManager } from '../data/DownloadManager';
 import { prepareSourceSwitch, switchedProgress, SourceSwitchResult, discoverSources, SourceDiscovery } from '../data/SourceSwitch';
 import { matchingChapter } from '../data/Matching';
-import { IconCircleButton } from '../common/Components';
-import { BG, CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
+import { BG, CARD, PRIMARY, DANGER, TEXT_SUB } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 
@@ -29,7 +30,6 @@ export struct WorkDetailPage {
   @State progress: ReadingProgress | null = null;
   @State error: string = '';
   @State sourceName: string = '';
-  @State coverTint: string = 'rgba(58,122,254,0.22)';
   @State filter: string = '';
   @State unread: boolean = false;
   @State ascending: boolean = true;
@@ -85,7 +85,6 @@ export struct WorkDetailPage {
       this.work = work;
       this.progress = progress;
       await albumCacheStore.put(album);
-      await historyStore.record(album, album.coverUrl);
     } catch (e) {
       if (ticket === this.generation && !isRequestCancelled(e as Error)) {
         this.error = errorMessage(e as Error);
@@ -273,33 +272,9 @@ export struct WorkDetailPage {
   }
 
   @Builder
-  private TopBar() {
-    Row({ space: 10 }) {
-      IconCircleButton({
-        glyph: $r('sys.symbol.chevron_left'),
-        onTap: (): void => {
-          this.stack.pop();
-        }
-      })
-
-      Text(this.album !== null ? this.album.name : '漫画详情')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: this.topInset + 8, bottom: 8 })
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
   private Info() {
     WorkHeroInfo({
       album: this.$album,
-      coverTint: this.$coverTint,
       sourceName: this.$sourceName,
       aid: this.aid,
       work: this.$work,
@@ -346,9 +321,8 @@ export struct WorkDetailPage {
   }
 
   build() {
-    NavDestination() {
+    HdsNavDestination() {
       Column() {
-        this.TopBar()
 
         if (this.error !== '') {
           Row({ space: 8 }) {
@@ -391,6 +365,7 @@ export struct WorkDetailPage {
             .width('42%')
             .height('100%')
             .scrollBar(BarState.Off)
+              .align(Alignment.TopStart)
 
             Scroll() {
               this.Chapters()
@@ -398,6 +373,7 @@ export struct WorkDetailPage {
             .width('58%')
             .height('100%')
             .scrollBar(BarState.Off)
+              .align(Alignment.TopStart)
           }
           .layoutWeight(1)
           .width('100%')
@@ -412,6 +388,7 @@ export struct WorkDetailPage {
           .layoutWeight(1)
           .width('100%')
           .scrollBar(BarState.Off)
+              .align(Alignment.TopStart)
         }
       }
       .width('100%')
@@ -423,7 +400,8 @@ export struct WorkDetailPage {
         systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }
-    .hideTitleBar(true)
+    .titleBar({ content: { title: { mainTitle: this.album === null ? '漫画详情' : this.album.name } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleMode(HdsNavDestinationTitleMode.MINI)
     .backgroundColor(BG)
     .onReady((context: NavDestinationContext) => {
       const params: Record<string, Object> | null = asRecord(context.pathInfo.param as Object);

@@ -95,11 +95,17 @@ export struct ReaderImageItem {
   @Prop @Watch('onSourceChanged') cropWhite: boolean = false;
   onFailure: (filename: string, error: Error) => void = (): void => {};
   onMeasured: (filename: string, aspect: number) => void = (): void => {};
+  @Prop @Watch('reportVisibility') active: boolean = true;
+  onDisplayed: (chapter: string, filename: string, visible: boolean) => void = (): void => {};
   @State pixelMap: image.PixelMap | undefined = undefined;
   @State loading: boolean = true;
   @State failed: boolean = false;
   @State aspect: number = 0.7;
   private loadToken: number = 0;
+  private inViewport: boolean = false;
+  private displayed: boolean = false;
+  private displayedChapter: string = '';
+  private displayedFilename: string = '';
   private signal: RequestAbortGroup = new RequestAbortGroup();
 
   aboutToAppear(): void {
@@ -107,6 +113,7 @@ export struct ReaderImageItem {
   }
 
   aboutToDisappear(): void {
+    this.onDisplayed(this.displayedChapter, this.displayedFilename, false);
     this.loadToken++;
     this.signal.abortAll();
     this.releaseMap();
@@ -125,6 +132,10 @@ export struct ReaderImageItem {
   }
 
   private async doLoad(): Promise<void> {
+    this.displayed = false;
+    this.onDisplayed(this.displayedChapter, this.displayedFilename, false);
+    this.displayedChapter = this.photoId;
+    this.displayedFilename = this.filename;
     if (this.photoId === '' || this.filename === '') {
       this.loading = false;
       this.failed = true;
@@ -189,6 +200,33 @@ export struct ReaderImageItem {
     }
     .width('100%')
     .height(this.fitScreen ? '100%' : 'auto')
+    .onVisibleAreaChange([0, 0.01], (_visible: boolean, ratio: number): void => {
+      this.inViewport = ratio > 0;
+      this.reportVisibility();
+    })
+  }
+
+  private reportVisibility(): void {
+    this.onDisplayed(this.displayedChapter, this.displayedFilename, this.active && this.inViewport && this.displayed && !this.loading && !this.failed);
+  }
+
+  private imageComplete(token: number, chapter: string, filename: string): void {
+    if (token !== this.loadToken || chapter !== this.photoId || filename !== this.filename) { return; }
+    this.displayed = true;
+    this.reportVisibility();
+  }
+
+  @Builder
+  private DisplayImage(map: image.PixelMap, token: number, chapter: string, filename: string) {
+    if (this.fitScreen) {
+      Image(map).width('100%').height('100%').objectFit(ImageFit.Contain)
+        .interpolation(ImageInterpolation.Medium)
+        .onComplete((): void => this.imageComplete(token, chapter, filename))
+    } else {
+      Image(map).width('100%').aspectRatio(this.aspect).objectFit(ImageFit.Fill)
+        .interpolation(ImageInterpolation.Medium)
+        .onComplete((): void => this.imageComplete(token, chapter, filename))
+    }
   }
 
   @Builder
@@ -238,19 +276,7 @@ export struct ReaderImageItem {
         })
       }
     } else if (this.pixelMap !== undefined) {
-      if (this.fitScreen) {
-        Image(this.pixelMap)
-          .width('100%')
-          .height('100%')
-          .objectFit(ImageFit.Contain)
-          .interpolation(ImageInterpolation.Medium)
-      } else {
-        Image(this.pixelMap)
-          .width('100%')
-          .aspectRatio(this.aspect)
-          .objectFit(ImageFit.Fill)
-          .interpolation(ImageInterpolation.Medium)
-      }
+      this.DisplayImage(this.pixelMap, this.loadToken, this.displayedChapter, this.displayedFilename)
     }
   }
 }

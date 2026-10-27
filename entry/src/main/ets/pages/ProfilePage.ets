@@ -1,34 +1,26 @@
+import { HdsNavigation } from '@kit.UIDesignKit';
 import common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import promptAction from '@ohos.promptAction';
-import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_DOWNLOADS } from '../common/Route';
+import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_DOWNLOADS, ROUTE_STATS } from '../common/Route';
 import { Prefs } from '../util/Prefs';
-import { library, LibraryWork } from '../data/Library';
-import { readingActivity, ActivityStats } from '../data/ReadingActivity';
-import { sourceStore, SourceEntry, sourceId } from '../data/Sources';
 import { exportBackup, importBackup } from '../data/Backup';
 import { cleanLegacyData } from '../data/LegacyCleanup';
 import { AuthOutcome, authenticate } from '../util/AppLock';
-import { IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
+import { IMMERSIVE_REGULAR_MATERIAL, HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { clearPageCache, pageCacheSize } from '../data/ImageDecode';
 import { SettingSelectRow } from '../common/Components';
-import {
-  BG,
-  CARD,
-  SUB_CARD,
-  TEXT_MAIN,
-  TEXT_SUB,
-  PRIMARY,
-  PRIMARY_SOFT,
-  DIVIDER,
-  TAB_BAR_HEIGHT
-} from '../common/Theme';
-import { Album, errorMessage } from '../models/Models';
+import { BG, CARD, TEXT_MAIN, TEXT_SUB, PRIMARY, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
+import { errorMessage } from '../models/Models';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
-class SourceCount {
-  name: string = '';
-  count: number = 0;
+/** 按引用传入开关状态，确保异步加载与失败回退能够刷新原生控件。 */
+interface ToggleRowOptions {
+  icon: Resource;
+  title: string;
+  isOn: boolean;
+  enabled: boolean;
+  onChange: (value: boolean) => void;
 }
 
 @Component
@@ -37,12 +29,7 @@ export struct ProfilePage {
   @StorageProp(TOP_RECT_HEIGHT_KEY) top: number = 0;
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
   @StorageProp('currentBreakpoint') breakpoint: string = 'sm';
-  @StorageProp('activityVersion') @Watch('load') activityVersion: number = 0;
-  @StorageProp('bookshelfDataVersion') @Watch('load') version: number = 0;
 
-  @State bookCount: number = 0;
-  @State stats: ActivityStats = new ActivityStats();
-  @State distribution: Array<SourceCount> = [];
   @State theme: number = 0;
   @State reader: number = 0;
   @State preload: number = 3;
@@ -54,6 +41,8 @@ export struct ProfilePage {
   @State message: string = '';
   @State busy: boolean = false;
 
+  private scroller: Scroller = new Scroller();
+  @State private privacyBusy: boolean = false;
   private readonly modes: Array<string> = ['vertical', 'pagedVertical', 'horizontal', 'rtl', 'double'];
   private readonly modeLabels: Array<string> = ['纵向条漫', '纵向翻页', '左翻单页', '日漫右翻', '双页拼合'];
 
@@ -62,18 +51,8 @@ export struct ProfilePage {
   }
 
   private async load(): Promise<void> {
+    this.privacyBusy = true;
     try {
-      const works: Array<LibraryWork> = await library.list();
-      this.bookCount = works.length;
-      this.stats = await readingActivity.stats();
-      const sources: Array<SourceEntry> = await sourceStore.list();
-      this.distribution = sources.map((source: SourceEntry): SourceCount => {
-        const count: SourceCount = new SourceCount();
-        count.name = source.name;
-        count.count = works.filter((w: LibraryWork) => w.albums.some((a: Album) => sourceId(a.id) === source.id)).length;
-        return count;
-      }).filter((count: SourceCount) => count.count > 0);
-
       const prefs: Prefs = await Prefs.getInstance();
       this.theme = Math.max(0, ['system', 'light', 'dark'].indexOf(await prefs.themeMode()));
       this.reader = Math.max(0, this.modes.indexOf(await prefs.readerMode()));
@@ -85,6 +64,8 @@ export struct ProfilePage {
       this.cache = pageCacheSize();
     } catch (e) {
       this.message = errorMessage(e as Error);
+    } finally {
+      this.privacyBusy = false;
     }
   }
 
@@ -105,6 +86,9 @@ export struct ProfilePage {
   }
 
   private async saveOption(key: string, value: Object): Promise<void> {
+    if (key === 'preview' && (this.privacyBusy || value === this.previewOn)) { return; }
+    const previousPreview: boolean = this.previewOn;
+    if (key === 'preview') { this.privacyBusy = true; this.previewOn = value as boolean; }
     try {
       const prefs: Prefs = await Prefs.getInstance();
       if (key === 'reader') {
@@ -120,12 +104,16 @@ export struct ProfilePage {
         await prefs.setHistoryEnabled(value as boolean);
         this.history = value as boolean;
       } else if (key === 'preview') {
-        await prefs.setPreviewProtection(value as boolean);
+        const windowName: string | undefined = this.getUIContext().getWindowName();
+        if (windowName === undefined) { throw new Error('无法获取当前窗口'); }
+        await prefs.setPreviewProtection(value as boolean, windowName);
         this.previewOn = value as boolean;
       }
     } catch (e) {
+      if (key === 'preview') { this.previewOn = previousPreview; }
       this.message = errorMessage(e as Error);
-    }
+      if (key === 'preview') { this.getUIContext().getPromptAction().showToast({ message: `隐私保护设置失败：${this.message}` }); }
+    } finally { if (key === 'preview') { this.privacyBusy = false; } }
   }
 
   private confirmLock(enable: boolean): void {
@@ -228,32 +216,6 @@ export struct ProfilePage {
   }
 
   @Builder
-  private Metric(val: string, unit: string, label: string) {
-    Column({ space: 4 }) {
-      Row({ space: 2 }) {
-        Text(val)
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-        Text(unit)
-          .fontSize(12)
-          .fontColor(TEXT_SUB)
-          .margin({ bottom: 3 })
-      }
-      .alignItems(VerticalAlign.Bottom)
-
-      Text(label)
-        .fontSize(12)
-        .fontColor(TEXT_SUB)
-    }
-    .layoutWeight(1)
-    .padding({ top: 12, bottom: 12 })
-    .borderRadius(14)
-    .backgroundColor(SUB_CARD)
-    .alignItems(HorizontalAlign.Center)
-  }
-
-  @Builder
   private NavRow(icon: Resource, title: string, valueText: string, onTap: () => void) {
     Row({ space: 12 }) {
       SymbolGlyph(icon)
@@ -283,21 +245,22 @@ export struct ProfilePage {
   }
 
   @Builder
-  private ToggleRow(icon: Resource, title: string, isOn: boolean, onChange: (val: boolean) => void) {
+  private ToggleRow(options: ToggleRowOptions) {
     Row({ space: 12 }) {
-      SymbolGlyph(icon)
+      SymbolGlyph(options.icon)
         .fontSize(20)
         .fontColor([PRIMARY])
-      Text(title)
+      Text(options.title)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: isOn })
+      Toggle({ type: ToggleType.Switch, isOn: options.isOn })
         .selectedColor(PRIMARY)
         .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+        .enabled(options.enabled)
         .onChange((v: boolean) => {
-          onChange(v);
+          options.onChange(v);
         })
     }
     .width('100%')
@@ -306,54 +269,13 @@ export struct ProfilePage {
   }
 
   build() {
-    Column() {
-      // 顶栏
-      Row({ space: 10 }) {
-        Text('我的')
-          .fontSize(26)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .layoutWeight(1)
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: this.top + 10, bottom: 8 })
-      .alignItems(VerticalAlign.Center)
-
-      Scroll() {
+    HdsNavigation() {
+      Scroll(this.scroller) {
         Column({ space: 16 }) {
-          // 1. 阅读统计看板
-          Column({ space: 14 }) {
-            Row() {
-              Text('漫屿阅读看板')
-                .fontSize(16)
-                .fontColor(TEXT_MAIN)
-                .fontWeight(FontWeight.Bold)
-                .layoutWeight(1)
-              Text('实时累计')
-                .fontSize(11)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(PRIMARY)
-                .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-                .borderRadius(8)
-                .backgroundColor(PRIMARY_SOFT)
-            }
-            .width('100%')
-
-            Row({ space: 10 }) {
-              this.Metric(`${this.bookCount}`, '部', '书架漫画')
-              this.Metric(`${this.stats.pages.length}`, '页', '累计已读')
-              this.Metric(`${Math.floor(this.stats.milliseconds / 60000)}`, '分', '阅读时长')
-            }
-            .width('100%')
-          }
-          .padding(18)
-          .width('100%')
-          .backgroundColor(CARD)
-          .borderRadius(20)
-          .border({ width: 0.5, color: DIVIDER })
-
           // 2. 常用功能快捷入口
           Column({ space: 6 }) {
+            this.NavRow($r('sys.symbol.clock'), '阅读统计', '', () => { this.stack.pushPathByName(ROUTE_STATS, {} as MangaRouteParams); })
+            Divider().color(DIVIDER).margin({ left: 32 })
             this.NavRow($r('sys.symbol.arrow_down_circle'), '离线下载与导出', '', () => {
               this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams);
             })
@@ -424,7 +346,7 @@ export struct ProfilePage {
             Divider().color(DIVIDER).margin({ left: 16 })
 
             Row() {
-              Text('记录浏览历史')
+              Text('记录阅读历史')
                 .fontSize(15)
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('sys.color.font_primary'))
@@ -448,14 +370,12 @@ export struct ProfilePage {
 
           // 4. 存储、隐私与数据备份
           Column({ space: 4 }) {
-            this.ToggleRow($r('sys.symbol.lock_fill'), '应用锁保护', this.securityLock, (on: boolean) => {
-              this.confirmLock(on);
-            })
+            this.ToggleRow({ icon: $r('sys.symbol.lock_fill'), title: '应用锁保护', isOn: this.securityLock, enabled: true,
+              onChange: (on: boolean): void => { this.confirmLock(on); } })
             Divider().color(DIVIDER).margin({ left: 32 })
 
-            this.ToggleRow($r('sys.symbol.eye_slash'), '后台多任务模糊保护', this.previewOn, (on: boolean) => {
-              this.saveOption('preview', on);
-            })
+            this.ToggleRow({ icon: $r('sys.symbol.eye_slash'), title: '隐私保护', isOn: this.previewOn,
+              enabled: !this.privacyBusy, onChange: (on: boolean): void => { this.saveOption('preview', on); } })
             Divider().color(DIVIDER).margin({ left: 32 })
 
             this.NavRow($r('sys.symbol.arrow_clockwise'), '全量备份与恢复', '', () => {
@@ -516,10 +436,10 @@ export struct ProfilePage {
       }
       .layoutWeight(1)
       .width('100%')
-      .scrollBar(BarState.Off)
+      .scrollBar(BarState.Off).align(Alignment.TopStart).clip(false)
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(BG)
+    .titleBar({ content: { title: { mainTitle: '我的' } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller])
+    .width('100%').height('100%').backgroundColor(BG)
   }
 }

@@ -40,6 +40,8 @@ export const ROUTE_JM_SETTINGS: string = 'jmSettings';
 export const ROUTE_JM_BROWSE: string = 'jmBrowse';
 export const ROUTE_EH_BROWSE: string = 'ehBrowse';
 export const ROUTE_BLOCK_RULES: string = 'blockRules';
+export const ROUTE_STATS: string = 'readingStats';
+export const ROUTE_SOURCE_BROWSE: string = 'sourceBrowse';
 
 /** 导航参数在来源边界之外始终使用完整来源标识。 */
 export interface MangaRouteParams {
@@ -53,6 +55,8 @@ export interface MangaRouteParams {
   scope?: SearchScope;
   selection?: SearchSelection;
   match?: boolean;
+  browseMode?: string;
+  order?: string;
 }
 
 /** MainShell 写入、Index.onBackPress 读取：NavDestination 在栈上时 > 0，Tab 首页为 0 */

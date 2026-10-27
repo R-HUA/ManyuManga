@@ -2,6 +2,7 @@ import { makeRelationalStore, makeNativeFs, makeAuthentication } from './core-pl
 import { regressionTests, installOfflineFixture, until, finishTask } from './core-regressions.mjs';
 import { sourceContractTests } from './source-contract-regressions.mjs';
 import { searchTests } from './search-regressions.mjs';
+import { interfaceTests } from './interface-regressions.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -70,18 +71,29 @@ function environment() {
   const context = { filesDir: path.join(directory, 'files'), cacheDir: path.join(directory, 'cache') };
   fs.mkdirSync(context.filesDir); fs.mkdirSync(context.cacheDir);
   globalThis.AppStorage = { setOrCreate: () => {}, get: () => undefined };
+  globalThis.Scroller = class { scrollTo() {} scrollEdge() {} };
+  globalThis.SwiperController = class { changeIndex() {} };
+  globalThis.Curve = { EaseOut: 'easeOut', Friction: 'friction' };
   const relational = makeRelationalStore(state);
   function load(file) {
     file = path.resolve(file);
     if (file.endsWith(path.normalize('/data/JmApi.ets'))) return jm;
     if (file.endsWith(path.normalize('/data/ImageDecode.ets'))) return imageDecode;
     if (file.endsWith(path.normalize('/util/Http.ets'))) return { httpUtil };
+    if (file.endsWith(path.normalize('/entryability/EntryAbility.ets'))) return {
+      TOP_RECT_HEIGHT_KEY: 'topRectHeight', BOTTOM_RECT_HEIGHT_KEY: 'bottomRectHeight', IS_DARK_MODE_KEY: 'isDarkMode'
+    };
     if (modules.has(file)) return modules.get(file).exports;
     const module = { exports: {} }; modules.set(file, module);
-    let source = fs.readFileSync(file, 'utf8');
+    let source = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+    if (file.endsWith(path.normalize('/pages/reader/ReaderImageItem.ets'))) {
+      source = source.slice(0, source.indexOf('@Component')) + source.slice(source.indexOf('@Component\nexport struct ReaderImageItem'));
+      source = source.replace(/  build\(\) \{[\s\S]*?(?=  private reportVisibility)/, '');
+    }
     // 保留真实页面方法，只移除本地 Node 无法执行的 ArkUI 声明式布局。
-    if (/[/\\]pages[/\\](SearchAllPage|search[/\\](SearchSuggestField|MetadataSearchChip))\.ets$/.test(file)) {
-      const end = source.indexOf(file.endsWith('MetadataSearchChip.ets') ? '  @Builder' : '  build()');
+    if (/[/\\]pages[/\\](SearchAllPage|ExplorePage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|detail[/\\]WorkTags|reader[/\\]ReaderImageItem|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
+      const builder = source.indexOf('  @Builder');
+      const end = builder >= 0 ? builder : source.indexOf('  build()');
       assert.ok(end > 0);
       source = (source.slice(0, end) + '\n}').replace(/@Component\s+export struct /g, 'export class ')
         .replace(/@(Consume|StorageProp|Watch|Prop|Link)\([^)]*\)\s*/g, '')
@@ -98,6 +110,14 @@ function environment() {
         decodeSync(value) { return new Uint8Array(Buffer.from(value, 'base64')); }
       }, TextDecoder: { create: () => ({ decodeToString: bytes => Buffer.from(bytes).toString('utf8') }) } },
       '@ohos.app.ability.common': {}, '@ohos.multimedia.image': {},
+      '@ohos.display': { getDefaultDisplaySync: () => ({ width: 1080 }) }, '@kit.ArkUI': { window: {} },
+      '@ohos.app.ability.ConfigurationConstant': {}, '@ohos.promptAction': { showToast: () => {} },
+      '@ohos.window': { findWindow: name => {
+        state.privacyWindows ??= []; state.privacyWindows.push(name);
+        return { setWindowPrivacyMode: async value => {
+        state.privacyCalls ??= []; state.privacyCalls.push(value);
+        if (state.privacyFailure) throw new Error('系统隐私保护设置失败');
+      } }; } },
       '@kit.AbilityKit': {},
       '@ohos.net.connection': {},
       '@ohos.url': require('node:url'),
@@ -382,6 +402,7 @@ try {
   await regressionTests(test);
   await sourceContractTests(test);
   await searchTests(test);
+  await interfaceTests(test);
   console.log(`共 ${checks} 项通过，${failures.length} 项失败（真实内存 SQLite，其余平台边界使用本地替身）。`);
   if (failures.length) process.exitCode = 1;
 } finally {

@@ -7,7 +7,7 @@
 import common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { MainShell } from './MainShell';
-import { PRIMARY, READER_BG, PRIVACY_MASK } from '../common/Theme';
+import { PRIMARY } from '../common/Theme';
 import { Prefs, getAppContext } from '../util/Prefs';
 import { APP_IN_BACKGROUND_KEY } from '../entryability/EntryAbility';
 import { NAV_STACK_DEPTH_KEY } from '../common/Route';
@@ -172,42 +172,9 @@ struct Index {
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 
-  @Builder
-  private PrivacyMask() {
-    Column({ space: 14 }) {
-      Stack({ alignContent: Alignment.Center }) {
-        SymbolGlyph($r('sys.symbol.shield_checkered'))
-          .fontSize(32)
-          .fontColor([PRIMARY])
-      }
-      .width(68)
-      .height(68)
-      .borderRadius(34)
-      .backgroundColor('rgba(58,122,254,0.16)')
-
-      Text('隐私保护中')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor('rgba(255,255,255,0.85)')
-      Text('回到应用后自动恢复显示')
-        .fontSize(12)
-        .fontColor('rgba(255,255,255,0.45)')
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor('rgba(14, 17, 26, 0.72)')
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-  }
-
   build() {
     Stack() {
       MainShell()
-      if (this.previewOn && this.inBackground && !this.locked && !this.authActive) {
-        this.PrivacyMask()
-      }
       if (this.locked) {
         this.LockOverlay()
       }
