@@ -15,6 +15,7 @@ import { isRequestCancelled, RequestAbortGroup } from '../../util/RequestAbort';
 import { albumCacheStore, pagesCacheStore, readProgressStore, historyStore } from '../../data/Stores';
 import { Prefs, getAppContext } from '../../util/Prefs';
 import { IS_DARK_MODE_KEY } from '../../entryability/EntryAbility';
+import { ROUTE_PREVIEW, MangaRouteParams } from '../../common/Route';
 
 /** 默认乱序参数 */
 const SCRAMBLE_DEFAULT: number = 220980;
@@ -629,7 +630,9 @@ export class ReaderController {
     progress.totalPages = this.host.pages.length;
     progress.title = this.host.albumTitle;
     progress.author = this.host.authorLine;
-    progress.coverUrl = jmApi.albumThumbUrl(this.host.aid);
+    progress.coverUrl = (this.currentAlbum !== null && this.currentAlbum.coverUrl !== '')
+      ? this.currentAlbum.coverUrl
+      : jmApi.albumThumbUrl(this.host.aid);
     return progress;
   }
 
@@ -959,6 +962,21 @@ export class ReaderController {
   goBack(): void {
     this.flushProgress();
     this.host.pageStack.pop();
+  }
+
+  openPreview(): void {
+    const chId: string = this.currentChapterId();
+    if (chId === '') {
+      return;
+    }
+    this.flushProgress();
+    this.host.hudVisible = false;
+    const params: MangaRouteParams = {
+      aid: this.host.aid,
+      chapterId: chId,
+      query: this.chapterTitle()
+    };
+    this.host.pageStack.pushPathByName(ROUTE_PREVIEW, params);
   }
 
   private toastMsg(msg: string): void {

@@ -174,7 +174,6 @@ export struct SourceEntryCard {
       // 启停开关
       Toggle({ type: ToggleType.Switch, isOn: this.source.enabled })
         .selectedColor(PRIMARY)
-        .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
         .onChange((enabled: boolean) => {
           const updated: SourceEntry = copySource(this.source);
           updated.enabled = enabled;

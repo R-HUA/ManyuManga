@@ -397,6 +397,7 @@ export struct WorkDetailPage {
       .bindSheet($$this.sourceSheet, this.SourcesSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
+        showClose: false,
         systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }

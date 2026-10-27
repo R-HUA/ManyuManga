@@ -225,11 +225,13 @@ export struct SourcesPage {
     .bindSheet($$this.form, this.ConnectionSheet(), {
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
+      showClose: false,
       systemMaterial: IMMERSIVE_SHEET_MATERIAL
     })
     .bindSheet($$this.settingsForm, this.SettingsSheet(), {
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
+      showClose: false,
       systemMaterial: IMMERSIVE_SHEET_MATERIAL
     })
   }

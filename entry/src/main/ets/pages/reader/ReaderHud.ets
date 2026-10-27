@@ -21,6 +21,7 @@ export struct ReaderHud {
   @Link panel: 'none' | 'mode' | 'display' | 'settings' | 'thumbnails';
   @Link hudVisible: boolean;
   goBack: () => void = (): void => {};
+  openPreview: () => void = (): void => {};
   @Link pages: Array<string>;
   @Link albumTitle: string;
   @Link currentPage: number;
@@ -143,6 +144,24 @@ export struct ReaderHud {
       .onClick(() => {
         this.toggleBookmark();
       })
+
+      // 章节速览（一键直达 24 宫格缩略图）
+      if (this.pages.length > 0) {
+        Stack({ alignContent: Alignment.Center }) {
+          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+            .fontSize(18)
+            .fontColor([Color.White])
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(18)
+        .backgroundColor('rgba(255,255,255,0.12)')
+        .border({ width: 0.5, color: 'rgba(255,255,255,0.18)' })
+        .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
+        .onClick(() => {
+          this.openPreview();
+        })
+      }
 
     }
     .width('100%')

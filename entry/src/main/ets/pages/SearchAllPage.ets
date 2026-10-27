@@ -1,9 +1,9 @@
 import { sourceStore, SourceEntry, SourceKind } from '../data/Sources';
 import { capabilitiesFor, SourceSearchOptions } from '../data/source/SourceContracts';
 import { HdsNavDestination } from '@kit.UIDesignKit';
-import { IMMERSIVE_CONTROL_MATERIAL } from '../common/ImmersiveMaterials';
+import { IMMERSIVE_CONTROL_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { SearchGroup, SearchGroupResults } from './search/SearchGroupResults';
-import { SearchFilters } from './search/SearchFilters';
+import { SearchFilterSheet } from './search/SearchFilterSheet';
 import { SearchHistory } from './search/SearchHistory';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, SearchScope, SearchSelection, searchSelectionFromObject } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
@@ -12,7 +12,7 @@ import { searchLibraryWorks } from '../data/SearchQuery';
 import { LibrarySearchResults } from './search/LibrarySearchResults';
 import { highConfidence } from '../data/Matching';
 import { Album, AlbumLite, SearchResult, asRecord, asString, errorMessage } from '../models/Models';
-import { BG, PRIMARY, DANGER, TEXT_SUB } from '../common/Theme';
+import { BG, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_SUB } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { SearchSuggestField } from './search/SearchSuggestField';
 import { searchHistoryStore } from '../data/stores/FilterStores';
@@ -36,6 +36,7 @@ export struct SearchAllPage {
   @State selection: SearchSelection | null = null;
   @State private searchKind: SourceKind | null = null;
   @State private searchOptions: SourceSearchOptions = new SourceSearchOptions();
+  @State private filterSheet: boolean = false;
 
   @State private submitted: string = '';
   private ticket: number = 0;
@@ -62,6 +63,16 @@ export struct SearchAllPage {
       this.resumeSearch = false;
       this.search();
     }
+  }
+
+  private hasActiveFilter(): boolean {
+    if (this.searchKind === 'jm') {
+      return this.searchOptions.jm.order !== 'mr' || this.searchOptions.jm.time !== 'a';
+    }
+    if (this.searchKind === 'eh') {
+      return this.searchOptions.eh.hasActiveFilter();
+    }
+    return false;
   }
 
   private editQuery(): void {
@@ -263,19 +274,45 @@ export struct SearchAllPage {
         onSubmit: (text: string, selection: SearchSelection | null): void => {
           this.query = text; this.selection = selection; this.search();
         } }).layoutWeight(1)
+      if (this.scope === 'source' && (this.searchKind === 'jm' || this.searchKind === 'eh')) {
+        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+          SymbolGlyph($r('sys.symbol.slider_horizontal_2'))
+            .fontSize(20)
+            .fontColor([this.hasActiveFilter() ? PRIMARY : $r('sys.color.font_primary')])
+        }
+        .width(40)
+        .height(40)
+        .backgroundColor(this.hasActiveFilter() ? PRIMARY_SOFT : Color.Transparent)
+        .systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
+        .accessibilityText('筛选')
+        .onClick((): void => {
+          this.filterSheet = true;
+        })
+      }
     }.width('100%').height(56).padding({ left: 16, right: 16 })
+  }
+
+  @Builder
+  private FilterSheetPanel() {
+    SearchFilterSheet({
+      kind: this.searchKind ?? 'jm',
+      options: this.searchOptions,
+      onApply: (options: SourceSearchOptions): void => {
+        this.searchOptions = options;
+        if (this.submitted !== '') {
+          this.search();
+        }
+      },
+      onClose: (): void => {
+        this.filterSheet = false;
+      }
+    })
   }
 
   build() {
     HdsNavDestination() {
       Navigation() {
         Column() {
-          if (this.scope === 'source' && (this.searchKind === 'jm' || this.searchKind === 'eh')) {
-            SearchFilters({ kind: this.searchKind, options: this.searchOptions, onApply: (options: SourceSearchOptions): void => {
-              this.searchOptions = options;
-              if (this.submitted !== '') { this.search(); }
-            } })
-          }
           Scroll() {
             Column({ space: 20 }) {
               if (this.query.trim() === '') {
@@ -312,6 +349,12 @@ export struct SearchAllPage {
       .title({ builder: (): void => this.SearchTitle(), height: TitleHeight.MainOnly }, { backgroundColor: Color.Transparent })
       .width('100%').height('100%').padding({ top: this.topInset })
     }.hideTitleBar(true).backgroundColor(BG)
+    .bindSheet($$this.filterSheet, this.FilterSheetPanel(), {
+      height: SheetSize.FIT_CONTENT,
+      dragBar: true,
+      showClose: false,
+      systemMaterial: IMMERSIVE_SHEET_MATERIAL
+    })
     .onReady((context: NavDestinationContext) => {
       const params: Record<string, Object> | null = asRecord(context.pathInfo.param as Object);
       this.query = params === null ? '' : asString(params['query']);

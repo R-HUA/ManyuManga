@@ -179,6 +179,10 @@ export struct ReaderPage {
     .cachedCount(Math.max(2, this.preloadCount))
     .width('100%')
     .height('100%')
+    .onAppear(() => {
+      const targetIdx: number = Math.max(0, this.controller.pageToSpreadIndex(this.currentPage));
+      this.controller.swiperController.changeIndex(targetIdx, false);
+    })
     .onChange((index: number) => {
       const page: number = this.controller.spreadIndexToPage(index);
       if (page !== this.currentPage) {
@@ -254,6 +258,7 @@ export struct ReaderPage {
       panel: this.$panel,
       hudVisible: this.$hudVisible,
       goBack: (): void => this.controller.goBack(),
+      openPreview: (): void => this.controller.openPreview(),
       pages: this.$pages,
       albumTitle: this.$albumTitle,
       currentPage: this.$currentPage,
@@ -381,15 +386,21 @@ export struct ReaderPage {
                 .onActionEnd((): void => {
                   this.controller.bounceZoomBack();
                 }),
-              PanGesture({ fingers: 2, distance: 1 })
+              PanGesture({ fingers: 1, distance: 3 })
                 .onActionStart((event: GestureEvent): void => {
-                  this.controller.onTwoFingerPanStart(event);
+                  if (this.zoomScale > 1.05) {
+                    this.controller.onTwoFingerPanStart(event);
+                  }
                 })
                 .onActionUpdate((event: GestureEvent): void => {
-                  this.controller.onTwoFingerPanUpdate(event);
+                  if (this.zoomScale > 1.05) {
+                    this.controller.onTwoFingerPanUpdate(event);
+                  }
                 })
                 .onActionEnd((): void => {
-                  this.controller.bounceZoomBack();
+                  if (this.zoomScale > 1.05) {
+                    this.controller.bounceZoomBack();
+                  }
                 })
             )
           )
@@ -430,6 +441,7 @@ export struct ReaderPage {
       .bindSheet($$this.sheetVisible, this.ChapterSheet(), {
         height: '62%',
         dragBar: true,
+        showClose: false,
         systemMaterial: IMMERSIVE_SHEET_MATERIAL,
         onDisappear: (): void => {
           this.sheetVisible = false;

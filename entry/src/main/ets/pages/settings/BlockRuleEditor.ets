@@ -60,7 +60,6 @@ export struct BlockRuleEditor {
         .font({ size: 14, weight: FontWeight.Medium })
         .fontColor(TEXT_MAIN)
         .backgroundColor(SUB_CARD)
-        .menuSystemMaterial(IMMERSIVE_REGULAR_MATERIAL)
         .onSelect((index: number) => {
           this.kindIndex = index;
         })

@@ -84,7 +84,6 @@ export struct SettingSelectRow {
         .selectedOptionFontColor(PRIMARY)
         .optionFont({ size: 15, weight: FontWeight.Normal })
         .backgroundColor(Color.Transparent)
-        .menuSystemMaterial(IMMERSIVE_REGULAR_MATERIAL)
         .onSelect((index: number) => {
           this.onChanged(index);
         })

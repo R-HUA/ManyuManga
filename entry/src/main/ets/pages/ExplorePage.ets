@@ -1,8 +1,7 @@
 import { ComicGrid } from '../common/ComicGrid';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SOURCE_BROWSE } from '../common/Route';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
-import { PRIMARY, TEXT_MAIN, TEXT_SUB, DANGER, TAB_BAR_HEIGHT } from '../common/Theme';
-import { IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
+import { PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB, DANGER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { AlbumLite, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 
@@ -57,18 +56,17 @@ export struct ExplorePage {
     else if (section === 'random') { this.randomLoading = true; this.randomError = ''; }
     else { this.latestLoading = true; this.latestError = ''; }
     try {
-      const items: Array<AlbumLite> = section === 'ranking' ?
-        await sourceApi.ranking(this.sourceIdValue, '', this.currentRank, 1) :
-        section === 'random' ? await sourceApi.random(this.sourceIdValue) : await sourceApi.latest(this.sourceIdValue, 1);
+      const items: Array<AlbumLite> = section === 'ranking' ? await sourceApi.ranking(this.sourceIdValue, '', this.currentRank, 1) : section === 'random' ? await sourceApi.random(this.sourceIdValue) : await sourceApi.latest(this.sourceIdValue, 1);
       if (ticket !== this.generation || (section === 'ranking' && rankTicket !== this.rankGeneration)) { return; }
       if (section === 'ranking') { this.rankItems = items; }
       else if (section === 'random') { this.randomItems = items; }
       else { this.latestItems = items; }
     } catch (e) {
       if (ticket !== this.generation || (section === 'ranking' && rankTicket !== this.rankGeneration)) { return; }
-      if (section === 'ranking') { this.rankError = errorMessage(e as Error); }
-      else if (section === 'random') { this.randomError = errorMessage(e as Error); }
-      else { this.latestError = errorMessage(e as Error); }
+      const message: string = errorMessage(e as Error);
+      if (section === 'ranking') { this.rankError = message; }
+      else if (section === 'random') { this.randomError = message; }
+      else { this.latestError = message; }
     } finally {
       if (ticket === this.generation) {
         if (section === 'ranking' && rankTicket === this.rankGeneration) { this.rankLoading = false; }
@@ -86,17 +84,45 @@ export struct ExplorePage {
   private Section($$: HomeSectionView) {
     Column({ space: 12 }) {
       Row({ space: 8 }) {
-        Text($$.title).fontSize(20).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
+        Text($$.title)
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(TEXT_MAIN)
         if ($$.section === 'ranking') {
           Select(this.labels.map((label: string): SelectOption => { return { value: label }; }))
-            .selected(this.orders.indexOf(this.currentRank)).value(this.labels[this.orders.indexOf(this.currentRank)])
-            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
-            .onSelect((index: number): void => { this.currentRank = this.orders[index]; this.fetchSection('ranking'); })
+            .selected(this.orders.indexOf(this.currentRank))
+            .value(this.labels[this.orders.indexOf(this.currentRank)])
+            .height(28)
+            .font({ size: 12, weight: FontWeight.Medium })
+            .fontColor(PRIMARY)
+            .selectedOptionFont({ size: 13, weight: FontWeight.Bold })
+            .selectedOptionFontColor(PRIMARY)
+            .optionFont({ size: 13, weight: FontWeight.Normal })
+            .backgroundColor(SUB_CARD)
+            .borderRadius(14)
+            .padding({ left: 10, right: 10 })
+            .onSelect((index: number): void => {
+              this.currentRank = this.orders[index];
+              this.fetchSection('ranking');
+            })
         }
+        Blank()
         Button($$.section === 'random' ? '换一批' : '查看全部', { buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(13).fontColor(PRIMARY).backgroundColor(Color.Transparent).enabled(!$$.loading)
-          .onClick(() => { if ($$.section === 'random') { this.fetchSection($$.section); } else { this.browse($$.section); } })
-      }.width('100%')
+          .fontSize(13)
+          .fontColor(PRIMARY)
+          .backgroundColor(Color.Transparent)
+          .enabled(!$$.loading)
+          .onClick(() => {
+            if ($$.section === 'random') {
+              this.fetchSection($$.section);
+            } else {
+              this.browse($$.section);
+            }
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
       if ($$.error !== '') {
         Text($$.error).fontSize(13).fontColor(DANGER).width('100%')
         Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.fetchSection($$.section))

@@ -19,7 +19,7 @@ export const HDS_TITLE_STYLE: TitleBarStyleOptions = {
 export const IMMERSIVE_CONTROL_MATERIAL: uiMaterial.ImmersiveMaterial =
   new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THIN });
 export const IMMERSIVE_TAB_BAR_MATERIAL: uiMaterial.ImmersiveMaterial =
-  new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THIN, colorInvert: true });
+  new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THIN });
 export const IMMERSIVE_REGULAR_MATERIAL: uiMaterial.ImmersiveMaterial =
   new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR });
 export const IMMERSIVE_SHEET_MATERIAL: uiMaterial.ImmersiveMaterial =

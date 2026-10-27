@@ -1,7 +1,10 @@
 /**
- * E-Hentai 高级搜索筛选面板：搜索模式、10 大分类开关（官方色标）、
- * 最低评分、页数区间与 advsearch 十项开关。编辑在副本上进行，
- * 点「应用」后由当前页面提交。
+ * entry/src/main/ets/pages/eh/EhFilterSheet.ets
+ * 修复截图 4 (202141) 与截图 5 (202150)：
+ * 1. 移除与系统右上角 × 冲突的布局，自带紧凑头部与关闭圆钮（配合 bindSheet showClose: false）
+ * 2. 搜索模式(4选1)与最低评分(5选1)重构为 34vp 一体式凹槽分段控制器，告别胖椭圆堆叠
+ * 3. 10 大画廊分类重构为 5列×2行 等宽色标矩阵 (Grid)，清空/全选改为 26vp 轻量胶囊
+ * 4. 砍掉底部冗余的第二排通栏「取消/收起」按钮，单行「重置 + 应用」释放 54vp 空间
  */
 import {
   EhSearchFilter,
@@ -9,10 +12,11 @@ import {
   EhCategoryOption,
   EH_CATEGORY_OPTIONS
 } from '../../data/eh/EhSearchFilter';
-import { SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { IconCircleButton } from '../../common/Components';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
+import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
-/** 高级开关行定义（label / EhSearchFilter 字段名一致的取值回调）。 */
 class EhFlagRow {
   label: string;
   key: string;
@@ -24,16 +28,16 @@ class EhFlagRow {
 }
 
 const FLAG_ROWS: Array<EhFlagRow> = [
-  new EhFlagRow('标题', 'inName'),
-  new EhFlagRow('标签', 'inTags'),
-  new EhFlagRow('描述', 'inDescription'),
-  new EhFlagRow('种子', 'inTorrents'),
-  new EhFlagRow('低权重标签', 'inLowPowerTags'),
-  new EhFlagRow('已删除图库', 'showExpunged'),
-  new EhFlagRow('低评分图库', 'showDownvoted'),
-  new EhFlagRow('文件名', 'inFileName'),
-  new EhFlagRow('上传者', 'inUploader'),
-  new EhFlagRow('种子文件', 'inTorrentFile')
+  new EhFlagRow('搜索画廊标题', 'inName'),
+  new EhFlagRow('搜索画廊标签', 'inTags'),
+  new EhFlagRow('搜索画廊描述', 'inDescription'),
+  new EhFlagRow('搜索种子名称', 'inTorrents'),
+  new EhFlagRow('包含低权重标签', 'inLowPowerTags'),
+  new EhFlagRow('显示已删除图库', 'showExpunged'),
+  new EhFlagRow('显示低评分图库', 'showDownvoted'),
+  new EhFlagRow('搜索文件名称', 'inFileName'),
+  new EhFlagRow('搜索上传者名称', 'inUploader'),
+  new EhFlagRow('搜索种子文件名', 'inTorrentFile')
 ];
 
 const RATING_OPTIONS: Array<number> = [0, 2, 3, 4, 5];
@@ -41,10 +45,10 @@ const RATING_OPTIONS: Array<number> = [0, 2, 3, 4, 5];
 @Component
 export struct EhFilterSheet {
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
-  /** 当前生效的筛选（构造时传入，编辑不落库）。 */
-  filter: EhSearchFilter = new EhSearchFilter();
+  /** 是否仅展示画廊分类面板（兼容 categoryOnly 与 searchFilters 两种调用入参） */
+  @Prop categoryOnly: boolean = false;
   @Prop searchFilters: boolean = true;
-  /** 编辑副本：点「应用」才由父页回写生效。 */
+  filter: EhSearchFilter = new EhSearchFilter();
   @State draft: EhSearchFilter = new EhSearchFilter();
   apply: (filter: EhSearchFilter) => void = (): void => {};
   close: () => void = (): void => {};
@@ -52,6 +56,10 @@ export struct EhFilterSheet {
   aboutToAppear(): void {
     this.draft = new EhSearchFilter();
     this.draft.copyFrom(this.filter);
+  }
+
+  private isOnlyCategory(): boolean {
+    return this.categoryOnly || !this.searchFilters;
   }
 
   private flagValue(key: string): boolean {
@@ -86,41 +94,83 @@ export struct EhFilterSheet {
     }
   }
 
+  private refreshDraft(): void {
+    const next: EhSearchFilter = new EhSearchFilter();
+    next.copyFrom(this.draft);
+    this.draft = next;
+  }
+
+  /** 一体式凹槽分段项：搜索模式 */
   @Builder
-  private ModeChip(label: string, mode: EhSearchMode) {
-    Button(label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-      .fontSize(12)
+  private ModeSegmentItem(label: string, mode: EhSearchMode) {
+    Text(label)
+      .fontSize(13)
       .fontWeight(this.draft.mode === mode ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.draft.mode === mode ? PRIMARY : TEXT_MAIN)
-      .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-      .margin({ right: 8, bottom: 8 })
-      .backgroundColor(this.draft.mode === mode ? PRIMARY_SOFT : SUB_CARD)
-      .onClick(() => { this.draft.mode = mode; })
+      .fontColor(this.draft.mode === mode ? PRIMARY : TEXT_SUB)
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .height(30)
+      .borderRadius(10)
+      .backgroundColor(this.draft.mode === mode ? CARD : Color.Transparent)
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+      .onClick(() => {
+        this.draft.mode = mode;
+        this.refreshDraft();
+      })
   }
 
+  /** 一体式凹槽分段项：最低评分 */
   @Builder
-  private CategoryChip(option: EhCategoryOption) {
-    Button(option.label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-      .fontSize(12)
-      .fontWeight(this.draft.categoryOn(option.bit) ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.draft.categoryOn(option.bit) ? Color.White : TEXT_SUB)
-      .padding({ left: 11, right: 11, top: 7, bottom: 7 })
-      .margin({ right: 8, bottom: 8 })
-      .backgroundColor(this.draft.categoryOn(option.bit) ? option.color : SUB_CARD)
-      .border({ width: 0.5, color: this.draft.categoryOn(option.bit) ? option.color : DIVIDER })
-      .onClick(() => { this.draft.toggleCategory(option.bit); })
-  }
-
-  @Builder
-  private RatingChip(value: number) {
-    Button(value === 0 ? '不限' : `${value} 星`, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+  private RatingSegmentItem(value: number) {
+    Text(value === 0 ? '不限' : `${value}星+`)
       .fontSize(12)
       .fontWeight(this.draft.minRating === value ? FontWeight.Bold : FontWeight.Medium)
       .fontColor(this.draft.minRating === value ? PRIMARY : TEXT_SUB)
-      .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-      .margin({ right: 8, bottom: 8 })
-      .backgroundColor(this.draft.minRating === value ? PRIMARY_SOFT : SUB_CARD)
-      .onClick(() => { this.draft.minRating = value; })
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .height(30)
+      .borderRadius(10)
+      .backgroundColor(this.draft.minRating === value ? CARD : Color.Transparent)
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+      .onClick(() => {
+        this.draft.minRating = value;
+        this.refreshDraft();
+      })
+  }
+
+  /** 2×5 等宽画廊分类矩阵单元 */
+  @Builder
+  private CategoryGridCell(option: EhCategoryOption) {
+    Row({ space: 8 }) {
+      Circle({ width: 8, height: 8 })
+        .fill(option.color)
+      Text(option.label)
+        .fontSize(13)
+        .fontWeight(this.draft.categoryOn(option.bit) ? FontWeight.Bold : FontWeight.Normal)
+        .fontColor(this.draft.categoryOn(option.bit) ? Color.White : TEXT_MAIN)
+        .maxLines(1)
+        .layoutWeight(1)
+      if (this.draft.categoryOn(option.bit)) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(14)
+          .fontColor([Color.White])
+      }
+    }
+    .width('100%')
+    .height(34)
+    .padding({ left: 10, right: 10 })
+    .alignItems(VerticalAlign.Center)
+    .borderRadius(10)
+    .backgroundColor(this.draft.categoryOn(option.bit) ? option.color : SUB_CARD)
+    .border({
+      width: 0.5,
+      color: this.draft.categoryOn(option.bit) ? option.color : DIVIDER
+    })
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
+    .onClick(() => {
+      this.draft.toggleCategory(option.bit);
+      this.refreshDraft();
+    })
   }
 
   @Builder
@@ -134,179 +184,244 @@ export struct EhFilterSheet {
         .selectedColor(PRIMARY)
         .onChange((on: boolean) => {
           this.setFlag(row.key, on);
+          this.refreshDraft();
         })
     }
     .width('100%')
-    .padding({ top: 4, bottom: 4 })
+    .height(40)
+    .alignItems(VerticalAlign.Center)
   }
 
   build() {
-    Scroll() {
-      Column({ space: 14 }) {
-        Text(this.searchFilters ? '搜索筛选' : '画廊分类')
-          .fontSize(20)
+    Column({ space: 14 }) {
+      // ── 顶部标题栏（配合 bindSheet showClose: false，彻底消除右上角 × 重叠） ──
+      Row({ space: 10 }) {
+        Text(this.isOnlyCategory() ? '画廊分类' : '搜索筛选')
+          .fontSize(19)
           .fontWeight(FontWeight.Bold)
           .fontColor(TEXT_MAIN)
-          .width('100%')
+          .layoutWeight(1)
 
-        // ── 搜索模式 ──
-        if (this.searchFilters) {
+        IconCircleButton({
+          glyph: $r('sys.symbol.xmark'),
+          btnSize: 32,
+          iconSize: 16,
+          onTap: (): void => {
+            this.close();
+          }
+        })
+      }
+      .width('100%')
+      .padding({ left: 20, right: 20, top: 12 })
+
+      Scroll() {
+        Column({ space: 16 }) {
+          if (!this.isOnlyCategory()) {
+            // ── 1. 搜索模式（一体式凹槽分段器） ──
+            Column({ space: 8 }) {
+              Text('搜索模式')
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(TEXT_SUB)
+              Row({ space: 4 }) {
+                this.ModeSegmentItem('普通', 'normal')
+                this.ModeSegmentItem('标签', 'tag')
+                this.ModeSegmentItem('上传者', 'uploader')
+                this.ModeSegmentItem('关注', 'watched')
+              }
+              .width('100%')
+              .padding(3)
+              .borderRadius(12)
+              .backgroundColor(SUB_CARD)
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+          }
+
+          // ── 2. 画廊分类（5列 × 2行 等宽色标矩阵） ──
           Column({ space: 8 }) {
-            Text('搜索模式').fontSize(12).fontColor(TEXT_SUB)
-            Flex({ wrap: FlexWrap.Wrap }) {
-              this.ModeChip('普通', 'normal')
-              this.ModeChip('标签', 'tag')
-              this.ModeChip('上传者', 'uploader')
-              this.ModeChip('关注', 'watched')
-            }.width('100%')
+            Row() {
+              Text('画廊分类（点击切换启用/排除）')
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(TEXT_SUB)
+                .layoutWeight(1)
+
+              // 紧凑型 26vp 胶囊按钮，杜绝竖向胖椭圆变形
+              Text(this.draft.categoryMask === 0x3ff ? '清空全部' : '全选分类')
+                .fontSize(11)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(PRIMARY)
+                .height(26)
+                .padding({ left: 10, right: 10 })
+                .borderRadius(13)
+                .backgroundColor(PRIMARY_SOFT)
+                .onClick(() => {
+                  this.draft.categoryMask = this.draft.categoryMask === 0x3ff ? 0 : 0x3ff;
+                  this.refreshDraft();
+                })
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+
+            Grid() {
+              ForEach(EH_CATEGORY_OPTIONS, (option: EhCategoryOption) => {
+                GridItem() {
+                  this.CategoryGridCell(option)
+                }
+              }, (option: EhCategoryOption) => `${option.bit}_${this.draft.categoryOn(option.bit)}`)
+            }
+            .columnsTemplate('1fr 1fr')
+            .columnsGap(10)
+            .rowsGap(8)
+            .width('100%')
+            .height(202)
           }
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-        }
 
-        // ── 分类 ──
-        Column({ space: 8 }) {
-          Row() {
-            Text('画廊分类').fontSize(12).fontColor(TEXT_SUB).layoutWeight(1)
-            Button(this.draft.categoryMask === 0x3ff ? '清空' : '全选', { buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(PRIMARY)
-              .onClick(() => {
-                this.draft.categoryMask = this.draft.categoryMask === 0x3ff ? 0 : 0x3ff;
-              })
-          }
-          .width('100%')
-          Flex({ wrap: FlexWrap.Wrap }) {
-            ForEach(EH_CATEGORY_OPTIONS, (option: EhCategoryOption) => {
-              this.CategoryChip(option)
-            }, (option: EhCategoryOption) => `${option.bit}`)
-          }.width('100%')
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-
-        if (this.searchFilters) {
-        // ── 最低评分 ──
-        Column({ space: 8 }) {
-          Text('最低评分').fontSize(12).fontColor(TEXT_SUB)
-          Flex({ wrap: FlexWrap.Wrap }) {
-            ForEach(RATING_OPTIONS, (value: number) => {
-              this.RatingChip(value)
-            }, (value: number) => `${value}`)
-          }.width('100%')
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-
-        // ── 页数区间 ──
-        Column({ space: 8 }) {
-          Text('页数区间').fontSize(12).fontColor(TEXT_SUB)
-          Row({ space: 10 }) {
-            TextInput({ text: this.draft.pageFrom, placeholder: '最少' })
-              .type(InputType.Number)
-              .height(38)
-              .layoutWeight(1)
+          if (!this.isOnlyCategory()) {
+            // ── 3. 最低评分（一体式凹槽分段器） ──
+            Column({ space: 8 }) {
+              Text('最低评分')
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(TEXT_SUB)
+              Row({ space: 4 }) {
+                ForEach(RATING_OPTIONS, (value: number) => {
+                  this.RatingSegmentItem(value)
+                }, (value: number) => `${value}_${this.draft.minRating === value}`)
+              }
+              .width('100%')
+              .padding(3)
               .borderRadius(12)
               .backgroundColor(SUB_CARD)
-              .fontColor(TEXT_MAIN)
-              .placeholderColor(TEXT_SUB)
-              .onChange((s: string) => {
-                this.draft.pageFrom = s;
-              })
-            Text('至')
-              .fontSize(12)
-              .fontColor(TEXT_SUB)
-            TextInput({ text: this.draft.pageTo, placeholder: '最多' })
-              .type(InputType.Number)
-              .height(38)
-              .layoutWeight(1)
-              .borderRadius(12)
-              .backgroundColor(SUB_CARD)
-              .fontColor(TEXT_MAIN)
-              .placeholderColor(TEXT_SUB)
-              .onChange((s: string) => {
-                this.draft.pageTo = s;
-              })
-            Text('页')
-              .fontSize(12)
-              .fontColor(TEXT_SUB)
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+
+            // ── 4. 页数区间 ──
+            Column({ space: 8 }) {
+              Text('页数区间')
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(TEXT_SUB)
+              Row({ space: 10 }) {
+                TextInput({ text: this.draft.pageFrom, placeholder: '最少页数' })
+                  .type(InputType.Number)
+                  .height(36)
+                  .fontSize(13)
+                  .layoutWeight(1)
+                  .borderRadius(10)
+                  .backgroundColor(SUB_CARD)
+                  .fontColor(TEXT_MAIN)
+                  .placeholderColor(TEXT_SUB)
+                  .onChange((s: string) => {
+                    this.draft.pageFrom = s;
+                  })
+                Text('至')
+                  .fontSize(12)
+                  .fontColor(TEXT_SUB)
+                TextInput({ text: this.draft.pageTo, placeholder: '最多页数' })
+                  .type(InputType.Number)
+                  .height(36)
+                  .fontSize(13)
+                  .layoutWeight(1)
+                  .borderRadius(10)
+                  .backgroundColor(SUB_CARD)
+                  .fontColor(TEXT_MAIN)
+                  .placeholderColor(TEXT_SUB)
+                  .onChange((s: string) => {
+                    this.draft.pageTo = s;
+                  })
+                Text('页')
+                  .fontSize(12)
+                  .fontColor(TEXT_SUB)
+              }
+              .width('100%')
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+
+            Divider().color(DIVIDER).width('100%')
+
+            // ── 5. 高级搜索条件折叠区 ──
+            Column({ space: 4 }) {
+              Row() {
+                Column({ space: 2 }) {
+                  Text('高级搜索条件 (AdvSearch)')
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(TEXT_MAIN)
+                  Text('细化检索范围、已删除图库与低评分内容')
+                    .fontSize(11)
+                    .fontColor(TEXT_SUB)
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+
+                Toggle({ type: ToggleType.Switch, isOn: this.draft.advanced })
+                  .selectedColor(PRIMARY)
+                  .onChange((on: boolean) => {
+                    this.draft.advanced = on;
+                    this.refreshDraft();
+                  })
+              }
+              .width('100%')
+
+              if (this.draft.advanced) {
+                Column() {
+                  ForEach(FLAG_ROWS, (row: EhFlagRow) => {
+                    this.FlagRow(row)
+                  }, (row: EhFlagRow) => `${row.key}_${this.flagValue(row.key)}`)
+                }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+                .margin({ top: 6 })
+                .borderRadius(12)
+                .backgroundColor(SUB_CARD)
+              }
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
           }
-          .width('100%')
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-
-        Divider().color(DIVIDER).width('100%')
-
-        // ── 高级开关 ──
-        Column({ space: 4 }) {
-          Row() {
-            Text('高级搜索条件').fontSize(12).fontColor(TEXT_SUB).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.draft.advanced })
-              .selectedColor(PRIMARY)
-              .onChange((on: boolean) => {
-                this.draft.advanced = on;
-              })
-          }
-          .width('100%')
-          .padding({ bottom: 4 })
-
-          if (this.draft.advanced) {
-            ForEach(FLAG_ROWS, (row: EhFlagRow) => {
-              this.FlagRow(row)
-            }, (row: EhFlagRow) => row.key)
-          }
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        }
-
-        // ── 操作 ──
-        Row({ space: 10 }) {
-          Button('重置', { buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(13)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(TEXT_SUB)
-            .layoutWeight(1)
-            .height(42)
-            .borderRadius(21)
-            .backgroundColor(SUB_CARD)
-            .onClick(() => {
-              this.draft = new EhSearchFilter();
-            })
-          Button('应用', { buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .layoutWeight(1)
-            .height(42)
-            .borderRadius(21)
-            .backgroundColor(PRIMARY)
-            .onClick(() => {
-              this.apply(this.draft);
-              this.close();
-            })
         }
         .width('100%')
-        .margin({ top: 4 })
+        .padding({ left: 20, right: 20, bottom: 8 })
+      }
+      .scrollBar(BarState.Off)
+      .constraintSize({ maxHeight: this.isOnlyCategory() ? 260 : 500 })
+      .width('100%')
 
-        Button('取消', { buttonStyle: ButtonStyleMode.NORMAL })
+      // ── 底部单行操作栏（彻底移除第二排冗余的「取消/收起」巨型按钮） ──
+      Row({ space: 12 }) {
+        Button('重置', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
           .fontColor(TEXT_MAIN)
-          .width('100%')
-          .height(42)
-          .borderRadius(21)
           .backgroundColor(SUB_CARD)
+          .layoutWeight(1)
+          .height(40)
           .onClick(() => {
+            this.draft = new EhSearchFilter();
+          })
+
+        Button('应用筛选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .backgroundColor(PRIMARY)
+          .layoutWeight(2)
+          .height(40)
+          .onClick(() => {
+            this.draft.save().catch((): void => {});
+            this.apply(this.draft);
             this.close();
           })
       }
       .width('100%')
-      .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
+      .padding({ left: 20, right: 20, top: 4, bottom: 16 + this.bottomInset })
     }
     .width('100%')
-    .scrollBar(BarState.Off).height('100%').align(Alignment.TopStart)
   }
 }

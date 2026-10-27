@@ -6,7 +6,7 @@ import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
-import { CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 
 @Component
 export struct WorkHeroInfo {
@@ -86,26 +86,29 @@ export struct WorkHeroInfo {
             }
 
             // Multi-Source Aggregation Capsule
-            Row({ space: 6 }) {
+            Row({ space: 4 }) {
               Text(this.sourceBadge())
                 .fontSize(11)
                 .fontWeight(FontWeight.Bold)
-                .fontColor(Color.White)
-                .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-                .borderRadius(8)
-                .backgroundColor(PRIMARY)
+                .fontColor(PRIMARY)
 
-              Text(this.work !== null && this.work.albums.length > 1
-                ? `已关联 ${this.work.albums.length} 个书源`
-                : '')
-                .fontSize(11)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(TEXT_MAIN)
+              if (this.work !== null && this.work.albums.length > 1) {
+                Text(`（${this.work.albums.length}源）`)
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(PRIMARY)
+              }
+              SymbolGlyph($r('sys.symbol.chevron_right'))
+                .fontSize(12)
+                .fontColor([PRIMARY])
             }
-            .padding({ left: 6, right: 10, top: 5, bottom: 5 })
-            .borderRadius(12)
-            .backgroundColor(CARD)
-            .border({ width: 0.5, color: DIVIDER })
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .borderRadius(8)
+            .backgroundColor(PRIMARY_SOFT)
+            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
+            .onClick(() => {
+              this.sourceSheet = true;
+            })
 
             Row({ space: 12 }) {
               Text(`共 ${this.album.episodes.length} 话`)
@@ -130,32 +133,32 @@ export struct WorkHeroInfo {
         .alignItems(VerticalAlign.Top)
 
         // 统一单行黄金动作栏：主阅读 CTA + 收藏 / 换源 / 下载
-        Row({ space: 10 }) {
+        Row({ space: 8 }) {
           Button(this.canContinue() ? this.continueLabel() : '开始阅读', { buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(15)
+            .fontSize(14)
             .fontWeight(FontWeight.Bold)
             .fontColor(Color.White)
             .backgroundColor(PRIMARY)
             .layoutWeight(1)
-            .height(46)
-            .borderRadius(23)
+            .height(42)
+            .borderRadius(21)
             .onClick(() => { this.read(); })
 
           // 1. 收藏/在架切换
           Column({ space: 2 }) {
             SymbolGlyph(this.work !== null ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
-              .fontSize(19)
+              .fontSize(18)
               .fontColor([this.work !== null ? PRIMARY : TEXT_MAIN])
             Text(this.work !== null ? '已在架' : '收藏')
               .fontSize(10)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.work !== null ? PRIMARY : TEXT_SUB)
           }
-          .width(54)
-          .height(46)
+          .width(52)
+          .height(42)
           .justifyContent(FlexAlign.Center)
-          .borderRadius(16)
-          .backgroundColor(this.work !== null ? PRIMARY_SOFT : CARD)
+          .borderRadius(14)
+          .backgroundColor(this.work !== null ? PRIMARY_SOFT : SUB_CARD)
           .border({ width: 0.5, color: this.work !== null ? PRIMARY : DIVIDER })
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
           .onClick(() => {
@@ -165,18 +168,18 @@ export struct WorkHeroInfo {
           // 2. 换源与多源角标（唯一主换源入口）
           Column({ space: 2 }) {
             SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
-              .fontSize(19)
+              .fontSize(18)
               .fontColor([this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_MAIN])
-            Text(this.work !== null && this.work.albums.length > 1 ? `${this.work.albums.length} 源` : '换源')
+            Text(this.work !== null && this.work.albums.length > 1 ? `${this.work.albums.length}源` : '换源')
               .fontSize(10)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_SUB)
           }
-          .width(54)
-          .height(46)
+          .width(52)
+          .height(42)
           .justifyContent(FlexAlign.Center)
-          .borderRadius(16)
-          .backgroundColor(CARD)
+          .borderRadius(14)
+          .backgroundColor(SUB_CARD)
           .border({ width: 0.5, color: DIVIDER })
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
           .onClick(() => {
@@ -186,18 +189,18 @@ export struct WorkHeroInfo {
           // 3. 离线下载
           Column({ space: 2 }) {
             SymbolGlyph($r('sys.symbol.arrow_down_circle'))
-              .fontSize(19)
+              .fontSize(18)
               .fontColor([TEXT_MAIN])
             Text('下载')
               .fontSize(10)
               .fontWeight(FontWeight.Medium)
               .fontColor(TEXT_SUB)
           }
-          .width(54)
-          .height(46)
+          .width(52)
+          .height(42)
           .justifyContent(FlexAlign.Center)
-          .borderRadius(16)
-          .backgroundColor(CARD)
+          .borderRadius(14)
+          .backgroundColor(SUB_CARD)
           .border({ width: 0.5, color: DIVIDER })
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
           .onClick(() => {

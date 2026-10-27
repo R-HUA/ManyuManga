@@ -39,7 +39,7 @@ export struct SearchHistory {
     Column({ space: 20 }) {
       if (this.items.length > 0) {
         Row() {
-          Text('搜索历史').fontSize(22).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
+          Text('搜索历史').fontSize(16).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
           IconCircleButton({ glyph: $r('sys.symbol.trash'), onTap: (): void => this.confirmClear() })
         }.width('100%')
         Row({ space: 12 }) {
@@ -62,6 +62,6 @@ export struct SearchHistory {
         }.alignItems(VerticalAlign.Top).width('100%')
       }
       if (this.error !== '') { Text(this.error).fontSize(13).fontColor(DANGER).width('100%') }
-    }.width('100%').alignItems(HorizontalAlign.Start).padding({ top: 28 })
+    }.width('100%').alignItems(HorizontalAlign.Start).padding({ top: 12 })
   }
 }

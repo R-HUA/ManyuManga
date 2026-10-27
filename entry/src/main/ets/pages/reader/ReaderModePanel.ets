@@ -1,46 +1,65 @@
-import { ModeOptionRow } from './ReaderControls';
 import { ReaderMode } from '../../models/Models';
+import { PRIMARY } from '../../common/Theme';
 
-const PANEL_BG: string = 'rgba(28,28,32,0.82)';
+class ModeItem {
+  mode: ReaderMode;
+  label: string;
+  icon: Resource;
+
+  constructor(mode: ReaderMode, label: string, icon: Resource) {
+    this.mode = mode;
+    this.label = label;
+    this.icon = icon;
+  }
+}
+
+const PANEL_BG: string = 'rgba(28,28,32,0.86)';
 
 @Component
 export struct ReaderModePanel {
   @Link mode: ReaderMode;
   switchMode: (m: ReaderMode) => void = (m: ReaderMode): void => {};
 
+  private readonly modeList: ModeItem[] = [
+    new ModeItem('vertical', '纵向条漫', $r('sys.symbol.doc_plaintext')),
+    new ModeItem('pagedVertical', '纵向翻页', $r('sys.symbol.page_turning')),
+    new ModeItem('horizontal', '左右翻页', $r('sys.symbol.rectangle_on_rectangle')),
+    new ModeItem('rtl', '日漫右翻', $r('sys.symbol.book_pages')),
+    new ModeItem('double', '双页拼合', $r('sys.symbol.rectangle_split_2x1'))
+  ];
+
   build() {
-    Column({ space: 6 }) {
-      ModeOptionRow({
-        label: '纵向条漫', sub: '上下连续瀑布流滚动', selected: this.mode === 'vertical',
-        onPick: (): void => {
-          this.switchMode('vertical');
+    Row({ space: 6 }) {
+      ForEach(this.modeList, (item: ModeItem) => {
+        Column({ space: 4 }) {
+          SymbolGlyph(item.icon)
+            .fontSize(22)
+            .fontColor([this.mode === item.mode ? Color.White : 'rgba(255,255,255,0.82)'])
+          Text(item.label)
+            .fontSize(11)
+            .fontWeight(this.mode === item.mode ? FontWeight.Bold : FontWeight.Medium)
+            .fontColor(this.mode === item.mode ? Color.White : 'rgba(255,255,255,0.72)')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
-      })
-      ModeOptionRow({
-        label: '纵向翻页', sub: '上下整屏滑动逐页阅读', selected: this.mode === 'pagedVertical',
-        onPick: (): void => { this.switchMode('pagedVertical'); }
-      })
-      ModeOptionRow({
-        label: '左右翻页', sub: '从左向右单页整屏适配', selected: this.mode === 'horizontal',
-        onPick: (): void => {
-          this.switchMode('horizontal');
-        }
-      })
-      ModeOptionRow({
-        label: '日漫右翻', sub: '从右向左的自然手势翻页（进度条自动镜像）', selected: this.mode === 'rtl',
-        onPick: (): void => {
-          this.switchMode('rtl');
-        }
-      })
-      ModeOptionRow({
-        label: '双页拼合', sub: '封面单页 + 跨页自动识别并排', selected: this.mode === 'double',
-        onPick: (): void => {
-          this.switchMode('double');
-        }
-      })
+        .layoutWeight(1)
+        .height(60)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .borderRadius(14)
+        .backgroundColor(this.mode === item.mode ? PRIMARY : 'rgba(255,255,255,0.06)')
+        .border({
+          width: 0.5,
+          color: this.mode === item.mode ? PRIMARY : 'rgba(255,255,255,0.10)'
+        })
+        .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
+        .onClick(() => {
+          this.switchMode(item.mode);
+        })
+      }, (item: ModeItem): string => item.mode)
     }
     .width('100%')
-    .padding(12)
+    .padding(6)
     .borderRadius(18)
     .backgroundColor(PANEL_BG)
     .border({ width: 0.5, color: 'rgba(255,255,255,0.12)' })

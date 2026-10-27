@@ -1,10 +1,10 @@
 {
   "color": [
     { "name": "start_window_background", "value": "#101112" },
-    { "name": "primary", "value": "#317AF7" },
-    { "name": "primary_soft", "value": "#24317AF7" },
-    { "name": "accent", "value": "#317AF7" },
-    { "name": "accent_soft", "value": "#24317AF7" },
+    { "name": "primary", "value": "#5B8DEF" },
+    { "name": "primary_soft", "value": "#245B8DEF" },
+    { "name": "accent", "value": "#A78BFA" },
+    { "name": "accent_soft", "value": "#24A78BFA" },
     { "name": "bg", "value": "#101112" },
     { "name": "card", "value": "#1C1D1F" },
     { "name": "sub_card", "value": "#28292C" },

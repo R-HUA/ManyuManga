@@ -192,7 +192,7 @@ export struct LibraryPage {
     }
     return [
       { content: { icon: $r('sys.symbol.magnifyingglass'), label: '搜索书架', action: (): void => { this.stack.pushPathByName(ROUTE_SEARCH, { scope: 'library' } as MangaRouteParams); } } },
-      { content: { icon: $r('sys.symbol.plus'), label: '导入漫画', action: (): void => { this.importLocalArchive(); } } },
+      { content: { icon: $r('sys.symbol.folder_badge_plus'), label: '导入漫画', action: (): void => { this.importLocalArchive(); } } },
       { content: { icon: $r('sys.symbol.slider_horizontal_2'), label: '筛选', action: (): void => { this.sheet = true; } } }
     ];
   }
@@ -238,7 +238,7 @@ export struct LibraryPage {
         if (this.works.length > 0) {
           Select(['全部分类'].concat(this.categories).map((name: string): SelectOption => { return { value: name }; }))
             .selected(this.categories.indexOf(this.category) + 1).value(this.category || '全部分类')
-            .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+            .height(30).font({ size: 12, weight: FontWeight.Medium }).fontColor(TEXT_MAIN).backgroundColor(SUB_CARD).borderRadius(15)
             .onSelect((index: number): void => { this.category = index === 0 ? '' : this.categories[index - 1]; })
             .margin({ left: 16, right: 16 })
         }
@@ -410,10 +410,10 @@ export struct LibraryPage {
       style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
     .titleMode(HdsNavigationTitleMode.MINI)
     .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller]).width('100%').height('100%')
-    .bindSheet($$this.sheet, this.FilterSheet(), { height: SheetSize.FIT_CONTENT, dragBar: true, systemMaterial: IMMERSIVE_SHEET_MATERIAL })
+    .bindSheet($$this.sheet, this.FilterSheet(), { height: SheetSize.FIT_CONTENT, dragBar: true, showClose: false, systemMaterial: IMMERSIVE_SHEET_MATERIAL })
     .bindSheet($$this.categorySheet, this.CategorySheet(), {
       height: SheetSize.FIT_CONTENT,
-      dragBar: true,
+      dragBar: true, showClose: false,
       systemMaterial: IMMERSIVE_SHEET_MATERIAL
     })
   }

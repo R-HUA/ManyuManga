@@ -1,6 +1,6 @@
 import { BasicDataSource } from '../../common/DataSource';
 import { IMMERSIVE_CONTROL_MATERIAL, IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
-import { TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { SearchSelection } from '../../common/Route';
 import { MetadataTerm, errorMessage } from '../../models/Models';
 import { SearchSuggestion, suggestLocal } from '../../data/SearchSuggest';
@@ -55,7 +55,7 @@ export struct SearchSuggestField {
     this.timer = setTimeout((): void => {
       this.timer = -1;
       this.load(value, ticket);
-    }, 200);
+    }, 180);
   }
 
   private async load(value: string, ticket: number): Promise<void> {
@@ -92,48 +92,68 @@ export struct SearchSuggestField {
       }
       LazyForEach(this.source, (item: SearchSuggestion) => {
         ListItem() {
-          Button(item.label, { type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(14)
-            .fontColor(item.kind === 'history' ? TEXT_SUB : TEXT_MAIN)
-            .backgroundColor(Color.Transparent)
-            .width('100%')
-            .height(44)
-            .onClick(() => this.choose(item))
+          Row({ space: 8 }) {
+            SymbolGlyph(item.kind === 'history' ? $r('sys.symbol.clock') : $r('sys.symbol.label'))
+              .fontSize(14)
+              .fontColor([item.kind === 'history' ? TEXT_SUB : PRIMARY])
+            Text(item.label)
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(TEXT_MAIN)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+            if (item.namespace !== '') {
+              Text(item.namespace)
+                .fontSize(10)
+                .fontColor(PRIMARY)
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                .borderRadius(6)
+                .backgroundColor(PRIMARY_SOFT)
+            }
+          }
+          .width('100%')
+          .height(38)
+          .padding({ left: 12, right: 12 })
+          .borderRadius(10)
+          .backgroundColor(CARD)
+          .onClick(() => this.choose(item))
         }
       }, (item: SearchSuggestion) => `${item.kind}_${item.sourceId}_${item.namespace}_${item.value}`)
     }
     .width(this.contentWidth)
-    .constraintSize({ maxHeight: 264 })
-    .padding(8)
+    .constraintSize({ maxHeight: 260 })
+    .padding(6)
     .scrollBar(BarState.Off)
   }
 
   build() {
-      Search({ value: this.text, placeholder: this.placeholder })
-        .width('100%')
-        .height(48)
-        .fontColor($r('sys.color.font_primary'))
-        .backgroundColor(Color.Transparent)
-        .systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
-        .searchButton('搜索', { autoDisable: true })
-        .cancelButton({ style: CancelButtonStyle.INPUT })
-        .onChange((value: string) => {
-          this.text = value;
-          this.selection = null;
-          this.onEdit(value);
-          this.schedule(value);
-        })
-        .onSubmit((value: string) => {
-          this.generation++;
-          this.clearTimer();
-          this.open = false;
-          this.onSubmit(value, this.selection);
-        })
-        .onAreaChange((_old: Area, area: Area) => { this.contentWidth = Number(area.width); })
-        .bindPopup(this.open, {
-          builder: this.Suggestions(), placement: Placement.Bottom, enableArrow: false,
-          systemMaterial: IMMERSIVE_REGULAR_MATERIAL,
-          onStateChange: (event: SuggestPopupState): void => { if (!event.isVisible) { this.open = false; } }
-        })
+    Search({ value: this.text, placeholder: this.placeholder })
+      .width('100%')
+      .height(40)
+      .fontColor($r('sys.color.font_primary'))
+      .backgroundColor(CARD)
+      .border({ width: 0.5, color: DIVIDER })
+      .systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
+      .searchButton('搜索', { autoDisable: true })
+      .cancelButton({ style: CancelButtonStyle.INPUT })
+      .onChange((value: string) => {
+        this.text = value;
+        this.selection = null;
+        this.onEdit(value);
+        this.schedule(value);
+      })
+      .onSubmit((value: string) => {
+        this.generation++;
+        this.clearTimer();
+        this.open = false;
+        this.onSubmit(value, this.selection);
+      })
+      .onAreaChange((_old: Area, area: Area) => { this.contentWidth = Number(area.width); })
+      .bindPopup(this.open, {
+        builder: this.Suggestions(), placement: Placement.Bottom, enableArrow: false,
+        systemMaterial: IMMERSIVE_REGULAR_MATERIAL,
+        onStateChange: (event: SuggestPopupState): void => { if (!event.isVisible) { this.open = false; } }
+      })
   }
 }
