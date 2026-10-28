@@ -1,8 +1,9 @@
 import { relationalStore } from '@kit.ArkData';
 import { SourceAuth, SourceConfiguration, SourceEntry, SourceInstance, SourceKind } from '../Sources';
-import { dbQuery, dbTransaction, txExecute, txQuery } from './AppDatabase';
+import { dbTransaction, txExecute, txQuery } from './AppDatabase';
 import { cellLong, cellString, readRows } from './RowCodec';
 import { registeredSourceKind } from '../source/SourceRegistry';
+import { asArray, asRecord, asString } from '../../models/Models';
 
 function sourceKind(value: string): SourceKind {
   const kind: SourceKind | null = registeredSourceKind(value);
@@ -61,11 +62,75 @@ export function loadSourceConfiguration(): Promise<SourceConfiguration> {
       instance.name = cellString(row, 'name');
       configuration.instances.push(instance);
     });
+    for (const instance of configuration.instances) {
+      await applyInstanceProfile(instance, await txQuery(tx,
+        "SELECT value FROM source_setting WHERE source_id = ? AND key = 'suwayomi_profile'", [instance.id]));
+    }
     const active: relationalStore.ResultSet = await txQuery(tx,
       "SELECT value FROM source_setting WHERE source_id = '' AND key = 'suwayomi_active_instance'", []);
     await readRows(active, (row: relationalStore.ResultSet): void => { configuration.activeInstance = cellString(row, 'value'); });
+    const hidden: relationalStore.ResultSet = await txQuery(tx,
+      "SELECT value FROM source_setting WHERE source_id = '' AND key = 'hidden_sources'", []);
+    await readRows(hidden, (row: relationalStore.ResultSet): void => {
+      configuration.hidden = hiddenIdsFrom(cellString(row, 'value'));
+    });
     return configuration;
   });
+}
+
+/** 隐藏标识存于键值表，避免为展示偏好改动 source_entry 结构。 */
+function hiddenIdsFrom(text: string): Array<string> {
+  if (text === '') {
+    return [];
+  }
+  let parsed: Object | null = null;
+  try {
+    parsed = JSON.parse(text) as Object;
+  } catch (e) {
+    return [];
+  }
+  const items: Array<Object> | null = asArray(parsed);
+  if (items === null) {
+    return [];
+  }
+  return items.map((item: Object): string => asString(item)).filter((value: string): boolean => value !== '');
+}
+
+/** 坏数据回退成空列表，不能让一条脏配置挡住图源载入。 */
+function parseHeaders(text: string): Array<Object> {
+  if (text === '') {
+    return [];
+  }
+  let parsed: Object | null = null;
+  try {
+    parsed = JSON.parse(text) as Object;
+  } catch (e) {
+    return [];
+  }
+  const items: Array<Object> | null = asArray(parsed);
+  return items === null ? [] : items;
+}
+
+/** 服务实例的备用地址与自定义请求头，按实例落在键值表，不改动 source_instance 结构。 */
+async function applyInstanceProfile(instance: SourceInstance, result: relationalStore.ResultSet): Promise<void> {
+  let text: string = '';
+  await readRows(result, (row: relationalStore.ResultSet): void => { text = cellString(row, 'value'); });
+  if (text === '') {
+    return;
+  }
+  let parsed: Object | null = null;
+  try {
+    parsed = JSON.parse(text) as Object;
+  } catch (e) {
+    return;
+  }
+  const profile: Record<string, Object> | null = asRecord(parsed);
+  if (profile === null) {
+    return;
+  }
+  instance.lanEndpoint = asString(profile['lan']);
+  const headers: Array<Object> | null = asArray(profile['headers']);
+  instance.headers = headers === null ? '' : JSON.stringify(headers);
 }
 
 export function saveSourceConfiguration(configuration: SourceConfiguration): Promise<void> {
@@ -75,12 +140,19 @@ export function saveSourceConfiguration(configuration: SourceConfiguration): Pro
     for (const instance of configuration.instances) {
       await txExecute(tx, 'INSERT INTO source_instance (id, endpoint, auth, name) VALUES (?, ?, ?, ?)',
         [instance.id, instance.endpoint, instance.auth, instance.name]);
+      const profile: Record<string, Object> = {};
+      profile['lan'] = instance.lanEndpoint;
+      profile['headers'] = parseHeaders(instance.headers);
+      await txExecute(tx, 'INSERT OR REPLACE INTO source_setting (source_id, key, value) VALUES (?, ?, ?)',
+        [instance.id, 'suwayomi_profile', JSON.stringify(profile)]);
     }
     for (let index: number = 0; index < configuration.entries.length; index++) {
       await writeEntry(tx, configuration.entries[index], index);
     }
     await txExecute(tx, "INSERT OR REPLACE INTO source_setting (source_id, key, value) VALUES ('', 'suwayomi_active_instance', ?)",
       [configuration.activeInstance]);
+    await txExecute(tx, "INSERT OR REPLACE INTO source_setting (source_id, key, value) VALUES ('', 'hidden_sources', ?)",
+      [JSON.stringify(configuration.hidden)]);
     await txExecute(tx, "INSERT OR REPLACE INTO source_setting (source_id, key, value) VALUES ('', 'seeded', '1')", []);
   });
 }
@@ -89,17 +161,4 @@ async function writeEntry(tx: relationalStore.Transaction, entry: SourceEntry, p
   await txExecute(tx, 'INSERT INTO source_entry (id, instance_id, name, kind, endpoint, remote_id, language, auth, enabled, latency, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [entry.id, entry.instanceId, entry.name, entry.kind, entry.endpoint, entry.remoteId, entry.language,
       entry.auth, entry.enabled ? 1 : 0, entry.latency, position]);
-}
-
-export async function loadSourceSetting(sourceId: string, key: string): Promise<string | null> {
-  const rows: relationalStore.ResultSet = await dbQuery('SELECT value FROM source_setting WHERE source_id = ? AND key = ?', [sourceId, key]);
-  let value: string | null = null;
-  await readRows(rows, (row: relationalStore.ResultSet): void => { value = cellString(row, 'value'); });
-  return value;
-}
-
-export function saveSourceSetting(sourceId: string, key: string, value: string): Promise<void> {
-  return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
-    await txExecute(tx, 'INSERT OR REPLACE INTO source_setting (source_id, key, value) VALUES (?, ?, ?)', [sourceId, key, value]);
-  });
 }

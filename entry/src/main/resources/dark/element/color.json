@@ -8,6 +8,7 @@
     { "name": "bg", "value": "#101112" },
     { "name": "card", "value": "#1C1D1F" },
     { "name": "sub_card", "value": "#28292C" },
+    { "name": "sheet_card", "value": "#8C28292C" },
     { "name": "text_main", "value": "#F1F2F3" },
     { "name": "text_sub", "value": "#A4A6AA" },
     { "name": "chip_bg", "value": "#28292C" },

@@ -299,14 +299,12 @@ export async function regressionTests(test) {
     assert.equal((await rows(env, 'SELECT name FROM custom_category')).length, 2);
   });
   for (const count of [1000, 10000]) {
-    await test(`${count} 条书架、收藏、历史和进度分页只读取请求页`, async env => {
+    await test(`${count} 条书架、历史和进度分页只读取请求页`, async env => {
       await seedMany(env, count);
       const { library } = env.load('data/Library');
-      const { favStore } = env.load('data/stores/FavoriteStore');
       const { historyStore, readProgressStore } = env.load('data/stores/ReadingStores');
       for (const [label, read, key, expected] of [
         ['书架', () => library.listPage(127, 17), 'id', 'w127'],
-        ['收藏', () => favStore.getPage(127, 17), 'id', 'jm~127'],
         ['历史', () => historyStore.getPage(127, 17), 'id', `jm~${count - 128}`],
         ['进度', () => readProgressStore.listPage(127, 17), 'aid', `jm~${count - 128}`]
       ]) {
@@ -316,20 +314,27 @@ export async function regressionTests(test) {
       }
     });
   }
-  await test('万条收藏单次修改只写目标记录，失败后数据库与读取结果一致', async env => {
+  await test('万条书架入架仅写目标作品，移出失败后数据库与读取结果一致', async env => {
     await seedMany(env, 10000);
-    const { favStore } = env.load('data/stores/FavoriteStore');
+    const { library } = env.load('data/Library');
     env.state.sql.length = 0;
     const album = albumFixture(env, 'jm~new');
-    await favStore.add(album, '');
-    const writes = env.state.sql.filter(item => item.kind === 'write' && /\bfavorite\b/.test(item.sql));
+    album.name = '新增独立作品';
+    await library.add(album);
+    const writes = env.state.sql.filter(item => item.kind === 'write' && /\blibrary_work\b/.test(item.sql));
     assert.ok(writes.reduce((n, item) => n + item.changes, 0) <= 2, '增量修改不应重写整表');
-    assert.ok(!writes.some(item => /^DELETE FROM favorite\s*$/i.test(item.sql.trim())));
-    assert.ok(await favStore.contains(album.id));
+    assert.ok(!writes.some(item => /^DELETE FROM library_work\s*$/i.test(item.sql.trim())));
+    const work = await library.workFor(album.id);
+    assert.ok(work);
+    assert.equal((await rows(env, 'SELECT COUNT(*) AS count FROM library_work'))[0].count, '10001');
     env.state.failFlush = true;
-    await assert.rejects(favStore.remove(album.id), /磁盘/);
-    assert.ok(await favStore.contains(album.id));
-    console.log(`  万条收藏增量：${writes.length} 次写入，影响 ${writes.reduce((n, item) => n + item.changes, 0)} 行`);
+    await assert.rejects(library.remove([work.id]), /磁盘/);
+    assert.ok(await library.workFor(album.id));
+    assert.equal((await rows(env, 'SELECT COUNT(*) AS count FROM library_work'))[0].count, '10001');
+    await library.remove([work.id]);
+    assert.equal(await library.workFor(album.id), null);
+    assert.equal((await rows(env, 'SELECT COUNT(*) AS count FROM library_work'))[0].count, '10000');
+    console.log(`  万条书架入架：${writes.length} 次写入，影响 ${writes.reduce((n, item) => n + item.changes, 0)} 行`);
   });
   await test('万条书架标记和分类仅修改目标作品及关系行', async env => {
     await seedMany(env, 10000);

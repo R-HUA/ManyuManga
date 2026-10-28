@@ -1,17 +1,18 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { BasicDataSource } from '../common/DataSource';
 import { ComicCard } from '../common/ComicCard';
-import { comicColumns, BG, TEXT_SUB, DANGER } from '../common/Theme';
+import { comicColumns, BG, TEXT_SUB, DANGER, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
 import { sourceStore, SourceEntry } from '../data/Sources';
 import { AlbumLite, SearchResult, asRecord, asString, errorMessage } from '../models/Models';
-import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
+import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
 export struct SourceBrowsePage {
   @Consume('navPathStack') stack: NavPathStack;
+  @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottom: number = 0;
   @State private title: string = '';
   @State private contentWidth: number = 328;
@@ -90,13 +91,13 @@ export struct SourceBrowsePage {
             }.width((this.contentWidth - 12 * (comicColumns(this.contentWidth) - 1)) / comicColumns(this.contentWidth))
           }, (item: AlbumLite) => item.id)
         }.columnsTemplate(`1fr `.repeat(comicColumns(this.contentWidth))).columnsGap(12).rowsGap(16)
-        .width('100%').height('100%').padding({ left: 16, right: 16 }).clip(false)
+        .width('100%').height('100%').padding({ left: 16, right: 16, top: this.topInset + HDS_TITLE_BAR_HEIGHT + 12, bottom: 20 }).clip(false)
         .onAreaChange((_old: Area, area: Area): void => { this.contentWidth = Number(area.width) - 32; })
         .onReachEnd(() => { this.load(false); })
       }.onRefreshing(() => { this.load(true); })
     }.titleBar({ content: { title: { mainTitle: this.title }, menu: { value: [
       { content: { icon: $r('sys.symbol.magnifyingglass'), label: '搜索', action: (): void => { this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: this.sourceId, scope: 'source' } as MangaRouteParams); } } }
-    ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true }).titleMode(HdsNavDestinationTitleMode.MINI)
+    ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true }).titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller]).backgroundColor(BG).onReady((context: NavDestinationContext): void => { this.initialize(context); })
   }
 }

@@ -1,5 +1,5 @@
 import image from '@ohos.multimedia.image';
-import { Prefs, PrefKeys } from '../util/Prefs';
+import { Prefs } from '../util/Prefs';
 /** 内存 LRU 上限 96MB，按 getPixelBytesNumber 计（PageLoader.kt:46-48） */
 const MEMORY_CAP: number = 96 * 1024 * 1024;
 /** 解码并发默认 4（PageLoader.kt:34） */
@@ -48,7 +48,7 @@ let decodeSem: DecodeSemaphore = new DecodeSemaphore(SEM_DEFAULT);
 export async function semFor(): Promise<DecodeSemaphore> {
   try {
     const prefs: Prefs = await Prefs.getInstance();
-    const raw: number = await prefs.getNumber(PrefKeys.DECODE_CONCURRENCY, 0);
+    const raw: number = await prefs.decodeConcurrency();
     let want: number = SEM_DEFAULT;
     if (raw >= SEM_USER_MIN && raw <= SEM_USER_MAX) {
       want = raw > SEM_CEIL ? SEM_CEIL : raw;

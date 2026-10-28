@@ -1,4 +1,4 @@
-import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
+import { IMMERSIVE_REGULAR_MATERIAL, EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
 import { CARD, DANGER, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { BlockRule, blockTagsStore } from '../../data/stores/FilterStores';
 
@@ -51,18 +51,27 @@ export struct BlockRuleEditor {
         .fontSize(12)
         .fontColor(TEXT_SUB)
         .width('100%')
-      Select([
-        { value: '关键词' },
-        { value: '精确标签' }
-      ])
-        .selected(this.kindIndex)
-        .value(this.kindIndex === 1 ? '精确标签' : '关键词')
-        .font({ size: 14, weight: FontWeight.Medium })
-        .fontColor(TEXT_MAIN)
-        .backgroundColor(SUB_CARD)
-        .onSelect((index: number) => {
-          this.kindIndex = index;
-        })
+      Row({ space: 12 }) {
+        Text('规则类型')
+          .fontSize(14)
+          .fontColor(TEXT_MAIN)
+          .layoutWeight(1)
+        Select([
+          { value: '关键词' },
+          { value: '精确标签' }
+        ])
+          .selected(this.kindIndex)
+          .value(this.kindIndex === 1 ? '精确标签' : '关键词')
+          .backgroundColor(Color.Transparent)
+          .borderWidth(0)
+          .borderColor(Color.Transparent)
+          .systemMaterial(EMPTY_MATERIAL)
+          .onSelect((index: number) => {
+            this.kindIndex = index;
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
       if (this.kindIndex === 1) {
         TextInput({ text: this.namespaceText, placeholder: '命名空间，可留空' })
           .width('100%')
@@ -86,11 +95,8 @@ export struct BlockRuleEditor {
         .onSubmit(() => {
           this.addRule();
         })
-      Button('添加规则', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+      Button('添加规则', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.EMPHASIZED })
         .fontSize(14)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .backgroundColor(PRIMARY)
         .width('100%')
         .height(40)
         .onClick(() => {
@@ -110,7 +116,6 @@ export struct BlockRuleEditor {
               .fontColor(PRIMARY)
               .layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: rule.enabled === 1 })
-              .selectedColor(PRIMARY)
               .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
               .onChange((on: boolean) => {
                 blockTagsStore.setEnabled(rule.id, on).then((): void => {
@@ -128,7 +133,6 @@ export struct BlockRuleEditor {
           Button('删除', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
             .fontSize(12)
             .fontColor(DANGER)
-            .backgroundColor(SUB_CARD)
             .height(32)
             .onClick(() => {
               blockTagsStore.removeRule(rule.id).then((): void => {

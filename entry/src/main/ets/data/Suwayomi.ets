@@ -36,27 +36,97 @@ function variables(input: Object): Record<string, Object> {
   return result;
 }
 
+/** 自定义请求头条目；服务端反代常需要额外鉴权或路由头。 */
+class HeaderPair {
+  name: string = '';
+  value: string = '';
+}
+
+/** 只有地址不可达才值得换备用地址；状态码与 GraphQL 错误换地址也无济于事。 */
+function isUnreachable(error: Error): boolean {
+  const message: string = error.message;
+  return !message.startsWith('书源请求失败（') && !message.startsWith('书源登录失效') &&
+    !message.startsWith('服务端返回的数据格式不正确') && !message.startsWith('服务端缺少列表数据');
+}
+
+function customHeaders(source: SourceEntry): Array<HeaderPair> {
+  if (source.customHeaders === '') {
+    return [];
+  }
+  let parsed: Object | null = null;
+  try {
+    parsed = JSON.parse(source.customHeaders) as Object;
+  } catch (e) {
+    return [];
+  }
+  const items: Array<Object> | null = asArray(parsed);
+  if (items === null) {
+    return [];
+  }
+  return items.map((value: Object): HeaderPair => {
+    const row: Record<string, Object> = asRecord(value) ?? {};
+    const pair: HeaderPair = new HeaderPair();
+    pair.name = asString(row['name']);
+    pair.value = asString(row['value']);
+    return pair;
+  }).filter((pair: HeaderPair): boolean => pair.name !== '');
+}
+
 /** 使用稳定服务端的内容接口，所有本机阅读状态仍由本机保存。 */
 export class SuwayomiClient {
   async headers(source: SourceEntry): Promise<Record<string, string>> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    for (const pair of customHeaders(source)) {
+      headers[pair.name] = pair.value;
+    }
     if (source.auth !== 'none') {
       headers['Authorization'] = await readSourceSecret(source.instanceId);
     }
     return headers;
+  }
+
+  /** 主地址连接失败时改用同实例的局域网备用地址。 */
+  private bases(source: SourceEntry): Array<string> {
+    const list: Array<string> = [source.endpoint];
+    if (source.lanEndpoint !== '' && source.lanEndpoint !== source.endpoint) {
+      list.push(source.lanEndpoint);
+    }
+    return list;
   }
   async query(source: SourceEntry, query: string, variables: Record<string, Object>,
     authorization?: string, signal: RequestAbortGroup | null = null): Promise<Record<string, Object>> {
     if (signal !== null) {
       signal.throwIfAborted();
     }
+    const bases: Array<string> = this.bases(source);
+    let lastError: Error = new Error('书源请求失败');
+    for (const base of bases) {
+      try {
+        return await this.post(base, source, query, variables, authorization, signal);
+      } catch (e) {
+        const error: Error = e as Error;
+        if (signal !== null && (signal.aborted() || isRequestCancelled(error))) {
+          throw new RequestCancelled();
+        }
+        // 仅地址不可达时换备用地址；HTTP 状态与 GraphQL 错误换地址也无济于事。
+        if (!isUnreachable(error)) {
+          throw error;
+        }
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
+  private async post(base: string, source: SourceEntry, query: string, variables: Record<string, Object>,
+    authorization: string | undefined, signal: RequestAbortGroup | null): Promise<Record<string, Object>> {
     const request: http.HttpRequest = http.createHttp();
     if (signal !== null) {
       signal.track(request);
     }
     try {
       const headers: Record<string, string> = authorization === undefined ? await this.headers(source) : { 'Content-Type': 'application/json', 'Authorization': authorization };
-      const response: http.HttpResponse = await request.request(`${source.endpoint}/api/graphql`, {
+      const response: http.HttpResponse = await request.request(`${base}/api/graphql`, {
         method: http.RequestMethod.POST,
         header: headers,
         extraData: JSON.stringify({ query: query, variables: variables }),

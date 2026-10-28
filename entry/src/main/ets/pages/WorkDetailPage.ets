@@ -1,11 +1,10 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
-import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
+import { HDS_TITLE_STYLE, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { WorkSourceSheet } from './detail/WorkSourceSheet';
 import { WorkChapterList } from './detail/WorkChapterList';
 import { WorkHeroInfo } from './detail/WorkHeroInfo';
 import promptAction from '@ohos.promptAction';
-import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
-import { MangaRouteParams, ROUTE_READER, ROUTE_DOWNLOADS, ROUTE_PREVIEW } from '../common/Route';
+import { MangaRouteParams, ROUTE_READER, ROUTE_PREVIEW } from '../common/Route';
 import { Album, Chapter, ReadingProgress, CommentItem, CommentsResult, asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 import { sourceId, sourceStore } from '../data/Sources';
@@ -35,6 +34,7 @@ export struct WorkDetailPage {
   @State ascending: boolean = true;
   @State descExpanded: boolean = false;
   @State sourceSheet: boolean = false;
+  @State fromLibrary: boolean = false;
   @State comments: Array<CommentItem> = [];
   @State commentPage: number = 0;
   @State commentsDone: boolean = false;
@@ -45,6 +45,8 @@ export struct WorkDetailPage {
   private generation: number = 0;
   private detailRequests: RequestAbortGroup = new RequestAbortGroup();
   private commentRequests: RequestAbortGroup = new RequestAbortGroup();
+  private mainScroller: Scroller = new Scroller();
+  private chaptersScroller: Scroller = new Scroller();
 
   private cancelRequests(): void {
     this.detailRequests.abortAll();
@@ -277,6 +279,7 @@ export struct WorkDetailPage {
       album: this.$album,
       sourceName: this.$sourceName,
       aid: this.aid,
+      fromLibrary: this.fromLibrary,
       work: this.$work,
       sourceSheet: this.$sourceSheet,
       progress: this.$progress,
@@ -323,7 +326,6 @@ export struct WorkDetailPage {
   build() {
     HdsNavDestination() {
       Column() {
-
         if (this.error !== '') {
           Row({ space: 8 }) {
             SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
@@ -359,26 +361,26 @@ export struct WorkDetailPage {
           .width('100%')
         } else if (this.breakpoint !== 'sm') {
           Row() {
-            Scroll() {
+            Scroll(this.mainScroller) {
               this.Info()
             }
             .width('42%')
             .height('100%')
             .scrollBar(BarState.Off)
-              .align(Alignment.TopStart)
+            .align(Alignment.TopStart)
 
-            Scroll() {
+            Scroll(this.chaptersScroller) {
               this.Chapters()
             }
             .width('58%')
             .height('100%')
             .scrollBar(BarState.Off)
-              .align(Alignment.TopStart)
+            .align(Alignment.TopStart)
           }
           .layoutWeight(1)
           .width('100%')
         } else {
-          Scroll() {
+          Scroll(this.mainScroller) {
             Column() {
               this.Info()
               this.Chapters()
@@ -388,7 +390,7 @@ export struct WorkDetailPage {
           .layoutWeight(1)
           .width('100%')
           .scrollBar(BarState.Off)
-              .align(Alignment.TopStart)
+          .align(Alignment.TopStart)
         }
       }
       .width('100%')
@@ -403,10 +405,12 @@ export struct WorkDetailPage {
     }
     .titleBar({ content: { title: { mainTitle: this.album === null ? '漫画详情' : this.album.name } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
     .titleMode(HdsNavDestinationTitleMode.MINI)
+    .bindToScrollable([this.mainScroller, this.chaptersScroller])
     .backgroundColor(BG)
     .onReady((context: NavDestinationContext) => {
       const params: Record<string, Object> | null = asRecord(context.pathInfo.param as Object);
       this.aid = params === null ? '' : asString(params['aid']);
+      this.fromLibrary = params !== null && (params['fromLibrary'] === true || params['match'] === true);
       this.load(this.aid);
       this.sourceSheet = params !== null && params['match'] === true;
     })

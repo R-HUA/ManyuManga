@@ -1,6 +1,11 @@
 import { asArray } from '../../models/Models';
 import { assertDatabaseGeneration, databaseGeneration } from '../db/AppDatabase';
 
+/** 书架与阅读记录共用版本，让续读和阅读状态同步刷新。 */
+export function notifyBookshelfChanged(): void {
+  AppStorage.setOrCreate('bookshelfDataVersion', Date.now());
+}
+
 /** 同一 store 的读改写依次执行，失败只反馈给当前调用方。 */
 export class StoreQueue {
   private pending: Promise<void> = Promise.resolve();

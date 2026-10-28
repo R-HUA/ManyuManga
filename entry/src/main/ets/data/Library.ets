@@ -6,7 +6,7 @@ import {
 } from './db/LibraryDao';
 import { albumFromJson, albumToJson } from './db/RowCodec';
 import { assertDatabaseGeneration } from './db/AppDatabase';
-import { StoreQueue } from './stores/StoreSupport';
+import { notifyBookshelfChanged, StoreQueue } from './stores/StoreSupport';
 
 /** 作品身份与来源身份分开，关联书源不会覆盖各来源的阅读记录。 */
 export class LibraryWork {
@@ -38,10 +38,6 @@ function newWork(album: Album): LibraryWork {
   return work;
 }
 
-function notifyLibraryChanged(): void {
-  AppStorage.setOrCreate('bookshelfDataVersion', Date.now());
-}
-
 class Library {
   private queue: StoreQueue = new StoreQueue();
 
@@ -54,8 +50,6 @@ class Library {
     await this.queue.wait();
     return loadLibraryPage(offset, limit);
   }
-
-  invalidate(): void {}
 
   async workFor(key: string): Promise<LibraryWork | null> {
     await this.queue.wait();
@@ -74,7 +68,7 @@ class Library {
         matching[0].albums.push(snapshot);
         await changeLibraryWorks([matching[0]]);
       } else { await changeLibraryWorks([newWork(snapshot)]); }
-      notifyLibraryChanged();
+      notifyBookshelfChanged();
     });
   }
 
@@ -82,7 +76,7 @@ class Library {
     const snapshot: Array<string> = ids.slice();
     return this.queue.run(async (): Promise<void> => {
       await changeLibraryWorks([], snapshot);
-      notifyLibraryChanged();
+      notifyBookshelfChanged();
     });
   }
 
@@ -91,7 +85,7 @@ class Library {
     const name: string = category.trim();
     return this.queue.run(async (): Promise<void> => {
       await categorizeLibraryWorks(snapshot, name);
-      notifyLibraryChanged();
+      notifyBookshelfChanged();
     });
   }
 
@@ -99,7 +93,7 @@ class Library {
     const snapshot: Array<string> = ids.slice();
     return this.queue.run(async (): Promise<void> => {
       await markLibraryWorksRead(snapshot, read);
-      notifyLibraryChanged();
+      notifyBookshelfChanged();
     });
   }
 
@@ -124,7 +118,7 @@ class Library {
       changed.push(target);
       assertDatabaseGeneration(generation);
       await changeLibraryWorks(changed, removed);
-      notifyLibraryChanged();
+      notifyBookshelfChanged();
     });
   }
 
@@ -138,14 +132,14 @@ class Library {
       if (work.activeKey === key) { work.activeKey = work.albums[0].id; }
       assertDatabaseGeneration(generation);
       await changeLibraryWorks([work, newWork(album)]);
-      notifyLibraryChanged();
+      notifyBookshelfChanged();
     });
   }
 
   activate(key: string): Promise<void> {
     return this.queue.run(async (): Promise<void> => {
       await activateLibraryAlbum(key);
-      notifyLibraryChanged();
+      notifyBookshelfChanged();
     });
   }
 
@@ -164,7 +158,7 @@ class Library {
       work.albums[index] = snapshot;
       assertDatabaseGeneration(generation);
       await changeLibraryWorks([work]);
-      notifyLibraryChanged();
+      notifyBookshelfChanged();
       return count;
     });
   }

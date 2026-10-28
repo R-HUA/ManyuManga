@@ -6,16 +6,17 @@ import { window } from '@kit.ArkUI';
 import { Album, Chapter, MetadataTerm, ReadingProgress, ReaderMode, errorMessage } from '../../models/Models';
 import { sourceApi as jmApi } from '../../data/SourceApi';
 import { library } from '../../data/Library';
-import { readerPreferences, ReaderOptions } from '../../data/ReaderOptions';
+import { readerPreferences, ReaderOptions, ReaderSheetKind } from '../../data/ReaderOptions';
 import { readingActivity } from '../../data/ReadingActivity';
 import { fallbackSource, SourceSwitchResult } from '../../data/SourceSwitch';
-import { makeSpreads, spreadForPage, lastPageInSpread } from '../../data/ReaderLayout';
+import { clampPage, makeSpreads, spreadForPage, lastPageInSpread } from '../../data/ReaderLayout';
 import { loadPagePixelMap, releasePagePixelMap } from '../../data/ImageDecode';
 import { isRequestCancelled, RequestAbortGroup } from '../../util/RequestAbort';
 import { albumCacheStore, pagesCacheStore, readProgressStore, historyStore } from '../../data/Stores';
 import { Prefs, getAppContext } from '../../util/Prefs';
 import { IS_DARK_MODE_KEY } from '../../entryability/EntryAbility';
 import { ROUTE_PREVIEW, MangaRouteParams } from '../../common/Route';
+import { ReaderPanelKind } from './ReaderHud';
 
 /** 默认乱序参数 */
 const SCRAMBLE_DEFAULT: number = 220980;
@@ -43,8 +44,10 @@ interface ReaderHost {
   currentPage: number;
   mode: ReaderMode;
   hudVisible: boolean;
-  panel: 'none' | 'mode' | 'display' | 'settings' | 'thumbnails';
+  panel: ReaderPanelKind;
+  sheetKind: ReaderSheetKind;
   sheetVisible: boolean;
+  zoneEditorVisible: boolean;
   brightnessValue: number;
   bgPaper: boolean;
   preloadCount: number;
@@ -92,7 +95,7 @@ export class ReaderController {
       if (this.pageSignal.aborted()) { this.pageSignal = new RequestAbortGroup(); }
       if (this.preloadSignal.aborted()) { this.preloadSignal = new RequestAbortGroup(); }
       if (this.paramReady && !this.readingResolved) {
-        this.loadAlbum().catch((e: Error): void => {});
+        this.loadAlbum().catch((_e: Error): void => {});
       }
     }
   }
@@ -220,11 +223,11 @@ export class ReaderController {
   }
 
   initAfterParams(): void {
-    this.measureSafeAreas().catch((e: Error): void => {
+    this.measureSafeAreas().catch((_e: Error): void => {
     });
-    this.loadPrefs().catch((e: Error): void => {
+    this.loadPrefs().catch((_e: Error): void => {
     });
-    this.loadAlbum().catch((e: Error): void => {
+    this.loadAlbum().catch((_e: Error): void => {
     });
   }
 
@@ -247,10 +250,10 @@ export class ReaderController {
       } else {
         this.host.mode = 'vertical';
       }
-      this.buildSpreads(); // 偏好模式可能晚于章节列表就绪：补一次跨页序列重建
+      this.buildSpreads();
       this.host.preloadCount = this.clampPreload(this.host.options.preload);
       this.host.bgPaper = this.host.options.paper;
-      this.applySystemBarDarkText(this.host.bgPaper).catch((e: Error): void => {
+      this.applySystemBarDarkText(this.host.bgPaper).catch((_e: Error): void => {
       });
       this.host.brightnessValue = brightness >= 0 && brightness <= 100 ? brightness : 100;
       this.autoCacheOn = autoCache;
@@ -274,7 +277,7 @@ export class ReaderController {
         this.host.bottomSafeVp = b;
       }
     } catch (e) {
-      // 量取失败保持默认（全屏沉浸下 HUD 仅短暂偏移）
+      // 量取失败保持默认
     }
   }
 
@@ -289,7 +292,7 @@ export class ReaderController {
 
   restoreSystemBarToTheme(): void {
     const isDark: boolean = AppStorage.get<boolean>(IS_DARK_MODE_KEY) ?? false;
-    this.applySystemBarDarkText(!isDark).catch((e: Error): void => {
+    this.applySystemBarDarkText(!isDark).catch((_e: Error): void => {
     });
   }
 
@@ -315,7 +318,7 @@ export class ReaderController {
       const fresh: Album = await jmApi.album(aid, false, signal);
       if (token !== this.albumToken || aid !== this.host.aid || this.destroyed || signal.aborted()) { return; }
       this.applyAlbum(fresh);
-      albumCacheStore.put(fresh).catch((e: Error): void => {
+      albumCacheStore.put(fresh).catch((_e: Error): void => {
       });
       this.beginReading();
     } catch (e) {
@@ -336,13 +339,12 @@ export class ReaderController {
     if (a.name !== '') {
       this.host.albumTitle = a.name;
     }
-    const authors: string = a.author.map((term: MetadataTerm): string => term.label).join(' · ');
+    const authors: string = a.author.map((term: MetadataTerm): string => term.label).join(' ');
     if (authors !== '') {
       this.host.authorLine = authors;
     }
     if (a.episodes.length > 0) {
       if (this.readingStarted) {
-        // 网络刷新后的目录以章 id 对齐当前阅读位置
         const curId: string = this.currentChapterId();
         const idx: number = curId !== '' ? this.indexOfChapterIn(a.episodes, curId) : -1;
         this.host.chapters = a.episodes;
@@ -404,7 +406,7 @@ export class ReaderController {
       return;
     }
     this.readingResolved = true;
-    this.loadChapter(chapterIdx, page).catch((e: Error): void => {
+    this.loadChapter(chapterIdx, page).catch((_e: Error): void => {
     });
   }
 
@@ -417,7 +419,6 @@ export class ReaderController {
       this.host.hudVisible = true;
       return;
     }
-    // 先落盘当前话进度，再清空 pages。否则节流中的保存会看到空列表直接返回，目录切章/加载中返回会丢进度
     this.flushProgress();
     this.activitySince = 0;
     this.visiblePages.clear();
@@ -430,7 +431,7 @@ export class ReaderController {
     this.host.scrambleId = SCRAMBLE_DEFAULT;
     this.prefetched.clear();
     this.host.pages = [];
-    this.resetZoom(false); // 切章复位缩放
+    this.resetZoom(false);
     this.pagesSource.setList(this.host.pages);
     this.buildSpreads();
     const token: number = ++this.chapterToken;
@@ -442,7 +443,6 @@ export class ReaderController {
     this.preloadSignal = preloadSignal;
     const initialTarget: number = targetPage;
 
-    // 1) 秒开：章节图片列表缓存
     let cached: Array<string> | null = null;
     try {
       cached = await pagesCacheStore.get(ch.id);
@@ -456,14 +456,13 @@ export class ReaderController {
       this.host.pages = cached;
       this.pagesSource.setList(cached);
       this.buildSpreads();
-      const t: number = this.clampPage(initialTarget, cached.length);
+      const t: number = clampPage(initialTarget, cached.length);
       this.host.currentPage = t;
       this.host.loadState = 'ready';
       this.scrollToPageDelayed(t);
       this.prefetchAhead(t);
     }
 
-    // 2) 网络刷新：先撤 loading 再定位（防「布局等 loading、定位等布局」死锁，ReaderScreen.kt:177-182）
     try {
       const fresh: Array<string> = await jmApi.chapterImages(ch.id, signal);
       if (!this.chapterCurrent(token, signal)) {
@@ -475,10 +474,10 @@ export class ReaderController {
         this.host.pages = fresh;
         this.pagesSource.setList(fresh);
         this.buildSpreads();
-        const t: number = this.clampPage(initialTarget, fresh.length);
+        const t: number = clampPage(initialTarget, fresh.length);
         this.host.currentPage = t;
         this.host.loadState = 'ready';
-        pagesCacheStore.put(ch.id, fresh).catch((e: Error): void => {
+        pagesCacheStore.put(ch.id, fresh).catch((_e: Error): void => {
         });
         this.prefetched.clear();
         this.scrollToPageDelayed(t);
@@ -499,10 +498,9 @@ export class ReaderController {
         this.host.hudVisible = true;
         return;
       }
-      this.host.loadState = 'ready'; // 失败保留缓存继续阅读
+      this.host.loadState = 'ready';
     }
 
-    // 3) 乱序参数后台获取（默认 220980 与云端值算法等价）
     try {
       const sid: number = await jmApi.scrambleId(ch.id, signal);
       if (!this.chapterCurrent(token, signal)) {
@@ -515,24 +513,22 @@ export class ReaderController {
       }
     } catch (e) {
       if (isRequestCancelled(e as Error) || !this.chapterCurrent(token, signal)) { return; }
-      // 保留默认值
     }
     if (!this.chapterCurrent(token, signal)) { return; }
 
-    // 4) 预加载下一章（目录 + 前 5 页）
-    this.preloadNextChapter(token, preloadSignal).catch((e: Error): void => {
+    this.preloadNextChapter(token, preloadSignal).catch((_e: Error): void => {
     });
     library.activate(this.host.aid).catch((e: Error) => { this.toastMsg(`保存当前书源失败：${errorMessage(e)}`); });
   }
 
   retryLoad(): void {
     if (this.host.chapters.length > 0) {
-      this.loadChapter(this.host.chapterIndex, 0).catch((e: Error): void => {
+      this.loadChapter(this.host.chapterIndex, 0).catch((_e: Error): void => {
       });
     } else {
       this.readingStarted = false;
       this.readingResolved = false;
-      this.loadAlbum().catch((e: Error): void => {
+      this.loadAlbum().catch((_e: Error): void => {
       });
     }
   }
@@ -571,7 +567,7 @@ export class ReaderController {
       const pm: image.PixelMap | null =
         await loadPagePixelMap(photoId, filename, scrambleId, this.targetWidthPx, signal);
       if (pm !== null) {
-        releasePagePixelMap(pm); // 借出即归还：位图留在 96MB 零拷贝 LRU 供热区秒开
+        releasePagePixelMap(pm);
       }
     } catch (e) {
       if (this.chapterCurrent(token, signal)) { this.prefetched.delete(key); }
@@ -598,7 +594,7 @@ export class ReaderController {
         list = await jmApi.chapterImages(next.id, signal);
         if (!this.chapterCurrent(token, signal)) { return; }
         if (list.length > 0) {
-          pagesCacheStore.put(next.id, list).catch((e: Error): void => {
+          pagesCacheStore.put(next.id, list).catch((_e: Error): void => {
           });
         }
       }
@@ -650,7 +646,6 @@ export class ReaderController {
     if (elapsed > 0) { this.lastSavedAt = now; }
   }
 
-  /** 只有真实显示的当前章节页面才能推进记录；预加载与迟到回调不属于阅读。 */
   pageDisplayed(chapter: string, filename: string, visible: boolean): void {
     if (chapter !== this.currentChapterId()) { return; }
     const page: number = this.host.pages.indexOf(filename);
@@ -702,13 +697,15 @@ export class ReaderController {
   }
 
   handleCanvasClick(x: number, y: number): void {
+    if (this.host.zoneEditorVisible) {
+      return;
+    }
     const w: number = this.host.canvasWidthVp;
-    if (w <= 0) {
+    if (w <= 0 || this.host.canvasHeightVp <= 0) {
       this.toggleHud();
       return;
     }
     const col: number = Math.max(0, Math.min(2, Math.floor(x / (w / 3))));
-    if (col === 1) { this.toggleHud(); return; }
     const row: number = Math.max(0, Math.min(2, Math.floor(y / (this.host.canvasHeightVp / 3))));
     const action: number = this.host.options.taps[row * 3 + col];
     if (action === 0) { this.toggleHud(); }
@@ -717,11 +714,35 @@ export class ReaderController {
     else { this.goChapter(action === 3 ? -1 : 1); }
   }
 
+  /** 目录入口拉起半模态抽屉；画面与设置改为切换底栏上方的同材质浮卡。 */
+  openSheet(kind: ReaderSheetKind): void {
+    this.host.sheetKind = kind;
+    if (kind === 'index') {
+      this.host.panel = 'none';
+      this.host.sheetVisible = true;
+    } else {
+      this.host.sheetVisible = false;
+      this.host.panel = kind;
+    }
+  }
+
+  /** 热区校准是三级全屏交互：先收起浮卡或抽屉，再压上蒙层。 */
+  openZoneEditor(): void {
+    this.host.sheetVisible = false;
+    this.host.panel = 'none';
+    const token: number = this.chapterToken;
+    setTimeout((): void => {
+      if (this.destroyed || token !== this.chapterToken) {
+        return;
+      }
+      this.host.hudVisible = false;
+      this.host.zoneEditorVisible = true;
+    }, 260);
+  }
+
   private toggleHud(): void {
     this.host.hudVisible = !this.host.hudVisible;
-    if (!this.host.hudVisible) {
-      this.host.panel = 'none';
-    }
+    this.host.panel = this.host.hudVisible ? 'progress' : 'none';
     this.syncHudTimer();
   }
 
@@ -732,13 +753,16 @@ export class ReaderController {
 
   syncHudTimer(): void {
     this.clearHudTimer();
-    if (!this.host.hudVisible || this.hudTouching || this.host.panel !== 'none' ||
+    const idlePanel: boolean = this.host.panel === 'none' || this.host.panel === 'progress';
+    if (!this.host.hudVisible || this.hudTouching || !idlePanel ||
       this.host.sliderDragging || this.host.sheetVisible) {
       return;
     }
     this.hudTimer = setTimeout((): void => {
       this.hudTimer = -1;
-      if (this.host.panel === 'none' && !this.host.sliderDragging && !this.host.sheetVisible && !this.hudTouching) {
+      const stillIdlePanel: boolean = this.host.panel === 'none' || this.host.panel === 'progress';
+      if (stillIdlePanel && !this.host.sliderDragging && !this.host.sheetVisible && !this.hudTouching) {
+        this.host.panel = 'none';
         this.host.hudVisible = false;
       }
     }, 3500);
@@ -770,14 +794,6 @@ export class ReaderController {
       this.host.zoomOffsetX = offsetX;
       this.host.zoomOffsetY = offsetY;
     });
-  }
-
-  private maxZoomOffsetX(): number {
-    return Math.max(0, (this.host.canvasWidthVp * (this.host.zoomScale - 1)) / 2);
-  }
-
-  private maxZoomOffsetY(): number {
-    return Math.max(0, (this.host.canvasHeightVp * (this.host.zoomScale - 1)) / 2);
   }
 
   bounceZoomBack(): void {
@@ -813,17 +829,16 @@ export class ReaderController {
     }
   }
 
-  onPinchStart(event: GestureEvent): void {
+  onPinchStart(_event: GestureEvent): void {
     this.pinchStartScale = this.host.zoomScale;
   }
 
   onPinchUpdate(event: GestureEvent): void {
-    // 实时缩放硬夹 [1,5]（ReaderScreen.kt:104-118 transformable 语义）
     const raw: number = this.pinchStartScale * event.scale;
     this.host.zoomScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, raw));
   }
 
-  onTwoFingerPanStart(event: GestureEvent): void {
+  onTwoFingerPanStart(_event: GestureEvent): void {
     this.panStartX = this.host.zoomOffsetX;
     this.panStartY = this.host.zoomOffsetY;
   }
@@ -885,7 +900,7 @@ export class ReaderController {
     if (total === 0) {
       return;
     }
-    const p: number = this.clampPage(page, total);
+    const p: number = clampPage(page, total);
     this.host.currentPage = p;
     if (this.host.mode === 'vertical') {
       this.listScroller.scrollToIndex(p, false);
@@ -913,7 +928,7 @@ export class ReaderController {
     const keepPage: number = this.host.currentPage;
     this.host.mode = m;
     this.host.panel = 'none';
-    this.buildSpreads(); // 跨页序列随模式重建（rtl 倒排 / double 双页并排，评审 Step4）
+    this.buildSpreads();
     this.persistOptions();
     const token: number = this.chapterToken;
     setTimeout((): void => {
@@ -938,9 +953,8 @@ export class ReaderController {
       return;
     }
     this.host.bgPaper = paper;
-    // 评审 Step4：米黄背景偏好持久化（退出再进保持）
     this.persistOptions();
-    this.applySystemBarDarkText(paper).catch((e: Error): void => {
+    this.applySystemBarDarkText(paper).catch((_e: Error): void => {
     });
   }
 
@@ -955,7 +969,7 @@ export class ReaderController {
       return;
     }
     this.saveProgressNow();
-    this.loadChapter(target, 0).catch((e: Error): void => {
+    this.loadChapter(target, 0).catch((_e: Error): void => {
     });
   }
 
@@ -1010,13 +1024,13 @@ export class ReaderController {
       return 0;
     }
     if (this.host.mode === 'rtl') {
-      const p: number = this.clampPage(page, this.host.pages.length);
+      const p: number = clampPage(page, this.host.pages.length);
       return Math.max(0, Math.min(n - 1, this.host.pages.length - 1 - p));
     }
     if (this.host.mode === 'double') {
-      return spreadForPage(this.spreadsCache, this.clampPage(page, this.host.pages.length));
+      return spreadForPage(this.spreadsCache, clampPage(page, this.host.pages.length));
     }
-    return this.clampPage(page, n);
+    return clampPage(page, n);
   }
 
   spreadIndexToPage(index: number): number {
@@ -1063,13 +1077,6 @@ export class ReaderController {
       }
     }
     return -1;
-  }
-
-  private clampPage(page: number, total: number): number {
-    if (total <= 0) {
-      return 0;
-    }
-    return Math.max(0, Math.min(page, total - 1));
   }
 
   private clampPreload(n: number): number {

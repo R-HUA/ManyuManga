@@ -2,7 +2,7 @@ import { Album, Chapter, ReadingProgress, CommentItem } from '../../models/Model
 import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { IconCircleButton } from '../../common/Components';
-import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -41,7 +41,7 @@ export struct WorkChapterList {
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
 
   build() {
-    Column({ space: 12 }) {
+    Column({ space: 10 }) {
       Row({ space: 8 }) {
         Text('章节目录')
           .fontSize(18)
@@ -64,18 +64,16 @@ export struct WorkChapterList {
           .padding({ left: 12, right: 12, top: 6, bottom: 6 })
           .borderRadius(14)
           .backgroundColor(CARD)
-          .border({ width: 0.5, color: DIVIDER })
           .onClick(() => {
             this.ascending = !this.ascending;
           })
         Text(this.unread ? '仅未读' : '全部章节')
           .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.unread ? Color.White : TEXT_MAIN)
+          .fontWeight(this.unread ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.unread ? PRIMARY : TEXT_MAIN)
           .padding({ left: 12, right: 12, top: 6, bottom: 6 })
           .borderRadius(14)
-          .backgroundColor(this.unread ? PRIMARY : CARD)
-          .border({ width: 0.5, color: this.unread ? PRIMARY : DIVIDER })
+          .backgroundColor(this.unread ? PRIMARY_SOFT : CARD)
           .onClick(() => {
             this.unread = !this.unread;
           })
@@ -98,13 +96,14 @@ export struct WorkChapterList {
           if (this.filter !== '') {
             IconCircleButton({
               symbol: $r('sys.symbol.xmark'),
-              btnSize: 32,
+              btnSize: 40,
               iconSize: 14,
+              bg: Color.Transparent,
               onTap: (): void => {
                 this.filter = '';
               }
             })
-              .margin({ left: 6 })
+              .margin({ left: 4 })
           }
         }
         .width('100%')
@@ -112,17 +111,17 @@ export struct WorkChapterList {
       }
 
       ForEach(this.chapters(), (chapter: Chapter) => {
-        Row({ space: 12 }) {
+        Row({ space: 8 }) {
           Column({ space: 4 }) {
             Row({ space: 6 }) {
               if (this.progress?.chapterId === chapter.id) {
                 Text('阅读中')
                   .fontSize(10)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor(Color.White)
+                  .fontColor(PRIMARY)
                   .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                   .borderRadius(6)
-                  .backgroundColor(PRIMARY)
+                  .backgroundColor(PRIMARY_SOFT)
               }
               Text(chapter.title || `第 ${chapter.sort} 章`)
                 .fontColor(this.progress?.chapterId === chapter.id ? PRIMARY : TEXT_MAIN)
@@ -142,27 +141,27 @@ export struct WorkChapterList {
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
+          .padding({ top: 10, bottom: 10 })
           .onClick(() => {
             this.read(chapter);
           })
 
           IconCircleButton({
             glyph: $r('sys.symbol.eye'),
-            btnSize: 34,
-            iconSize: 16,
+            btnSize: 44,
+            iconSize: 18,
+            bg: Color.Transparent,
+            iconColor: TEXT_SUB,
             onTap: (): void => {
               this.preview(chapter);
             }
           })
+            .accessibilityText('预览本章页面')
         }
         .width('100%')
-        .padding({ left: 16, right: 12, top: 12, bottom: 12 })
+        .padding({ left: 16, right: 6 })
         .backgroundColor(CARD)
-        .borderRadius(16)
-        .border({
-          width: this.progress?.chapterId === chapter.id ? 1 : 0.5,
-          color: this.progress?.chapterId === chapter.id ? PRIMARY : DIVIDER
-        })
+        .borderRadius(14)
       }, (chapter: Chapter) => `${chapter.id}_${this.progress?.chapterId === chapter.id}`)
 
       if (this.chapters().length === 0) {
@@ -174,7 +173,6 @@ export struct WorkChapterList {
           .textAlign(TextAlign.Center)
       }
 
-      // 评论 Section（JM 漫评 / EH 画廊评论）
       if (this.album !== null && this.commentsAvailable()) {
         Column({ space: 12 }) {
           Row() {
@@ -233,7 +231,6 @@ export struct WorkChapterList {
             .padding(14)
             .backgroundColor(CARD)
             .borderRadius(14)
-            .border({ width: 0.5, color: DIVIDER })
           }, (comment: CommentItem, idx: number) => `${comment.id}_${idx}`)
         }
         .width('100%')

@@ -15,7 +15,7 @@ function reader(env) {
     chapterIndex: 0, pages: ['1.jpg', '2.jpg'], loadState: 'ready', currentPage: 0,
     inBackground: false, mode: 'horizontal', panel: 'none', sheetVisible: false, sliderDragging: false,
     hudVisible: false, canvasWidthVp: 360, canvasHeightVp: 720, zoomScale: 1, zoomOffsetX: 0, zoomOffsetY: 0,
-    options: { taps: Array(9).fill(2) }, getUIContext: () => ({ animateTo: (_options, run) => run(),
+    options: { taps: [1, 0, 2, 1, 0, 2, 3, 0, 4] }, getUIContext: () => ({ animateTo: (_options, run) => run(),
       getPromptAction: () => ({ showToast: () => {} }) }) };
   env.load('data/SourceApi').sourceApi.albumThumbUrl = () => '';
   const { ReaderController } = env.load('pages/reader/ReaderController');
@@ -25,6 +25,113 @@ function reader(env) {
 }
 
 export async function interfaceTests(test) {
+  await test('图源管理恢复停用状态，隐藏保存失败回滚，展示开关同步生效', async env => {
+    const { SourceEntry, sourceStore } = env.load('data/Sources');
+    const { SourceManagementPage } = env.load('pages/sources/SourceManagementPage');
+    const onlineA = new SourceEntry('jm_a', '在线一', 'jm'); onlineA.enabled = false;
+    const onlineB = new SourceEntry('eh_b', '在线二', 'eh');
+    const local = new SourceEntry('local_a', '本地', 'local');
+    for (const source of [local, onlineA, onlineB]) await sourceStore.save(source);
+    const page = new SourceManagementPage();
+    page.sources = [local, onlineA, onlineB]; page.hidden = [];
+    const notices = [];
+    page.getUIContext = () => ({ getPromptAction: () => ({ showToast: notice => notices.push(notice.message) }) });
+    env.state.failFlush = true;
+    await page.applyHidden('jm_a', true);
+    assert.deepEqual(page.hidden, []); assert.deepEqual(await sourceStore.hiddenIds(), []);
+    assert.match(page.error, /磁盘/); assert.match(notices.at(-1), /磁盘/);
+    await page.applyHidden('jm_a', true);
+    assert.deepEqual(await sourceStore.hiddenIds(), ['jm_a']);
+    await page.enable('jm_a');
+    assert.equal((await sourceStore.get('jm_a')).enabled, true);
+  });
+
+  await test('远程入口只显示当前连接中可用且未隐藏的扩展', async env => {
+    const { SourceEntry, SourceInstance, sourceStore } = env.load('data/Sources');
+    const { SuwayomiSourcesPage } = env.load('pages/sources/SuwayomiSourcesPage');
+    const instance = new SourceInstance(); instance.id = 'gateway'; instance.endpoint = 'https://example.invalid'; instance.name = '服务';
+    const a = new SourceEntry('gateway_a', '服务 · 甲', 'suwayomi'); a.instanceId = instance.id; a.remoteId = 'a';
+    const b = new SourceEntry('gateway_b', '服务 · 乙', 'suwayomi'); b.instanceId = instance.id; b.remoteId = 'b';
+    await sourceStore.syncSuwayomi(instance, [a, b]);
+    await sourceStore.setHidden(b.id, true);
+    const page = new SuwayomiSourcesPage(); await page.load();
+    assert.equal(page.connected, true); assert.deepEqual(page.sources.map(source => source.id), [a.id]);
+    assert.equal(page.displayName(page.sources[0]), '甲');
+  });
+
+  await test('图源入口按注册动作执行浏览、配置和导入，停用图源仍可管理', async env => {
+    const { SourceEntryCard } = env.load('pages/sources/SourceEntryCard');
+    const { SourceEntry } = env.load('data/Sources');
+    const { sourceActions } = env.load('data/source/SourceCatalog');
+    const { ROUTE_SOURCE_BROWSE, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS } = env.load('common/Route');
+    const card = new SourceEntryCard(), routes = [], configured = [];
+    card.stack = { pushPathByName: (name, params) => routes.push({ name, params }) };
+    card.openSettings = source => configured.push(source.id);
+    card.connectSource = source => configured.push(source.id);
+    let imported = 0; card.importLocal = () => { imported++; };
+    for (const kind of ['jm', 'eh', 'local', 'suwayomi']) {
+      card.source = new SourceEntry(`opaque_${kind}`, '图源', kind);
+      card.onPrimaryBrowse();
+      assert.equal(routes.at(-1).params.sourceId, card.source.id);
+      const secondary = card.secondaryActions();
+      assert.ok(secondary.length > 0);
+      for (const action of secondary.filter(action => !action.danger)) card.run(action);
+    }
+    assert.deepEqual(configured, ['opaque_eh', 'opaque_suwayomi']);
+    assert.ok(routes.some(route => route.name === ROUTE_JM_SETTINGS));
+    assert.ok(routes.some(route => route.name === ROUTE_SOURCE_BROWSE));
+    assert.deepEqual(routes.filter(route => route.name === ROUTE_BLOCK_RULES).map(route => route.params.sourceId),
+      ['opaque_local', 'opaque_suwayomi']);
+    card.source = new SourceEntry('local', '本地', 'local');
+    const importAction = sourceActions(card.source).find(action => action.kind === 'import');
+    card.run(importAction); assert.equal(imported, 1);
+    card.busy = true; card.run(importAction); assert.equal(imported, 1); card.busy = false;
+    card.source.enabled = false; card.run(importAction); assert.equal(imported, 1);
+    card.onPrimaryBrowse(); assert.equal(routes.at(-1).name, ROUTE_BLOCK_RULES);
+    card.source = new SourceEntry('remote', '扩展', 'suwayomi'); card.source.enabled = false;
+    card.onPrimaryBrowse(); assert.equal(card.actionsVisible, true);
+    assert.ok(card.secondaryActions().some(action => action.kind === 'remove'));
+  });
+
+  await test('扩展图源移除须确认，失败保留配置，成功刷新且保留书架', async env => {
+    const { sourceStore, SourceEntry } = env.load('data/Sources');
+    const { library } = env.load('data/Library');
+    const { Album } = env.load('models/Models');
+    const { SourceEntryCard } = env.load('pages/sources/SourceEntryCard');
+    const source = new SourceEntry('extension', '扩展', 'suwayomi'); await sourceStore.save(source);
+    await library.add(new Album('extension~book', '保留作品'));
+    const card = new SourceEntryCard(); card.source = source;
+    let dialog, reloads = 0; const errors = [];
+    card.getUIContext = () => ({ showAlertDialog: value => { dialog = value; } });
+    card.reloadSources = () => { reloads++; }; card.reportError = message => errors.push(message);
+    card.run(card.secondaryActions().find(action => action.kind === 'remove'));
+    dialog.primaryButton.action(); assert.ok(sourceStore.peek(source.id));
+    env.state.failFlush = true; dialog.secondaryButton.action();
+    await until(() => reloads === 1, '移除失败反馈');
+    assert.ok(sourceStore.peek(source.id)); assert.match(errors[0], /磁盘/);
+    dialog.secondaryButton.action(); await until(() => reloads === 2, '移除成功刷新');
+    assert.equal(sourceStore.peek(source.id), null);
+    assert.ok(await library.workFor('extension~book'));
+  });
+
+  await test('导出画质设置写入后参与编码，保存失败保留原选择', async env => {
+    const { ProfilePage } = env.load('pages/ProfilePage'), page = new ProfilePage();
+    const { Prefs } = env.load('util/Prefs'), prefs = await Prefs.getInstance();
+    const { makeArchiveEntry } = env.load('data/CbzPacker');
+    const { ChapterPage } = env.load('models/Models');
+    const fs = await import('node:fs');
+    const path = `${env.directory}/quality.jpg`; fs.writeFileSync(path, Buffer.from('image'));
+    await page.saveOption('archiveQuality', 1);
+    await makeArchiveEntry(path, new ChapterPage('jm~chapter', '1.jpg'), 0, await prefs.archiveImgQuality());
+    assert.equal(page.archiveQuality, 1); assert.equal(env.state.packed.at(-1).quality, 85);
+    env.state.failFlush = true; await page.saveOption('archiveQuality', 0);
+    assert.equal(page.archiveQuality, 1); assert.equal(await prefs.archiveImgQuality(), 'compact');
+    assert.match(page.message, /磁盘/);
+    await page.saveOption('archiveQuality', 0);
+    await makeArchiveEntry(path, new ChapterPage('jm~chapter', '1.jpg'), 0, await prefs.archiveImgQuality());
+    assert.equal(page.archiveQuality, 0); assert.equal(env.state.packed.at(-1).quality, 95);
+  });
+
   await test('三种搜索范围的空输入均为零请求，编辑时清除旧结果与提交条件', async env => {
     const { SearchAllPage } = env.load('pages/SearchAllPage');
     const api = env.load('data/SourceApi').sourceApi;
@@ -98,6 +205,58 @@ export async function interfaceTests(test) {
     assert.deepEqual(page.latestItems, []);
   });
 
+  await test('分类筛选整体提交默认排序、自定义关键词，后续修改不改变旧查询', async env => {
+    const { JmBrowsePage } = env.load('pages/jm/JmBrowsePage');
+    const page = new JmBrowsePage();
+    assert.equal(page.categoryQuery.order, 'mr');
+    page.selectCategory({ id: 'doujin', name: '同人', slug: 'doujin' });
+    const category = page.categoryQuery;
+    assert.deepEqual([category.categoryId, category.categoryName, category.categorySlug, category.order, category.customQuery],
+      ['doujin', '同人', 'doujin', 'mv', '']);
+    page.selectCategory({ id: 'doujin', name: '同人', slug: 'doujin' });
+    assert.equal(page.categoryQuery, category);
+    page.selectOrder('mv_w');
+    const weekly = page.categoryQuery;
+    assert.notEqual(weekly, category); assert.equal(category.order, 'mv');
+    assert.deepEqual([weekly.categoryId, weekly.categoryName, weekly.categorySlug, weekly.order, weekly.customQuery],
+      ['doujin', '同人', 'doujin', 'mv_w', '']);
+    page.selectOrder('mv_w'); assert.equal(page.categoryQuery, weekly);
+    page.selectCategory({ id: 'other', name: '其他', slug: '' });
+    assert.equal(page.categoryQuery.order, 'mr');
+    page.selectCustom('自定义');
+    const custom = page.categoryQuery;
+    assert.deepEqual([custom.categoryId, custom.categoryName, custom.categorySlug, custom.order, custom.customQuery],
+      ['custom:自定义', '自定义', '', 'mr', '自定义']);
+    page.selectOrder('mv_m');
+    assert.equal(page.categoryQuery.customQuery, '自定义'); assert.equal(custom.order, 'mr');
+    page.selectAll();
+    assert.deepEqual([page.categoryQuery.categoryId, page.categoryQuery.categorySlug, page.categoryQuery.order, page.categoryQuery.customQuery], ['', '', 'mr', '']);
+  });
+
+  await test('分类列表使用当前查询快照重载、分页，并拒收上一分类的迟到结果', async env => {
+    const { JmBrowsePage } = env.load('pages/jm/JmBrowsePage');
+    const { CategoryPage } = env.load('pages/CategoryPage');
+    const api = env.load('data/SourceApi').sourceApi;
+    const old = deferred(), calls = [];
+    api.ranking = async (sourceId, slug, order, page) => {
+      calls.push([sourceId, slug, order, page]);
+      return calls.length === 1 ? old.promise : [{ id: `jm~${slug}-${page}`, title: slug, author: [], category: '', categorySub: '' }];
+    };
+    const owner = new JmBrowsePage(), page = new CategoryPage(); page.sourceIdValue = 'jm';
+    page.query = owner.categoryQuery;
+    const pending = page.reload();
+    owner.selectCategory({ id: 'doujin', name: '同人', slug: 'doujin' });
+    owner.selectOrder('mv_w'); page.query = owner.categoryQuery;
+    await page.reload();
+    old.resolve([{ id: 'jm~old', title: '旧分类', author: [], category: '', categorySub: '' }]); await pending;
+    assert.deepEqual(calls, [['jm', '0', 'mr', 1], ['jm', 'doujin', 'mv_w', 1]]);
+    assert.deepEqual(page.rawItems.map(item => item.id), ['jm~doujin-1']);
+    await page.loadMore();
+    assert.deepEqual(calls[2], ['jm', 'doujin', 'mv_w', 2]);
+    assert.deepEqual(page.rawItems.map(item => item.id), ['jm~doujin-1', 'jm~doujin-2']);
+    assert.equal(page.firstLoading, false); assert.equal(page.loadingMore, false);
+  });
+
   await test('图源重新进入使用默认会话，已有浏览实例保留当前筛选', async env => {
     const { JmBrowsePage } = env.load('pages/jm/JmBrowsePage');
     const existing = new JmBrowsePage(); existing.tab = 1;
@@ -105,8 +264,8 @@ export async function interfaceTests(test) {
     const { EhSearchFilter } = env.load('data/eh/EhSearchFilter');
     const saved = new EhSearchFilter(); saved.categoryMask = 1; saved.minRating = 5; await saved.save();
     const { EhBrowsePage } = env.load('pages/eh/EhBrowsePage');
-    const fresh = new EhBrowsePage(); fresh.load = async () => {}; await fresh.bootstrap();
-    assert.equal(fresh.tab, 0); assert.equal(fresh.query, '');
+    const fresh = new EhBrowsePage(); fresh.aboutToAppear();
+    assert.equal(fresh.tab, 0);
     assert.equal(fresh.filter.categoryMask, new EhSearchFilter().categoryMask);
     assert.equal(fresh.filter.minRating, new EhSearchFilter().minRating);
   });
@@ -188,8 +347,8 @@ export async function interfaceTests(test) {
   await test('缩放和平移后中央点按仍可唤出菜单，双击按原画布坐标定位并可复位', async env => {
     const { host, controller } = reader(env);
     host.zoomScale = 4; host.zoomOffsetX = 300; host.zoomOffsetY = -200;
-    controller.handleCanvasClick(180, 360); assert.equal(host.hudVisible, true);
-    host.panel = 'settings'; controller.handleCanvasClick(180, 100);
+    controller.handleCanvasClick(180, 360); assert.equal(host.hudVisible, true); assert.equal(host.panel, 'progress');
+    host.panel = 'prefs'; controller.handleCanvasClick(180, 100);
     assert.equal(host.hudVisible, false); assert.equal(host.panel, 'none');
     controller.resetZoom(false); controller.onDoubleTap(90, 180);
     assert.equal(host.zoomScale, 2); assert.equal(host.zoomOffsetX, 90); assert.equal(host.zoomOffsetY, 180);

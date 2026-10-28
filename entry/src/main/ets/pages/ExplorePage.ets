@@ -1,7 +1,8 @@
 import { ComicGrid } from '../common/ComicGrid';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SOURCE_BROWSE } from '../common/Route';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
-import { PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB, DANGER, TAB_BAR_HEIGHT } from '../common/Theme';
+import { PRIMARY, TEXT_MAIN, TEXT_SUB, DANGER, TAB_BAR_HEIGHT } from '../common/Theme';
+import { EMPTY_MATERIAL } from '../common/ImmersiveMaterials';
 import { AlbumLite, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 
@@ -49,7 +50,7 @@ export struct ExplorePage {
     this.refreshing = false;
   }
 
-  private async fetchSection(section: HomeSection): Promise<void> {
+  async fetchSection(section: HomeSection): Promise<void> {
     const ticket: number = this.generation;
     const rankTicket: number = section === 'ranking' ? ++this.rankGeneration : this.rankGeneration;
     if (section === 'ranking') { this.rankLoading = true; this.rankError = ''; }
@@ -92,25 +93,19 @@ export struct ExplorePage {
           Select(this.labels.map((label: string): SelectOption => { return { value: label }; }))
             .selected(this.orders.indexOf(this.currentRank))
             .value(this.labels[this.orders.indexOf(this.currentRank)])
-            .height(28)
-            .font({ size: 12, weight: FontWeight.Medium })
-            .fontColor(PRIMARY)
-            .selectedOptionFont({ size: 13, weight: FontWeight.Bold })
-            .selectedOptionFontColor(PRIMARY)
-            .optionFont({ size: 13, weight: FontWeight.Normal })
-            .backgroundColor(SUB_CARD)
-            .borderRadius(14)
-            .padding({ left: 10, right: 10 })
+            .backgroundColor(Color.Transparent)
+            .borderWidth(0)
+            .borderColor(Color.Transparent)
+            .systemMaterial(EMPTY_MATERIAL)
             .onSelect((index: number): void => {
               this.currentRank = this.orders[index];
               this.fetchSection('ranking');
             })
         }
         Blank()
-        Button($$.section === 'random' ? '换一批' : '查看全部', { buttonStyle: ButtonStyleMode.NORMAL })
+        Button($$.section === 'random' ? '换一批' : '查看全部', { buttonStyle: ButtonStyleMode.TEXTUAL })
           .fontSize(13)
           .fontColor(PRIMARY)
-          .backgroundColor(Color.Transparent)
           .enabled(!$$.loading)
           .onClick(() => {
             if ($$.section === 'random') {
@@ -142,7 +137,14 @@ export struct ExplorePage {
           this.Section({ title: '热门', section: 'ranking', items: this.rankItems, loading: this.rankLoading, error: this.rankError })
           this.Section({ title: '随机推荐', section: 'random', items: this.randomItems, loading: this.randomLoading, error: this.randomError })
           this.Section({ title: '最新上架', section: 'latest', items: this.latestItems, loading: this.latestLoading, error: this.latestError })
-        }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: (this.embeddedInShell ? TAB_BAR_HEIGHT : 0) + 28 + this.bottomInset })
+        }
+        .width('100%')
+        .padding({
+          left: 16,
+          right: 16,
+          top: 12,
+          bottom: (this.embeddedInShell ? TAB_BAR_HEIGHT : 0) + 28 + this.bottomInset
+        })
       }.width('100%').height('100%').align(Alignment.TopStart).scrollBar(BarState.Off).clip(false)
     }.width('100%').height('100%').onRefreshing(() => { this.refresh(); })
   }

@@ -1,5 +1,5 @@
 import { ReaderMode } from '../../models/Models';
-import { PRIMARY } from '../../common/Theme';
+import { PRIMARY, PRIMARY_SOFT, readerHudPalette } from '../../common/Theme';
 
 class ModeItem {
   mode: ReaderMode;
@@ -13,11 +13,10 @@ class ModeItem {
   }
 }
 
-const PANEL_BG: string = 'rgba(28,28,32,0.86)';
-
 @Component
 export struct ReaderModePanel {
   @Link mode: ReaderMode;
+  @Prop bgPaper: boolean = false;
   switchMode: (m: ReaderMode) => void = (m: ReaderMode): void => {};
 
   private readonly modeList: ModeItem[] = [
@@ -31,27 +30,23 @@ export struct ReaderModePanel {
   build() {
     Row({ space: 6 }) {
       ForEach(this.modeList, (item: ModeItem) => {
-        Column({ space: 4 }) {
+        Column({ space: 6 }) {
           SymbolGlyph(item.icon)
             .fontSize(22)
-            .fontColor([this.mode === item.mode ? Color.White : 'rgba(255,255,255,0.82)'])
+            .fontColor([this.mode === item.mode ? PRIMARY : readerHudPalette(this.bgPaper).text])
           Text(item.label)
             .fontSize(11)
             .fontWeight(this.mode === item.mode ? FontWeight.Bold : FontWeight.Medium)
-            .fontColor(this.mode === item.mode ? Color.White : 'rgba(255,255,255,0.72)')
+            .fontColor(this.mode === item.mode ? PRIMARY : readerHudPalette(this.bgPaper).textSub)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .layoutWeight(1)
-        .height(60)
+        .height(62)
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
         .borderRadius(14)
-        .backgroundColor(this.mode === item.mode ? PRIMARY : 'rgba(255,255,255,0.06)')
-        .border({
-          width: 0.5,
-          color: this.mode === item.mode ? PRIMARY : 'rgba(255,255,255,0.10)'
-        })
+        .backgroundColor(this.mode === item.mode ? PRIMARY_SOFT : Color.Transparent)
         .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
         .onClick(() => {
           this.switchMode(item.mode);
@@ -59,9 +54,5 @@ export struct ReaderModePanel {
       }, (item: ModeItem): string => item.mode)
     }
     .width('100%')
-    .padding(6)
-    .borderRadius(18)
-    .backgroundColor(PANEL_BG)
-    .border({ width: 0.5, color: 'rgba(255,255,255,0.12)' })
   }
 }

@@ -6,7 +6,7 @@ import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
-import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 
 @Component
 export struct WorkHeroInfo {
@@ -15,6 +15,7 @@ export struct WorkHeroInfo {
   @Consume('navPathStack') stack: NavPathStack;
   @Link sourceName: string;
   @Prop aid: string = '';
+  @Prop fromLibrary: boolean = false;
   @Link work: LibraryWork | null;
   @Link sourceSheet: boolean;
   @Link progress: ReadingProgress | null;
@@ -85,30 +86,41 @@ export struct WorkHeroInfo {
               }
             }
 
-            // Multi-Source Aggregation Capsule
-            Row({ space: 4 }) {
-              Text(this.sourceBadge())
-                .fontSize(11)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(PRIMARY)
-
-              if (this.work !== null && this.work.albums.length > 1) {
-                Text(`（${this.work.albums.length}源）`)
+            if (this.fromLibrary) {
+              Row({ space: 4 }) {
+                Text(this.sourceBadge())
                   .fontSize(11)
-                  .fontWeight(FontWeight.Medium)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(PRIMARY)
+
+                if (this.work !== null && this.work.albums.length > 1) {
+                  Text(`（${this.work.albums.length}源）`)
+                    .fontSize(11)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(PRIMARY)
+                }
+                SymbolGlyph($r('sys.symbol.chevron_right'))
+                  .fontSize(12)
+                  .fontColor([PRIMARY])
+              }
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .borderRadius(8)
+              .backgroundColor(PRIMARY_SOFT)
+              .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
+              .onClick(() => {
+                this.sourceSheet = true;
+              })
+            } else {
+              Row() {
+                Text(this.sourceBadge())
+                  .fontSize(11)
+                  .fontWeight(FontWeight.Bold)
                   .fontColor(PRIMARY)
               }
-              SymbolGlyph($r('sys.symbol.chevron_right'))
-                .fontSize(12)
-                .fontColor([PRIMARY])
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .borderRadius(8)
+              .backgroundColor(PRIMARY_SOFT)
             }
-            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .borderRadius(8)
-            .backgroundColor(PRIMARY_SOFT)
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
-            .onClick(() => {
-              this.sourceSheet = true;
-            })
 
             Row({ space: 12 }) {
               Text(`共 ${this.album.episodes.length} 话`)
@@ -132,19 +144,16 @@ export struct WorkHeroInfo {
         .width('100%')
         .alignItems(VerticalAlign.Top)
 
-        // 统一单行黄金动作栏：主阅读 CTA + 收藏 / 换源 / 下载
+        // 动作栏：主阅读 CTA + 收藏 + （仅书架进入显示换源） + 下载
         Row({ space: 8 }) {
-          Button(this.canContinue() ? this.continueLabel() : '开始阅读', { buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .backgroundColor(PRIMARY)
+          Button(this.canContinue() ? this.continueLabel() : '开始阅读', {
+            type: ButtonType.Capsule,
+            buttonStyle: ButtonStyleMode.EMPHASIZED
+          })
             .layoutWeight(1)
             .height(42)
-            .borderRadius(21)
             .onClick(() => { this.read(); })
 
-          // 1. 收藏/在架切换
           Column({ space: 2 }) {
             SymbolGlyph(this.work !== null ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
               .fontSize(18)
@@ -159,34 +168,32 @@ export struct WorkHeroInfo {
           .justifyContent(FlexAlign.Center)
           .borderRadius(14)
           .backgroundColor(this.work !== null ? PRIMARY_SOFT : SUB_CARD)
-          .border({ width: 0.5, color: this.work !== null ? PRIMARY : DIVIDER })
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
           .onClick(() => {
             this.toggleShelf();
           })
 
-          // 2. 换源与多源角标（唯一主换源入口）
-          Column({ space: 2 }) {
-            SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
-              .fontSize(18)
-              .fontColor([this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_MAIN])
-            Text(this.work !== null && this.work.albums.length > 1 ? `${this.work.albums.length}源` : '换源')
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_SUB)
+          if (this.fromLibrary) {
+            Column({ space: 2 }) {
+              SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
+                .fontSize(18)
+                .fontColor([this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_MAIN])
+              Text(this.work !== null && this.work.albums.length > 1 ? `${this.work.albums.length}源` : '换源')
+                .fontSize(10)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_SUB)
+            }
+            .width(52)
+            .height(42)
+            .justifyContent(FlexAlign.Center)
+            .borderRadius(14)
+            .backgroundColor(SUB_CARD)
+            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
+            .onClick(() => {
+              this.sourceSheet = true;
+            })
           }
-          .width(52)
-          .height(42)
-          .justifyContent(FlexAlign.Center)
-          .borderRadius(14)
-          .backgroundColor(SUB_CARD)
-          .border({ width: 0.5, color: DIVIDER })
-          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
-          .onClick(() => {
-            this.sourceSheet = true;
-          })
 
-          // 3. 离线下载
           Column({ space: 2 }) {
             SymbolGlyph($r('sys.symbol.arrow_down_circle'))
               .fontSize(18)
@@ -201,7 +208,6 @@ export struct WorkHeroInfo {
           .justifyContent(FlexAlign.Center)
           .borderRadius(14)
           .backgroundColor(SUB_CARD)
-          .border({ width: 0.5, color: DIVIDER })
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
           .onClick(() => {
             this.download();
@@ -209,7 +215,6 @@ export struct WorkHeroInfo {
         }
         .width('100%')
 
-        // Description
         if (this.album.description !== '') {
           Column({ space: 6 }) {
             Text(this.album.description)
@@ -223,14 +228,12 @@ export struct WorkHeroInfo {
           .padding(14)
           .borderRadius(16)
           .backgroundColor(CARD)
-          .border({ width: 0.5, color: DIVIDER })
           .width('100%')
           .onClick(() => {
             this.descExpanded = !this.descExpanded;
           })
         }
 
-        // Clickable Tags
         if (this.album.tags.length > 0) {
           WorkTags({ aid: this.aid, terms: this.album.tags, sourceId: sourceId(this.aid), sourceName: this.sourceName })
         }

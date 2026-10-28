@@ -13,6 +13,7 @@ const LEGACY_PREF_KEYS: Array<string> = [
   'sources_v1',
   'eh_seeded_v1',
   'eh_site_mode',
+  'store_home_cache',
   PrefKeys.FAV_ITEMS,
   PrefKeys.FAV_TAGS,
   PrefKeys.HISTORY_ITEMS,

@@ -1,7 +1,7 @@
 import { ComicCard } from '../../common/ComicCard';
 import promptAction from '@ohos.promptAction';
 import { EmptyView } from '../../common/Components';
-import { comicColumns, BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { comicColumns, BG, CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { ROUTE_READER, MangaRouteParams } from '../../common/Route';
 import { Album, MetadataTerm, errorMessage } from '../../models/Models';
 import { downloadManager, DownloadTask } from '../../data/DownloadManager';
@@ -165,14 +165,6 @@ export struct DownloadedPane {
       this.jobs = this.jobs.slice();
     }
     this.busy = false;
-  }
-
-  private async exportSmart(): Promise<void> {
-    if (this.selected.length === 1) {
-      await this.exportSingle();
-    } else {
-      await this.exportSelected(false);
-    }
   }
 
   private async exportSingle(): Promise<void> {

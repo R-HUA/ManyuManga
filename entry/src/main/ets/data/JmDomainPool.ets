@@ -72,7 +72,6 @@ export class JmDomainPool {
   private quarantineUntil: Map<string, number> = new Map<string, number>();
   private scrambleCache: Map<string, number> = new Map<string, number>();
   private healthyImgHosts: Array<string> = [];
-  private imgProbeAt: number = 0;
 
   async init(context?: common.Context): Promise<void> {
     if (this.initialized) {
@@ -444,62 +443,6 @@ export class JmDomainPool {
     return healthy.length > 0 ? healthy : all;
   }
 
-  nextImageHost(current: string): string | null {
-    const pool: Array<string> = this.imageHostPool();
-    if (pool.length <= 1) {
-      return null;
-    }
-    const idx: number = pool.indexOf(current);
-    const next: string = pool[(idx < 0 ? 0 : idx + 1) % pool.length];
-    return next === current ? null : next;
-  }
-
-  reportImgHostFailure(host: string): void {
-    this.healthyImgHosts = this.healthyImgHosts.filter((h: string) => h !== host);
-    this.imgProbeAt = 0;
-  }
-
-  refreshImageHostsAsync(): void {
-    const now: number = Date.now();
-    if (now - this.imgProbeAt < 30 * 60 * 1000 && this.healthyImgHosts.length > 0) {
-      return;
-    }
-    this.imgProbeAt = now;
-    const hosts: Array<string> = this.allImgHosts();
-    const self: JmDomainPool = this;
-    const probes: Array<Promise<string | null>> = [];
-    for (const h of hosts) {
-      probes.push(self.probeImageHost(h));
-    }
-    Promise.all(probes).then((values: Array<string | null>) => {
-      const okHosts: Array<string> = [];
-      for (const v of values) {
-        if (v !== null) {
-          const host: string = v.split('|')[0];
-          if (host !== '') {
-            okHosts.push(host);
-          }
-        }
-      }
-      if (okHosts.length > 0) {
-        self.healthyImgHosts = okHosts;
-      }
-    }).catch((e: Error) => {
-      console.info(`[JmApi] 图片域名探测失败: ${errorMessage(e)}`);
-    });
-  }
-
-  private async probeImageHost(host: string): Promise<string | null> {
-    const t0: number = Date.now();
-    try {
-      await httpUtil.head(`https://${host}/media/albums/1475774_3x4.jpg`, 5000, 8000, 10000);
-      return `${host}|${Date.now() - t0}`;
-    } catch (e) {
-      if (isRequestCancelled(e as Error)) { throw e as Error; }
-      return null;
-    }
-  }
-
   hostForSeed(seed: string, retry: number): string {
     const pool: Array<string> = this.imageHostPool();
     let index: number = (javaStringHashCode(seed) & 0x7FFFFFFF) % pool.length;
@@ -594,14 +537,6 @@ export class JmDomainPool {
     await this.rememberGoodDomain(domain);
   }
 
-  getImageHost(): string {
-    return this.imageHost;
-  }
-
-  getAppVersion(): string {
-    return this.appVersion;
-  }
-
   async testDomains(): Promise<Array<DomainSpeed>> {
     const candidates: Array<string> = this.withLastFirst(this.domains, this.lastDomain);
     const probes: Array<Promise<DomainSpeed>> = [];
@@ -636,15 +571,6 @@ export class JmDomainPool {
     headers['token'] = token;
     headers['tokenparam'] = `${ts},${this.appVersion}`;
     await httpUtil.getText(`https://${domain}/setting`, headers, 5000, 8000, 10000);
-  }
-
-  debugInfo(): string {
-    const lines: Array<string> = [];
-    lines.push(`域名(${this.domains.length}): ${this.domains.join(', ')}`);
-    lines.push(`图片域名: ${this.imageHost}`);
-    lines.push(`接口版本: ${this.appVersion}`);
-    lines.push(`Cookie: ${httpUtil.cookieCount()} 条`);
-    return lines.join('\n');
   }
 
 }

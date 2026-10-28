@@ -15,9 +15,11 @@ import { ChapterPreviewPage } from './ChapterPreviewPage';
 import { JmSourceSettingsPage } from './JmSourceSettingsPage';
 import { EhBrowsePage } from './eh/EhBrowsePage';
 import { BlockRulesPage } from './settings/BlockRulesPage';
+import { SourceManagementPage } from './sources/SourceManagementPage';
+import { SuwayomiSourcesPage } from './sources/SuwayomiSourcesPage';
 import { HDS_NATIVE_MATERIAL } from '../common/ImmersiveMaterials';
-import { ROUTE_SEARCH, ROUTE_ALBUM, ROUTE_READER, ROUTE_DOWNLOADS, ROUTE_PREVIEW, ROUTE_JM_SETTINGS, ROUTE_JM_BROWSE, ROUTE_EH_BROWSE, ROUTE_BLOCK_RULES, ROUTE_STATS, ROUTE_SOURCE_BROWSE, NAV_STACK_DEPTH_KEY } from '../common/Route';
-import { BG, CARD, SUB_CARD, DIVIDER, TEXT_SUB, PRIMARY, PRIMARY_SOFT } from '../common/Theme';
+import { ROUTE_SEARCH, ROUTE_ALBUM, ROUTE_READER, ROUTE_DOWNLOADS, ROUTE_PREVIEW, ROUTE_JM_SETTINGS, ROUTE_JM_BROWSE, ROUTE_EH_BROWSE, ROUTE_BLOCK_RULES, ROUTE_STATS, ROUTE_SOURCE_BROWSE, ROUTE_SOURCE_SETTINGS, ROUTE_SUWAYOMI_LIBRARY, NAV_STACK_DEPTH_KEY } from '../common/Route';
+import { BG, CARD, DIVIDER, TEXT_SUB, PRIMARY } from '../common/Theme';
 
 @Component
 export struct MainShell {
@@ -67,6 +69,10 @@ export struct MainShell {
       ReadingStatsPage()
     } else if (name === ROUTE_SOURCE_BROWSE) {
       SourceBrowsePage()
+    } else if (name === ROUTE_SOURCE_SETTINGS) {
+      SourceManagementPage()
+    } else if (name === ROUTE_SUWAYOMI_LIBRARY) {
+      SuwayomiSourcesPage()
     } else if (name === ROUTE_BLOCK_RULES) {
       BlockRulesPage()
     }
@@ -90,7 +96,6 @@ export struct MainShell {
     .width('100%')
     .padding({ top: 12, bottom: 12 })
     .borderRadius(14)
-    .backgroundColor(this.tab === index ? PRIMARY_SOFT : Color.Transparent)
     .onClick(() => {
       this.tab = index;
     })
@@ -99,21 +104,10 @@ export struct MainShell {
   @Builder
   private Rail() {
     Column({ space: 10 }) {
-      Stack({ alignContent: Alignment.Center }) {
-        SymbolGlyph($r('sys.symbol.book_pages'))
-          .fontSize(22)
-          .fontColor([Color.White])
-      }
-      .width(42)
-      .height(42)
-      .borderRadius(12)
-      .backgroundColor(PRIMARY)
-      .margin({ bottom: 10 })
-
       this.RailItem('书架', $r('sys.symbol.books_vertical_fill'), 0)
-      this.RailItem('动态', $r('sys.symbol.clock'), 1)
-      this.RailItem('图源', $r('sys.symbol.square_grid_2x2'), 2)
-      this.RailItem('我的', $r('sys.symbol.person'), 3)
+      this.RailItem('动态', $r('sys.symbol.clock_fill'), 1)
+      this.RailItem('图源', $r('sys.symbol.square_fill_grid_2x2'), 2)
+      this.RailItem('我的', $r('sys.symbol.person_fill'), 3)
       Blank()
     }
     .width(82)
@@ -131,9 +125,9 @@ export struct MainShell {
       HdsNavigation(this.stack) {
         HdsTabs({ index: this.tab }) {
           TabContent() { LibraryPage() }.tabBar(this.tabStyle('书架', $r('sys.symbol.books_vertical_fill')))
-          TabContent() { UpdatesPage() }.tabBar(this.tabStyle('动态', $r('sys.symbol.clock')))
-          TabContent() { SourcesPage() }.tabBar(this.tabStyle('图源', $r('sys.symbol.square_grid_2x2')))
-          TabContent() { ProfilePage() }.tabBar(this.tabStyle('我的', $r('sys.symbol.person')))
+          TabContent() { UpdatesPage() }.tabBar(this.tabStyle('动态', $r('sys.symbol.clock_fill')))
+          TabContent() { SourcesPage() }.tabBar(this.tabStyle('图源', $r('sys.symbol.square_fill_grid_2x2')))
+          TabContent() { ProfilePage() }.tabBar(this.tabStyle('我的', $r('sys.symbol.person_fill')))
         }
         .barPosition(BarPosition.End)
         .scrollable(false)

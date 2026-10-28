@@ -42,6 +42,8 @@ export const ROUTE_EH_BROWSE: string = 'ehBrowse';
 export const ROUTE_BLOCK_RULES: string = 'blockRules';
 export const ROUTE_STATS: string = 'readingStats';
 export const ROUTE_SOURCE_BROWSE: string = 'sourceBrowse';
+export const ROUTE_SUWAYOMI_LIBRARY: string = 'suwayomiLibrary';
+export const ROUTE_SOURCE_SETTINGS: string = 'sourceSettings';
 
 /** 导航参数在来源边界之外始终使用完整来源标识。 */
 export interface MangaRouteParams {
@@ -55,6 +57,8 @@ export interface MangaRouteParams {
   scope?: SearchScope;
   selection?: SearchSelection;
   match?: boolean;
+  /** 仅从书架进入时为 true，决定详情页是否提供多源换源入口。 */
+  fromLibrary?: boolean;
   browseMode?: string;
   order?: string;
 }

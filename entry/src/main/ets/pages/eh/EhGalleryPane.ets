@@ -5,8 +5,8 @@ import { AlbumLite, errorMessage } from '../../models/Models';
 import { ComicCard } from '../../common/ComicCard';
 import { withoutBlockedAlbums } from '../../data/stores/FilterStores';
 import { BasicDataSource } from '../../common/DataSource';
-import { comicColumns, PRIMARY, PRIMARY_SOFT, TEXT_SUB } from '../../common/Theme';
-import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
+import { comicColumns, PRIMARY, PRIMARY_SOFT, TEXT_SUB, HDS_TITLE_BAR_HEIGHT } from '../../common/Theme';
+import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 const COLUMN_GAP: number = 12;
 const ROW_GAP: number = 12;
@@ -26,6 +26,7 @@ function ehLengthToNumber(value: Length): number {
 export struct EhGalleryPane {
   @Prop galleryIndex: number = 0;
   @Prop @Watch('onFilterChanged') filter: EhSearchFilter = new EhSearchFilter();
+  @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
   scroller: Scroller = new Scroller();
   onOpen: (item: AlbumLite) => void = (_item: AlbumLite): void => {};
@@ -233,7 +234,7 @@ export struct EhGalleryPane {
         .columnsTemplate(this.columnsTemplate())
         .columnsGap(COLUMN_GAP)
         .rowsGap(ROW_GAP)
-        .padding({ left: 16, right: 16, top: 12, bottom: 64 + this.bottomInset })
+        .padding({ left: 16, right: 16, top: this.topInset + HDS_TITLE_BAR_HEIGHT + 12, bottom: 64 + this.bottomInset })
         .edgeEffect(EdgeEffect.Spring)
         .width('100%')
         .height('100%')

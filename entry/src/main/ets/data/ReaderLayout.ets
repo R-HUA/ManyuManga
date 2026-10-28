@@ -19,3 +19,8 @@ export function lastPageInSpread(spreads: Array<Array<string>>, spread: number):
   for (let i: number = 0; i <= spread && i < spreads.length; i++) { page += spreads[i].length; }
   return Math.max(0, page);
 }
+/** 页码以当前章节为边界，空章节保持起始位置。 */
+export function clampPage(page: number, total: number): number {
+  if (total <= 0) { return 0; }
+  return Math.max(0, Math.min(page, total - 1));
+}

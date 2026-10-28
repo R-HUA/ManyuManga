@@ -18,6 +18,9 @@ export class SourceEntry {
   auth: SourceAuth = 'none';
   enabled: boolean = true;
   latency: number = 0;
+  /** 以下两项只在 Suwayomi 网关入口上由实例配置即时装配，不落 source_entry 表。 */
+  lanEndpoint: string = '';
+  customHeaders: string = '';
   constructor(id: string = '', name: string = '', kind: SourceKind = 'jm') {
     this.id = id;
     this.instanceId = id;
@@ -31,12 +34,18 @@ export class SourceInstance {
   endpoint: string = '';
   auth: SourceAuth = 'none';
   name: string = '';
+  /** 局域网备用地址：外网主地址失败时按此择优，属同一服务实例。 */
+  lanEndpoint: string = '';
+  /** 自定义请求头 JSON（Array<{name,value}>），网关与远程书架共用。 */
+  headers: string = '';
 }
 
 export class SourceConfiguration {
   entries: Array<SourceEntry> = [];
   instances: Array<SourceInstance> = [];
   activeInstance: string = '';
+  /** 列表隐藏是展示偏好，与 enabled（服务端同步用于退役失效子源）互不替代。 */
+  hidden: Array<string> = [];
 }
 
 export function copySource(entry: SourceEntry): SourceEntry {
@@ -48,6 +57,8 @@ export function copySource(entry: SourceEntry): SourceEntry {
   copy.auth = entry.auth;
   copy.enabled = entry.enabled;
   copy.latency = entry.latency;
+  copy.lanEndpoint = entry.lanEndpoint;
+  copy.customHeaders = entry.customHeaders;
   return copy;
 }
 
@@ -149,6 +160,52 @@ class SourceStore {
     this.queue = next.catch((): void => {});
     return next;
   }
+
+  /** 展示层隐藏标识（不影响 enabled，也不删除身份）。 */
+  async hiddenIds(): Promise<Array<string>> {
+    await this.list();
+    return this.configuration.hidden.slice();
+  }
+
+  setHidden(id: string, hidden: boolean): Promise<void> {
+    const expected: number = databaseGeneration();
+    const next: Promise<void> = this.queue.then(async (): Promise<void> => {
+      assertDatabaseGeneration(expected);
+      await this.list();
+      const merged: Array<string> = this.configuration.hidden.filter((value: string): boolean => value !== id);
+      if (hidden) {
+        merged.push(id);
+      }
+      const configuration: SourceConfiguration = this.copyConfiguration(this.configuration.entries);
+      configuration.hidden = merged;
+      assertDatabaseGeneration(expected);
+      await this.persist(configuration);
+    });
+    this.queue = next.catch((): void => {});
+    return next;
+  }
+
+  /** 排序即重写 entries 顺序；position 由持久化层按数组下标落库。 */
+  reorder(orderedIds: Array<string>): Promise<void> {
+    const expected: number = databaseGeneration();
+    const next: Promise<void> = this.queue.then(async (): Promise<void> => {
+      assertDatabaseGeneration(expected);
+      const all: Array<SourceEntry> = await this.list();
+      const head: Array<SourceEntry> = [];
+      for (const id of orderedIds) {
+        const found: SourceEntry | undefined = all.find((entry: SourceEntry): boolean => entry.id === id);
+        if (found !== undefined) {
+          head.push(found);
+        }
+      }
+      const tail: Array<SourceEntry> = all.filter((entry: SourceEntry): boolean => !orderedIds.includes(entry.id));
+      assertDatabaseGeneration(expected);
+      await this.persist(this.copyConfiguration(head.concat(tail)));
+    });
+    this.queue = next.catch((): void => {});
+    return next;
+  }
+
   async connection(): Promise<SourceInstance | null> {
     await this.list();
     const instance: SourceInstance | undefined = this.configuration.instances.find(
@@ -161,7 +218,25 @@ class SourceStore {
     copy.endpoint = instance.endpoint;
     copy.auth = instance.auth;
     copy.name = instance.name;
+    copy.lanEndpoint = instance.lanEndpoint;
+    copy.headers = instance.headers;
     return copy;
+  }
+
+  /** 网关入口：主地址即 endpoint，备用地址与自定义请求头由实例配置装配。 */
+  async gateway(): Promise<SourceEntry | null> {
+    const instance: SourceInstance | null = await this.connection();
+    if (instance === null) {
+      return null;
+    }
+    const entry: SourceEntry = new SourceEntry(instance.id, instance.name, 'suwayomi');
+    entry.instanceId = instance.id;
+    entry.endpoint = instance.endpoint;
+    entry.lanEndpoint = instance.lanEndpoint;
+    entry.customHeaders = instance.headers;
+    entry.auth = instance.auth;
+    entry.enabled = true;
+    return entry;
   }
 
   /** 同一服务按 remoteId 保留身份；更换服务必须由连接页显式确认。 */
@@ -212,6 +287,7 @@ class SourceStore {
     configuration.entries = entries.map((entry: SourceEntry): SourceEntry => copySource(entry));
     configuration.instances = this.configuration.instances.slice();
     configuration.activeInstance = this.configuration.activeInstance;
+    configuration.hidden = this.configuration.hidden.slice();
     return configuration;
   }
 

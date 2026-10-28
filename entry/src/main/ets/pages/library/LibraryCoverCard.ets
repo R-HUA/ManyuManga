@@ -25,7 +25,7 @@ export struct LibraryCoverCard {
         badge: this.selected.length > 0 ? '' : this.work.newChapters > 0 ? `+${this.work.newChapters}` : this.work.albums.length > 1 ? `${this.work.albums.length} 源` : '',
         onCardClick: (): void => {
           if (this.selected.length > 0) { this.toggle(this.work); }
-          else { this.stack.pushPathByName(ROUTE_ALBUM, { aid: this.work.activeKey } as MangaRouteParams); }
+          else { this.stack.pushPathByName(ROUTE_ALBUM, { aid: this.work.activeKey, fromLibrary: true } as MangaRouteParams); }
         } })
       if (this.selected.length > 0) {
         Stack() {

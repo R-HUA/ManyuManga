@@ -1,6 +1,5 @@
-import { ComicCard } from './ComicCard';
-import { IMMERSIVE_REGULAR_MATERIAL } from './ImmersiveMaterials';
-import { PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, SUB_CARD, DIVIDER, COVER_R, CHIP_R, COVER_ASPECT_RATIO } from './Theme';
+import { PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, SUB_CARD, DIVIDER, COVER_R, COVER_ASPECT_RATIO } from './Theme';
+import { EMPTY_MATERIAL } from './ImmersiveMaterials';
 /**
  * 全局复用组件
  */
@@ -36,7 +35,6 @@ export struct IconCircleButton {
     .width(this.btnSize)
     .height(this.btnSize)
     .backgroundColor(this.active ? PRIMARY_SOFT : this.bg)
-    .border({ width: this.active ? 0.5 : 0, color: PRIMARY })
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
     .onClick(() => {
       this.onTap();
@@ -45,18 +43,18 @@ export struct IconCircleButton {
 }
 
 /**
- * 官方风格设置下拉行（对齐系统设置选项规范）
+ * 官方风格设置下拉行（对齐系统设置选项规范，不覆盖 Select 原生外观）
  */
 @Component
 export struct SettingSelectRow {
-  @Prop title: string = '';
+  @Prop title: ResourceStr = '';
   @Prop subtitle: string = '';
-  @Prop options: Array<string> = [];
+  @Prop options: Array<ResourceStr> = [];
   @Prop selectedIndex: number = 0;
   onChanged: (index: number) => void = () => {};
 
   private selectOptions(): Array<SelectOption> {
-    return this.options.map((item: string): SelectOption => ({ value: item }));
+    return this.options.map((item: ResourceStr): SelectOption => ({ value: item }));
   }
 
   build() {
@@ -78,65 +76,16 @@ export struct SettingSelectRow {
       Select(this.selectOptions())
         .selected(this.selectedIndex)
         .value(this.options[this.selectedIndex] ?? '')
-        .font({ size: 14, weight: FontWeight.Normal })
-        .fontColor($r('sys.color.font_secondary'))
-        .selectedOptionFont({ size: 15, weight: FontWeight.Medium })
-        .selectedOptionFontColor(PRIMARY)
-        .optionFont({ size: 15, weight: FontWeight.Normal })
         .backgroundColor(Color.Transparent)
+        .borderWidth(0)
+        .borderColor(Color.Transparent)
+        .systemMaterial(EMPTY_MATERIAL)
         .onSelect((index: number) => {
           this.onChanged(index);
         })
     }
     .width('100%')
     .constraintSize({ minHeight: 48 })
-    .alignItems(VerticalAlign.Center)
-  }
-}
-
-/**
- * 漫画卡片
- */
-
-
-/**
- * 区块标题：左侧强调竖条 + 标题 + 右侧操作
- */
-@Component
-export struct SectionTitle {
-  @Prop title: string = '';
-  @Prop actionText: string = '';
-  onAction: () => void = () => {};
-
-  build() {
-    Row({ space: 8 }) {
-      Row()
-        .width(4)
-        .height(16)
-        .borderRadius(2)
-        .backgroundColor(PRIMARY)
-      Text(this.title)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-      if (this.actionText !== '') {
-        Text(this.actionText)
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(PRIMARY)
-          .maxLines(1)
-          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-          .backgroundColor(PRIMARY_SOFT)
-          .borderRadius(12)
-          .onClick(() => {
-            this.onAction();
-          })
-      }
-    }
-    .width('100%')
     .alignItems(VerticalAlign.Center)
   }
 }
@@ -154,15 +103,14 @@ export struct EmptyView {
   build() {
     Column({ space: 14 }) {
       Stack({ alignContent: Alignment.Center }) {
-        SymbolGlyph($r('sys.symbol.folder'))
-          .fontSize(32)
+        SymbolGlyph($r('sys.symbol.folder_fill'))
+          .fontSize(30)
           .fontColor([TEXT_SUB])
       }
-      .width(68)
-      .height(68)
-      .borderRadius(34)
+      .width(64)
+      .height(64)
+      .borderRadius(32)
       .backgroundColor(SUB_CARD)
-      .border({ width: 0.5, color: DIVIDER })
 
       Text(this.message)
         .fontSize(14)
@@ -175,9 +123,7 @@ export struct EmptyView {
         Button(this.retryText, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
           .height(36)
           .fontSize(13)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(PRIMARY)
-          .backgroundColor(PRIMARY_SOFT)
+          .fontWeight(FontWeight.Medium)
           .padding({ left: 24, right: 24 })
           .onClick(() => {
             this.onRetry();
@@ -192,7 +138,7 @@ export struct EmptyView {
 }
 
 /**
- * 标签胶囊
+ * 标签胶囊：选中态使用浅底 + 品牌色文字，不叠加实心色块与描边
  */
 @Component
 export struct TagChip {
@@ -204,12 +150,12 @@ export struct TagChip {
     Text(this.label)
       .fontSize(12)
       .fontWeight(this.selected ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.selected ? Color.White : TEXT_SUB)
+      .fontColor(this.selected ? PRIMARY : TEXT_MAIN)
       .maxLines(1)
       .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .backgroundColor(this.selected ? PRIMARY : SUB_CARD)
-      .borderRadius(CHIP_R)
-      .border({ width: 0.5, color: this.selected ? PRIMARY : DIVIDER })
+      .constraintSize({ minHeight: 32 })
+      .backgroundColor(this.selected ? PRIMARY_SOFT : SUB_CARD)
+      .borderRadius(16)
       .onClick(() => {
         this.onChipClick();
       })

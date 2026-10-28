@@ -42,6 +42,7 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   jm.presentation.idJumpPlaceholder = '输入 JM 纯数字车号直达详情…';
   jm.presentation.idJumpLabel = '车号直达';
   jm.presentation.defaultName = '禁漫';
+  jm.presentation.section = 'online';
   jm.actions = [new SourceAction('进入发现', 'route', ROUTE_JM_BROWSE, true, false, true),
     new SourceAction('节点设置', 'route', ROUTE_JM_SETTINGS)];
   definitions.set(jm.kind, jm);
@@ -57,6 +58,7 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   eh.presentation.idJumpPlaceholder = '粘贴画廊链接或 GID/Token…';
   eh.presentation.idJumpLabel = '画廊直达';
   eh.presentation.defaultName = 'E-Hentai / ExHentai';
+  eh.presentation.section = 'online';
   eh.presentation.settingsToken = 'eh.site';
   eh.actions = [new SourceAction('进入画廊广场', 'route', ROUTE_EH_BROWSE, true, false, true),
     new SourceAction('站点与账号', 'settings')];
@@ -69,17 +71,18 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   local.presentation.description = '本地 CBZ / ZIP 归档与目录';
   local.presentation.iconToken = 'folder';
   local.presentation.defaultName = '本地漫画';
+  local.presentation.section = 'local';
   local.actions = [new SourceAction('本地漫画', 'route', ROUTE_SOURCE_BROWSE, true, false, true),
-    new SourceAction('导入漫画包', 'import'), new SourceAction('本源屏蔽规则', 'route', ROUTE_BLOCK_RULES)];
+    new SourceAction('导入漫画包', 'import', '', false, false, true), new SourceAction('本源屏蔽规则', 'route', ROUTE_BLOCK_RULES)];
   definitions.set(local.kind, local);
 
   const remote: SourceDefinition = new SourceDefinition('suwayomi', suwayomiStrategy);
   remote.capabilities.signedCover = true;
   remote.presentation.shortLabel = '扩展';
-  remote.presentation.describeEndpoint = true;
   remote.presentation.iconToken = 'drive';
   remote.presentation.registrable = true;
   remote.presentation.defaultName = 'Suwayomi';
+  remote.presentation.section = 'remote';
   remote.actions = [new SourceAction('浏览漫画', 'route', ROUTE_SOURCE_BROWSE, true, false, true),
     new SourceAction('连接配置', 'connect'), new SourceAction('移除', 'remove', '', false, true),
     new SourceAction('本源屏蔽规则', 'route', ROUTE_BLOCK_RULES)];

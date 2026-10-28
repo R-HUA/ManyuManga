@@ -1,25 +1,19 @@
 import { ReaderController } from './reader/ReaderController';
 import { HdsNavDestination } from '@kit.UIDesignKit';
-import { ReaderHud } from './reader/ReaderHud';
+import { ReaderHud, ReaderPanelKind } from './reader/ReaderHud';
 import { ReaderChapterSheet } from './reader/ReaderChapterSheet';
+import { ReaderZoneOverlay } from './reader/ReaderZoneOverlay';
 import { ReaderImageItem } from './reader/ReaderImageItem';
-import display from '@ohos.display';
 import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { EmptyView } from '../common/Components';
-import { READER_BG, PRIMARY, ACCENT, CHIP_R } from '../common/Theme';
+import { READER_BG, PRIMARY, ACCENT, CHIP_R, eyeComfortTint, readerHudPalette } from '../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode, asNumber, asRecord, asString } from '../models/Models';
-import { ReaderOptions } from '../data/ReaderOptions';
+import { ReaderOptions, ReaderSheetKind } from '../data/ReaderOptions';
 import { MangaRouteParams, ROUTE_SEARCH } from '../common/Route';
 /** 默认乱序参数 */
 const SCRAMBLE_DEFAULT: number = 220980;
 /** 护眼米黄背景 */
 const PAPER_BG: string = '#F5EFE2';
-
-// ───────────────────────── LazyForEach 数据源 ─────────────────────────
-
-// ───────────────────────── 子组件 ─────────────────────────
-
-// ───────────────────────── ReaderPage ─────────────────────────
 
 @Component
 export struct ReaderPage {
@@ -39,8 +33,10 @@ export struct ReaderPage {
   @State currentPage: number = 0;
   @State mode: ReaderMode = 'vertical';
   @State @Watch('onHudIdle') hudVisible: boolean = false;
-  @State @Watch('onHudIdle') panel: 'none' | 'mode' | 'display' | 'settings' | 'thumbnails' = 'none';
+  @State @Watch('onHudIdle') panel: ReaderPanelKind = 'none';
+  @State sheetKind: ReaderSheetKind = 'index';
   @State @Watch('onHudIdle') sheetVisible: boolean = false;
+  @State zoneEditorVisible: boolean = false;
   @State brightnessValue: number = 100;
   @State bgPaper: boolean = false;
   @State preloadCount: number = 3;
@@ -60,16 +56,6 @@ export struct ReaderPage {
   aboutToDisappear(): void { this.controller.aboutToDisappear(); }
   private backgroundChanged(): void { this.controller.backgroundChanged(); }
 
-              // ───────────────────────── 预加载─────────────────────────
-
-          // ───────────────────────── 翻页 / 热区 / 模式─────────────────────────
-
-    // ───────────────────────── 双指缩放─────────────────────────
-
-              // ───────────────────────── 跨页序列（评审 Step4：rtl 右起 / double 双页并排）─────────────────────────
-
-        // ───────────────────────── 画布─────────────────────────
-
   @Builder
   private VerticalList() {
     List({ scroller: this.controller.listScroller }) {
@@ -88,20 +74,19 @@ export struct ReaderPage {
           })
         }
       }, (filename: string) => filename)
-      // 尾部：本章完 + 上一章/下一章（边界隐藏，ReaderScreen.kt:409-431）
       ListItem() {
         Column({ space: 14 }) {
-          Text('—— 本章完 ——')
+          Text('本章完')
             .fontSize(13)
-            .fontColor('rgba(255,255,255,0.45)')
+            .fontColor(readerHudPalette(this.bgPaper).textSub)
           Row({ space: 12 }) {
             if (this.chapterIndex > 0) {
               Text('上一章')
                 .fontSize(14)
-                .fontColor('rgba(255,255,255,0.9)')
+                .fontColor(readerHudPalette(this.bgPaper).text)
                 .padding({ left: 22, right: 22, top: 9, bottom: 9 })
                 .borderRadius(CHIP_R)
-                .backgroundColor('rgba(255,255,255,0.12)')
+                .backgroundColor(readerHudPalette(this.bgPaper).capsule)
                 .onClick(() => {
                   this.controller.goChapter(-1);
                 })
@@ -121,7 +106,7 @@ export struct ReaderPage {
           if (this.chapters.length <= 1) {
             Text('本作品仅此一话')
               .fontSize(12)
-              .fontColor('rgba(255,255,255,0.35)')
+              .fontColor(readerHudPalette(this.bgPaper).faint)
           }
         }
         .width('100%')
@@ -133,7 +118,7 @@ export struct ReaderPage {
     .height('100%')
     .scrollBar(BarState.Off)
     .cachedCount(this.preloadCount)
-    .onScrollIndex((first: number, end: number) => {
+    .onScrollIndex((first: number) => {
       if (first !== this.currentPage) {
         this.currentPage = first;
         this.controller.prefetchAhead(first);
@@ -142,7 +127,6 @@ export struct ReaderPage {
     })
   }
 
-  /** 横向翻页（评审 Step4）：跨页序列渲染——horizontal 单页顺排 / rtl 倒排右起 / double 双页并排 */
   @Builder
   private HorizontalSwiper() {
     Swiper(this.controller.swiperController) {
@@ -193,15 +177,13 @@ export struct ReaderPage {
     })
   }
 
-  // ───────────────────────── 全屏状态（四态）─────────────────────────
-
   @Builder
   private LoadingView() {
     Column({ space: 14 }) {
       LoadingProgress().width(38).height(38).color(PRIMARY)
       Text('正在加载章节…')
         .fontSize(13)
-        .fontColor('rgba(255,255,255,0.6)')
+        .fontColor(readerHudPalette(this.bgPaper).textSub)
     }
     .width('100%')
     .height('100%')
@@ -219,14 +201,7 @@ export struct ReaderPage {
           this.controller.retryLoad();
         }
       })
-      Text('跨源匹配其他可用书源')
-        .fontSize(13)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .padding({ left: 20, right: 20, top: 10, bottom: 10 })
-        .borderRadius(20)
-        .backgroundColor('rgba(255,255,255,0.14)')
-        .border({ width: 0.5, color: 'rgba(255,255,255,0.22)' })
+      Button('跨源匹配其他可用书源', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
         .onClick(() => {
           this.pageStack.pushPathByName(ROUTE_SEARCH, { matchAid: this.aid } as MangaRouteParams);
         })
@@ -248,23 +223,15 @@ export struct ReaderPage {
     .padding({ top: this.topSafeVp })
   }
 
-    @Builder
+  @Builder
   private HudLayer() {
     ReaderHud({
-      options: this.$options,
-      brightnessValue: this.$brightnessValue,
-      bgPaper: this.$bgPaper,
-      preloadCount: this.$preloadCount,
       panel: this.$panel,
       hudVisible: this.$hudVisible,
-      goBack: (): void => this.controller.goBack(),
-      openPreview: (): void => this.controller.openPreview(),
       pages: this.$pages,
       albumTitle: this.$albumTitle,
       currentPage: this.$currentPage,
       zoomScale: this.$zoomScale,
-      resetZoom: (animated: boolean): void => this.controller.resetZoom(animated),
-      toggleBookmark: (): Promise<void> => this.controller.toggleBookmark(),
       topSafeVp: this.$topSafeVp,
       sliderDragging: this.$sliderDragging,
       sliderValue: this.$sliderValue,
@@ -274,15 +241,23 @@ export struct ReaderPage {
       mode: this.$mode,
       jumpToPage: (page: number): void => this.controller.jumpToPage(page),
       chapters: this.$chapters,
-      sheetVisible: this.$sheetVisible,
       bottomSafeVp: this.$bottomSafeVp,
       switchMode: (m: ReaderMode): void => this.controller.switchMode(m),
-      toggleBackground: (paper: boolean): void => this.controller.toggleBackground(paper),
+      openSheet: (kind: ReaderSheetKind): void => this.controller.openSheet(kind),
+      goBack: (): void => this.controller.goBack(),
+      resetZoom: (animated: boolean): void => this.controller.resetZoom(animated),
+      toggleBookmark: (): Promise<void> => this.controller.toggleBookmark(),
+      bookmarks: this.$bookmarks,
+      options: this.$options,
+      brightnessValue: this.$brightnessValue,
+      bgPaper: this.$bgPaper,
+      preloadCount: this.$preloadCount,
       buildSpreads: (): void => this.controller.buildSpreads(),
       scrollToPageDelayed: (page: number): void => this.controller.scrollToPageDelayed(page),
       persistOptions: (): Promise<void> => this.controller.persistOptions(),
+      toggleBackground: (paper: boolean): void => this.controller.toggleBackground(paper),
       setPreload: (n: number): void => this.controller.setPreload(n),
-      bookmarks: this.$bookmarks,
+      openZoneEditor: (): void => this.controller.openZoneEditor(),
       onHudTouch: (down: boolean): void => this.controller.onHudTouch(down)
     })
   }
@@ -292,7 +267,6 @@ export struct ReaderPage {
   }
 
   private tapPoint(event: GestureEvent): Array<number> {
-    // 键盘或手柄触发时没有触点，按画布中央操作；触屏使用原生点击坐标。
     return event.tapLocation === undefined ? [this.canvasWidthVp / 2, this.canvasHeightVp / 2]
       : [event.tapLocation.x, event.tapLocation.y];
   }
@@ -304,14 +278,13 @@ export struct ReaderPage {
       Text(`${this.controller.chapterTitle()} P.${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
         .fontSize(10)
         .fontWeight(FontWeight.Medium)
-        .fontColor('rgba(255,255,255,0.86)')
+        .fontColor(readerHudPalette(this.bgPaper).text)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .constraintSize({ maxWidth: '72%' })
         .padding({ left: 10, right: 10, top: 4, bottom: 4 })
         .borderRadius(12)
-        .backgroundColor('rgba(14, 17, 26, 0.72)')
-        .border({ width: 0.5, color: 'rgba(255,255,255,0.14)' })
+        .backgroundColor(readerHudPalette(this.bgPaper).capsule)
     }
     .width('100%')
     .height('100%')
@@ -321,26 +294,29 @@ export struct ReaderPage {
     .hitTestBehavior(HitTestMode.None)
   }
 
-  /** 章节目录半模态：点击直达对应话 */
+  /** 二级抽屉内容：仅目录与缩略图使用半模态，其余面板均作为底栏上方浮卡就地展开 */
   @Builder
-  private ChapterSheet() {
+  private SheetContent() {
     ReaderChapterSheet({
       bookmarks: this.$bookmarks,
       sheetVisible: this.$sheetVisible,
       chapters: this.$chapters,
-      loadChapter: (chapterIdx: number, targetPage: number, preserveAttempts: boolean = false): Promise<void> => this.controller.loadChapter(chapterIdx, targetPage, preserveAttempts),
+      loadChapter: (chapterIdx: number, targetPage: number, preserveAttempts: boolean = false): Promise<void> =>
+        this.controller.loadChapter(chapterIdx, targetPage, preserveAttempts),
       chapterSource: this.controller.chapterSource,
       chapterIndex: this.$chapterIndex,
+      pages: this.$pages,
+      currentPage: this.$currentPage,
+      scrambleId: this.$scrambleId,
+      photoId: this.controller.currentChapterId(),
+      jumpToPage: (page: number): void => this.controller.jumpToPage(page),
       flushProgress: (): void => this.controller.flushProgress()
     })
   }
 
-  // ───────────────────────── 页面 ─────────────────────────
-
   build() {
     HdsNavDestination() {
       Stack() {
-        // 手势统一由未变换的画布识别，图片单独缩放和平移。
         Column() {
           Stack() {
             if (this.loadState === 'loading') {
@@ -363,51 +339,54 @@ export struct ReaderPage {
         .width('100%')
         .height('100%')
         .gesture(
-            GestureGroup(GestureMode.Parallel,
-              GestureGroup(GestureMode.Exclusive,
-                TapGesture({ count: 2, fingers: 1 })
-                  .onAction((event: GestureEvent): void => {
-                    const point: Array<number> = this.tapPoint(event);
-                    this.controller.onDoubleTap(point[0], point[1]);
-                  }),
-                TapGesture({ count: 1, fingers: 1 })
-                  .onAction((event: GestureEvent): void => {
-                    const point: Array<number> = this.tapPoint(event);
-                    this.controller.handleCanvasClick(point[0], point[1]);
-                  })
-              ),
-              PinchGesture({ fingers: 2 })
-                .onActionStart((event: GestureEvent): void => {
-                  this.controller.onPinchStart(event);
-                })
-                .onActionUpdate((event: GestureEvent): void => {
-                  this.controller.onPinchUpdate(event);
-                })
-                .onActionEnd((): void => {
-                  this.controller.bounceZoomBack();
+          GestureGroup(GestureMode.Parallel,
+            GestureGroup(GestureMode.Exclusive,
+              TapGesture({ count: 2, fingers: 1 })
+                .onAction((event: GestureEvent): void => {
+                  const point: Array<number> = this.tapPoint(event);
+                  this.controller.onDoubleTap(point[0], point[1]);
                 }),
-              PanGesture({ fingers: 1, distance: 3 })
-                .onActionStart((event: GestureEvent): void => {
-                  if (this.zoomScale > 1.05) {
-                    this.controller.onTwoFingerPanStart(event);
-                  }
+              TapGesture({ count: 1, fingers: 1 })
+                .onAction((event: GestureEvent): void => {
+                  const point: Array<number> = this.tapPoint(event);
+                  this.controller.handleCanvasClick(point[0], point[1]);
                 })
-                .onActionUpdate((event: GestureEvent): void => {
-                  if (this.zoomScale > 1.05) {
-                    this.controller.onTwoFingerPanUpdate(event);
-                  }
-                })
-                .onActionEnd((): void => {
-                  if (this.zoomScale > 1.05) {
-                    this.controller.bounceZoomBack();
-                  }
-                })
-            )
+            ),
+            PinchGesture({ fingers: 2 })
+              .onActionStart((event: GestureEvent): void => {
+                this.controller.onPinchStart(event);
+              })
+              .onActionUpdate((event: GestureEvent): void => {
+                this.controller.onPinchUpdate(event);
+              })
+              .onActionEnd((): void => {
+                this.controller.bounceZoomBack();
+              }),
+            PanGesture({ fingers: 1, distance: 3 })
+              .onActionStart((event: GestureEvent): void => {
+                if (this.zoomScale > 1.05) {
+                  this.controller.onTwoFingerPanStart(event);
+                }
+              })
+              .onActionUpdate((event: GestureEvent): void => {
+                if (this.zoomScale > 1.05) {
+                  this.controller.onTwoFingerPanUpdate(event);
+                }
+              })
+              .onActionEnd((): void => {
+                if (this.zoomScale > 1.05) {
+                  this.controller.bounceZoomBack();
+                }
+              })
           )
-        if (this.options.eyeComfort) {
-          Column().width('100%').height('100%').backgroundColor('rgba(255,185,85,0.16)').hitTestBehavior(HitTestMode.None)
+        )
+        if (this.options.eyeComfort > 0) {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor(eyeComfortTint(this.options.eyeComfort))
+            .hitTestBehavior(HitTestMode.None)
         }
-        // 亮度遮罩
         if (this.brightnessValue < 100) {
           Column()
             .width('100%')
@@ -415,20 +394,28 @@ export struct ReaderPage {
             .backgroundColor(`rgba(0,0,0,${(((100 - this.brightnessValue) / 100) * 0.72).toFixed(2)})`)
             .hitTestBehavior(HitTestMode.None)
         }
-        // 微型页码胶囊（HUD 隐藏时常驻）
-        if (!this.hudVisible && this.loadState === 'ready' && this.pages.length > 0) {
+        if (!this.hudVisible && !this.zoneEditorVisible && this.loadState === 'ready' && this.pages.length > 0) {
           this.PagePill()
         }
-        // 上下双层 HUD
         if (this.hudVisible) {
           this.HudLayer()
+        }
+        if (this.zoneEditorVisible) {
+          ReaderZoneOverlay({
+            options: this.$options,
+            topSafeVp: this.$topSafeVp,
+            persistOptions: (): Promise<void> => this.controller.persistOptions(),
+            close: (): void => {
+              this.zoneEditorVisible = false;
+            }
+          })
         }
       }
       .width('100%')
       .height('100%')
       .backgroundColor(this.bgPaper ? PAPER_BG : READER_BG)
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-      .onAreaChange((oldArea: Area, newArea: Area) => {
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
         const w: number = Number(newArea.width);
         const h: number = Number(newArea.height);
         if (!Number.isNaN(w) && w > 0) {
@@ -438,10 +425,11 @@ export struct ReaderPage {
           this.canvasHeightVp = h;
         }
       })
-      .bindSheet($$this.sheetVisible, this.ChapterSheet(), {
-        height: '62%',
+      .bindSheet($$this.sheetVisible, this.SheetContent(), {
+        detents: [SheetSize.MEDIUM, SheetSize.LARGE],
         dragBar: true,
-        showClose: false,
+        showClose: true,
+        title: { title: '目录与预览' },
         systemMaterial: IMMERSIVE_SHEET_MATERIAL,
         onDisappear: (): void => {
           this.sheetVisible = false;
@@ -460,7 +448,6 @@ export struct ReaderPage {
         const rec: Record<string, Object> | null = asRecord(raw);
         if (rec !== null) {
           this.aid = asString(rec['aid']);
-          // 契约参数 chapterId?: number，模型/Store 侧为 string —— asString 容忍数字统一转字符串
           this.controller.routeChapterId = asString(rec['chapterId']);
           this.controller.routeChapterIndex = asNumber(rec['chapterIndex'], -1);
           this.controller.routePage = asNumber(rec['page'], -1);
@@ -472,8 +459,7 @@ export struct ReaderPage {
       this.controller.readerVisible = true;
       this.readerActive = true;
       if (this.controller.paramReady && this.controller.readingResolved && this.loadState === 'loading') { this.controller.retryLoad(); }
-      // 阅读器画布恒深色（米黄除外）：进入即白字/米黄深字（评审 Step2 状态栏联动）
-      this.controller.applySystemBarDarkText(this.bgPaper).catch((e: Error): void => {
+      this.controller.applySystemBarDarkText(this.bgPaper).catch((_e: Error): void => {
       });
     })
     .onHidden(() => {

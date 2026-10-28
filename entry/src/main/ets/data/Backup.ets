@@ -1,3 +1,4 @@
+
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
 import { relationalStore } from '@kit.ArkData';
@@ -5,10 +6,7 @@ import { getAppContext } from '../util/Prefs';
 import { utf8Decode, utf8Encode } from './JmApi';
 import { sourceStore } from './Sources';
 import { EhSettings } from './eh/EhSettings';
-import { library } from './Library';
-import { historyStore, readProgressStore } from './stores/ReadingStores';
-import { favStore } from './stores/FavoriteStore';
-import { searchHistoryStore, blockTagsStore, customCatStore } from './stores/FilterStores';
+import { blockTagsStore } from './stores/FilterStores';
 import { localSource } from './LocalSource';
 import { downloadManager } from './DownloadManager';
 import { asArray, asNumber, asRecord, asString } from '../models/Models';
@@ -152,13 +150,7 @@ export async function importBackup(): Promise<boolean> {
 }
 
 function invalidateRestoredData(document: BackupDocument): void {
-  library.invalidate();
-  historyStore.invalidate();
-  readProgressStore.invalidate();
-  favStore.invalidate();
-  searchHistoryStore.invalidate();
   blockTagsStore.invalidate();
-  customCatStore.invalidate();
   localSource.invalidate();
   sourceStore.invalidate();
   let site: string = 'e';

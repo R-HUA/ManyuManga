@@ -1,37 +1,21 @@
-import { CategoryFilterBar, CATEGORY_BAR_HEIGHT } from './jm/CategoryFilterBar';
+import { CategoryBrowseQuery } from './jm/CategoryBrowseQuery';
 import { ComicCard } from '../common/ComicCard';
-import { badgeForAlbum } from '../common/ComicBadge';
+import { badgeForAlbum, formatCount, langBadgeFor } from '../common/ComicBadge';
 import { BasicDataSource } from '../common/DataSource';
-import { formatCount, langBadgeFor } from '../common/ComicBadge';
-import { AlbumCard } from './jm/AlbumCard';
-import { AddCatDialog } from './jm/AddCatDialog';
 import { FONT_CAPTION, PRIMARY, SPACE_L, SPACE_M, SPACE_S, TEXT_SUB, TAB_BAR_HEIGHT, comicColumns } from '../common/Theme';
 import { EmptyView, SkeletonGrid } from '../common/Components';
 import { ROUTE_ALBUM } from '../common/Route';
-import { AlbumLite, CategoryItem, errorMessage } from '../models/Models';
+import { AlbumLite, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 import { sourceId, sourceStore } from '../data/Sources';
-import { blockTagsStore, customCatStore } from '../data/Stores';
-import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } from '../entryability/EntryAbility';
+import { blockTagsStore } from '../data/Stores';
+import { BOTTOM_RECT_HEIGHT_KEY, CURRENT_BREAKPOINT_KEY } from '../entryability/EntryAbility';
 export { formatCount, langBadgeFor } from '../common/ComicBadge';
-export { AlbumCard } from './jm/AlbumCard';
-/**
- * 分类页面
- */
-
-/* ===== 路由参数（ 契约表；ArkTS 严格模式禁对象字面量传参，用具名 class） ===== */
 
 class AlbumRouteParam {
   aid: string = '';
 }
 
-class SearchRouteParam {
-  query: string = '';
-}
-
-// ───────────────────────── 页间共享的小工具（SearchPage 复用） ─────────────────────────
-
-/** 筛选选项 */
 export class ChipOption {
   code: string;
   label: string;
@@ -42,58 +26,22 @@ export class ChipOption {
   }
 }
 
-/** 排序选项 */
-const ORDER_OPTIONS: Array<ChipOption> = [
-  new ChipOption('mv_t', '日榜'),
-  new ChipOption('mv_w', '周榜'),
-  new ChipOption('mv_m', '月榜'),
-  new ChipOption('mv', '总榜'),
-  new ChipOption('mr', '最新')
-];
-
-// ───────────────────────── WaterFlow 数据源（LazyForEach + IDataSource） ─────────────────────────
-
-/** 专辑列表数据源：供 WaterFlow LazyForEach 懒加载（） */
 export class AlbumSource extends BasicDataSource<AlbumLite> {
   setItems(items: Array<AlbumLite>): void { this.setList(items); }
   count(): number { return this.totalCount(); }
 }
-
-// ───────────────────────── 瀑布流封面卡（3:4 封面 + 徽章 + 2 个高频标签胶囊） ─────────────────────────
-
-// ───────────────────────── 分类页 ─────────────────────────
-
-/** 分类列表进程内缓存（契约缺口：Stores.ets 无分类持久化缓存，切 Tab/返回仍保留选中与列表） */
-const cachedCategories: Map<string, Array<CategoryItem>> = new Map();
 
 @Component
 export struct CategoryPage {
   @Consume('navPathStack') navPathStack: NavPathStack;
   @Prop embeddedInShell: boolean = false;
   @Prop sourceIdValue: string = '';
+  @Prop @Watch('onQueryChanged') query: CategoryBrowseQuery = new CategoryBrowseQuery();
 
-  /* ── 安全区/断点契约（评审 Step2/Step4：EntryAbility 写入 AppStorage，页面 @StorageProp 消费）── */
-  @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 16;
   @StorageProp(CURRENT_BREAKPOINT_KEY) bp: string = 'sm';
-  /* ── 屏蔽词实时联动（评审 Step3）── */
   @StorageProp('blockTagsVersion') @Watch('onBlockTagsChanged') blockVer: number = 0;
 
-  // 筛选状态
-  @State selectedCatId: string = '';
-  @State selectedCatName: string = '';
-  @State selectedCatSlug: string = '';
-  @State order: string = 'mr';
-  @State expanded: boolean = true;
-  @State catDrawerVisible: boolean = false;
-
-  // 分类列表
-  @State categories: Array<CategoryItem> = [];
-  @State customCats: Array<string> = [];
-  @State catsLoading: boolean = true;
-  @State catsError: string = '';
-
-  // 列表四态
   @State firstLoading: boolean = true;
   @State firstError: string = '';
   @State emptyResult: boolean = false;
@@ -101,79 +49,30 @@ export struct CategoryPage {
   @State moreError: boolean = false;
   @State finished: boolean = false;
   @State loadedCount: number = 0;
-  @State headerHeight: number = CATEGORY_BAR_HEIGHT;
   @State private contentWidth: number = 328;
   @State private refreshing: boolean = false;
-  private customQuery: string = '';
 
   private source: AlbumSource = new AlbumSource();
   scroller: Scroller = new Scroller();
   private page: number = 1;
   private requestSeq: number = 0;
-  /** 未经屏蔽过滤的合并原始列表（评审 Step3：屏蔽词变更时重复过滤整体替换） */
   private rawItems: Array<AlbumLite> = [];
-  /** 跨页去重已见 id 集（reload 时重置）：榜单接口翻页可能重复返回同一本子 */
   private pageSeenIds: Set<string> = new Set<string>();
-  /** 连续整页都是已见 id 的次数；满 2 次才结束，避免一页重复就把后面的新书丢掉 */
   private dupPageStreak: number = 0;
-
-  private addDialogCtrl: CustomDialogController = new CustomDialogController({
-    builder: AddCatDialog({
-      onAdded: (): void => {
-        this.refreshCustomCats().catch((e: Error) => {
-          console.info(`[CategoryPage] 自定义分类刷新失败: ${errorMessage(e)}`);
-        });
-      }
-    })
-  });
 
   aboutToAppear(): void {
     sourceApi.init().catch((e: Error) => {
       console.info(`[CategoryPage] sourceApi.init: ${errorMessage(e)}`);
-    });
-    this.loadCategories();
-    this.refreshCustomCats().catch((e: Error) => {
-      console.info(`[CategoryPage] 自定义分类读取失败: ${errorMessage(e)}`);
     });
     this.reload();
   }
 
   aboutToDisappear(): void { this.requestSeq++; }
 
-  // ── 数据 ──
-
-  private async loadCategories(): Promise<void> {
-    const cached: Array<CategoryItem> | undefined = cachedCategories.get(this.sourceIdValue);
-    if (cached !== undefined) {
-      this.categories = cached;
-      this.catsLoading = false;
-      return;
-    }
-    this.catsLoading = true;
-    this.catsError = '';
-    try {
-      const list: Array<CategoryItem> = await sourceApi.categories(this.sourceIdValue);
-      cachedCategories.set(this.sourceIdValue, list);
-      this.categories = list;
-    } catch (e) {
-      this.catsError = errorMessage(e as Error);
-    } finally {
-      this.catsLoading = false;
-    }
+  private onQueryChanged(): void {
+    this.reload();
   }
 
-  private async refreshCustomCats(): Promise<void> {
-    this.customCats = await customCatStore.getList();
-  }
-
-  private currentSlug(): string {
-    if (this.selectedCatId === '') {
-      return '0';
-    }
-    return this.selectedCatSlug === '' ? '0' : this.selectedCatSlug;
-  }
-
-  /** 屏蔽词过滤（字段匹配口径，简化） */
   private async filterBlocked(list: Array<AlbumLite>): Promise<Array<AlbumLite>> {
     const out: Array<AlbumLite> = [];
     for (const it of list) {
@@ -187,7 +86,6 @@ export struct CategoryPage {
     return out;
   }
 
-  /** 评审 Step3：屏蔽词变更（Stores 递增 blockTagsVersion）→ 以原始合并列表重新过滤整体替换 */
   private onBlockTagsChanged(): void {
     this.refilterBlocked().catch((e: Error) => {
       console.info(`[CategoryPage] 屏蔽词重过滤失败: ${errorMessage(e)}`);
@@ -235,10 +133,6 @@ export struct CategoryPage {
     this.loadMore();
   }
 
-  /**
-   * 翻页去重：重复 id 会导致 LazyForEach key 冲突。
-   * 只读 pageSeenIds，成功写入列表后才 rememberIds，过滤失败或请求作废不会把这页标成已见。
-   */
   private dedupById(list: Array<AlbumLite>): Array<AlbumLite> {
     const local: Set<string> = new Set<string>();
     const out: Array<AlbumLite> = [];
@@ -264,9 +158,10 @@ export struct CategoryPage {
 
   private async fetchPage(target: number): Promise<void> {
     const seq: number = ++this.requestSeq;
-    const slug: string = this.currentSlug();
-    const query: string = this.customQuery;
-    const order: string = this.order;
+    const snapshot: CategoryBrowseQuery = this.query;
+    const slug: string = snapshot.categoryId === '' || snapshot.categorySlug === '' ? '0' : snapshot.categorySlug;
+    const query: string = snapshot.customQuery;
+    const order: string = snapshot.order;
     try {
       const raw: Array<AlbumLite> = query === '' ? await sourceApi.ranking(this.sourceIdValue, slug, order, target) :
         (await sourceApi.searchSource(await sourceStore.get(this.sourceIdValue), query, target)).list;
@@ -285,9 +180,8 @@ export struct CategoryPage {
         this.emptyResult = fresh.length === 0;
         this.dupPageStreak = 0;
       } else if (raw.length === 0) {
-        this.finished = true; // 接口返回空页：没有更多了（CategoryScreen.kt:276-278）
+        this.finished = true;
       } else if (fresh.length === 0) {
-        // 整页都是已见 id：先翻过这一页再要下一页。连续两页如此才结束，避免重复页把后面的新书截掉
         this.dupPageStreak++;
         if (this.dupPageStreak >= 2) {
           this.finished = true;
@@ -321,59 +215,10 @@ export struct CategoryPage {
     }
   }
 
-  // ── 筛选联动 ──
-
-  private selectAll(): void {
-    if (this.selectedCatId === '') {
-      return;
-    }
-    this.selectedCatId = '';
-    this.selectedCatName = '';
-    this.selectedCatSlug = '';
-    this.customQuery = '';
-    this.applyOrderDefaultAndReload();
-  }
-
-  private selectCategory(cat: CategoryItem): void {
-    if (this.selectedCatId === cat.id) {
-      return;
-    }
-    this.selectedCatId = cat.id;
-    this.selectedCatName = cat.name;
-    this.selectedCatSlug = cat.slug;
-    this.customQuery = '';
-    this.applyOrderDefaultAndReload();
-  }
-
-  private selectCustom(term: string): void {
-    this.selectedCatId = `custom:${term}`;
-    this.selectedCatName = term;
-    this.selectedCatSlug = '';
-    this.customQuery = term;
-    this.order = 'mr';
-    this.reload();
-  }
-
-  /** 联动：无 slug 分类（含全部）默认最新 mr，有 slug 默认总榜 mv（CategoryScreen.kt:240-242） */
-  private applyOrderDefaultAndReload(): void {
-    this.order = (this.selectedCatId === '' || this.selectedCatSlug === '') ? 'mr' : 'mv';
-    this.reload();
-  }
-
-  private selectOrder(code: string): void {
-    if (this.order === code) {
-      return;
-    }
-    this.order = code;
-    this.reload();
-  }
-
-    /** 响应式网格列数（评审 Step4：sm 3 / md 4 / lg 5） */
   private gridColumns(): number {
     return comicColumns(this.contentWidth);
   }
 
-  /** WaterFlow 列模板串（如 '1fr 1fr 1fr'），随断点联动 */
   private columnsTemplateStr(): string {
     const parts: Array<string> = [];
     for (let i: number = 0; i < this.gridColumns(); i++) {
@@ -388,54 +233,6 @@ export struct CategoryPage {
     this.navPathStack.pushPathByName(ROUTE_ALBUM, p);
   }
 
-  private confirmDeleteCustom(term: string): void {
-    this.getUIContext().showAlertDialog({
-      message: `删除自定义分类「${term}」？`,
-      primaryButton: {
-        value: '取消',
-        action: (): void => {
-        }
-      },
-      secondaryButton: {
-        value: '删除',
-        fontColor: PRIMARY,
-        action: (): void => {
-          customCatStore.remove(term).then((): void => {
-            if (this.customQuery === term) { this.selectAll(); }
-            this.refreshCustomCats();
-          }).catch((e: Error) => {
-            console.info(`[CategoryPage] 自定义分类删除失败: ${errorMessage(e)}`);
-          });
-        }
-      }
-    });
-  }
-
-  // ── UI ──
-
-  private openAddDialog(): void { this.addDialogCtrl.open(); }
-
-  @Builder
-  private FilterHeader() {
-    CategoryFilterBar({
-      sourceIdValue: this.sourceIdValue,
-      selectedCatId: this.$selectedCatId,
-      selectAll: (): void => this.selectAll(),
-      categories: this.$categories,
-      selectCategory: (cat: CategoryItem): void => this.selectCategory(cat),
-      selectCustom: (term: string): void => this.selectCustom(term),
-      customCats: this.$customCats,
-      catDrawerVisible: this.$catDrawerVisible,
-      selectedCatName: this.$selectedCatName,
-      selectOrder: (code: string): void => this.selectOrder(code),
-      embeddedInShell: this.embeddedInShell,
-      headerHeight: this.$headerHeight,
-      openAddDialog: (): void => this.openAddDialog(),
-      confirmDeleteCustom: (term: string): void => this.confirmDeleteCustom(term),
-      order: this.$order
-    })
-  }
-
   @Builder
   private Content() {
     if (this.firstLoading) {
@@ -444,7 +241,7 @@ export struct CategoryPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ left: SPACE_L, right: SPACE_L, top: this.headerHeight + SPACE_S })
+      .padding({ left: SPACE_L, right: SPACE_L, top: 8 })
     } else if (this.firstError !== '') {
       Column() {
         EmptyView({
@@ -458,7 +255,7 @@ export struct CategoryPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ top: this.headerHeight })
+      .padding({ top: 8 })
     } else if (this.emptyResult) {
       Column() {
         EmptyView({
@@ -468,7 +265,7 @@ export struct CategoryPage {
       }
       .width('100%')
       .height('100%')
-      .padding({ top: this.headerHeight })
+      .padding({ top: 8 })
     } else {
       WaterFlow({ scroller: this.scroller, footer: (): void => this.Footer() }) {
         LazyForEach(this.source, (item: AlbumLite) => {
@@ -489,8 +286,9 @@ export struct CategoryPage {
       .columnsTemplate(this.columnsTemplateStr())
       .columnsGap(SPACE_M)
       .rowsGap(14)
-      .padding({ left: SPACE_L, right: SPACE_L, top: this.headerHeight + SPACE_S, bottom: SPACE_S })
+      .padding({ left: SPACE_L, right: SPACE_L, top: 8, bottom: SPACE_S })
       .cachedCount(4)
+      .clip(false)
       .width('100%')
       .height('100%')
       .onReachEnd(() => {
@@ -538,10 +336,7 @@ export struct CategoryPage {
 
   build() {
     Refresh({ refreshing: $$this.refreshing }) {
-      Stack({ alignContent: Alignment.Top }) {
       this.Content()
-      this.FilterHeader()
-      }.width('100%').height('100%')
     }
     .width('100%')
     .height('100%')

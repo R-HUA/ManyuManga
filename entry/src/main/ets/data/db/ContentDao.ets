@@ -65,17 +65,6 @@ export async function loadTasks(): Promise<Array<TaskRow>> {
   return items;
 }
 
-export async function loadTaskPage(offset: number, limit: number): Promise<Array<TaskRow>> {
-  const args: Array<relationalStore.ValueType> = [];
-  const sql: string = appendPage('SELECT * FROM download_task ORDER BY created_at DESC', args, limit, offset);
-  const items: Array<TaskRow> = [];
-  const result: relationalStore.ResultSet = await dbQuery(sql, args);
-  await readRows(result, (row: relationalStore.ResultSet): void => {
-    items.push(taskFrom(row));
-  });
-  return items;
-}
-
 export function saveTasks(items: Array<TaskRow>): Promise<void> {
   return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
     for (const item of items) {
@@ -204,18 +193,6 @@ export async function loadLocalBooks(): Promise<Array<LocalBookRow>> {
     items.push(book);
   });
   return items;
-}
-
-export function saveLocalBooks(items: Array<LocalBookRow>): Promise<void> {
-  const now: number = Date.now();
-  return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
-    await txExecute(tx, 'DELETE FROM local_book', []);
-    for (const item of items) {
-      await txExecute(tx,
-        'INSERT INTO local_book (book_id, payload, files_json, updated_at) VALUES (?, ?, ?, ?)',
-        [item.bookId, albumToJson(item.album), item.filesJson, now]);
-    }
-  });
 }
 
 export function saveExport(albumId: string, taskId: number, location: string): Promise<void> {

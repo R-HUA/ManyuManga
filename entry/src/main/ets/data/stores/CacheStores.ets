@@ -1,15 +1,9 @@
 import { Prefs, PrefKeys } from '../../util/Prefs';
-import { Album, AlbumLite, asArray, asRecord, asString } from '../../models/Models';
+import { Album, asArray, asRecord, asString } from '../../models/Models';
 import { parseJsonArray, StoreQueue } from './StoreSupport';
 import { albumFromJson, albumToJson } from '../db/RowCodec';
 import { assertDatabaseGeneration } from '../db/AppDatabase';
 const ALBUM_CACHE_LIMIT: number = 100;
-export class HomeCacheData {
-  random: Array<AlbumLite> = [];
-  ranking: Array<AlbumLite> = [];
-  latest: Array<AlbumLite> = [];
-}
-
 export class AlbumCacheStore {
   private queue: StoreQueue = new StoreQueue();
   private loaded: boolean = false;
@@ -153,66 +147,6 @@ export class PagesCacheStore {
   }
 }
 
-export class HomeCacheStore {
-  async load(): Promise<HomeCacheData | null> {
-    const prefs: Prefs = await Prefs.getInstance();
-    const text: string = await prefs.getString(PrefKeys.HOME_CACHE, '');
-    if (text === '') {
-      return null;
-    }
-    const rec: Record<string, Object> | null = asRecord(JSON.parse(text) as Object);
-    if (rec === null) {
-      return null;
-    }
-    const data: HomeCacheData = new HomeCacheData();
-    data.random = this.parseLiteArray(rec['random']);
-    data.ranking = this.parseLiteArray(rec['ranking']);
-    data.latest = this.parseLiteArray(rec['latest']);
-    return data;
-  }
-
-  private parseLiteArray(v: Object | null): Array<AlbumLite> {
-    const out: Array<AlbumLite> = [];
-    const arr: Array<Object> | null = asArray(v);
-    if (arr === null) {
-      return out;
-    }
-    for (const it of arr) {
-      const rec: Record<string, Object> | null = asRecord(it);
-      if (rec === null) {
-        continue;
-      }
-      out.push(new AlbumLite(
-        asString(rec['id']),
-        asString(rec['title']),
-        asString(rec['author']),
-        asString(rec['coverUrl']),
-        asString(rec['category']),
-        asString(rec['categorySub'])
-      ));
-    }
-    return out;
-  }
-
-  async save(random: Array<AlbumLite>, ranking: Array<AlbumLite>, latest: Array<AlbumLite>): Promise<void> {
-    const prefs: Prefs = await Prefs.getInstance();
-    await prefs.putString(PrefKeys.HOME_CACHE,
-      JSON.stringify(new HomeCacheSnapshot(random, ranking, latest)));
-  }
-}
-
-class HomeCacheSnapshot {
-  random: Array<AlbumLite>;
-  ranking: Array<AlbumLite>;
-  latest: Array<AlbumLite>;
-
-  constructor(random: Array<AlbumLite>, ranking: Array<AlbumLite>, latest: Array<AlbumLite>) {
-    this.random = random;
-    this.ranking = ranking;
-    this.latest = latest;
-  }
-}
-
 class ListEntry {
   key: string = '';
   list: Array<string> = [];
@@ -220,4 +154,3 @@ class ListEntry {
 
 export const albumCacheStore: AlbumCacheStore = new AlbumCacheStore();
 export const pagesCacheStore: PagesCacheStore = new PagesCacheStore();
-export const homeCacheStore: HomeCacheStore = new HomeCacheStore();

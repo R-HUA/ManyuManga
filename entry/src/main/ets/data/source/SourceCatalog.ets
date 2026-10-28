@@ -1,14 +1,38 @@
 import { SourceEntry, SourceKind } from '../Sources';
 import { definitionFor, sourceDefinitions } from './SourceRegistry';
 
+/** 图源列表的分组归属，由注册表声明，页面不再按 kind 分支。 */
+export type SourceSection = 'remote' | 'online' | 'local';
+
+/** 分组自上而下的固定顺序与标题。 */
+export const SOURCE_SECTIONS: Array<SourceSection> = ['remote', 'online', 'local'];
+
+export function sourceSectionTitle(section: SourceSection): string {
+  if (section === 'remote') {
+    return '远程媒体库';
+  }
+  return section === 'local' ? '本地存储' : '在线画廊';
+}
+
+/** 列表分组容器，仅承载"分区 + 该分区条目"。 */
+export class SourceSectionBucket {
+  section: SourceSection;
+  title: string;
+  items: Array<SourceEntry> = [];
+  constructor(section: SourceSection, title: string) {
+    this.section = section;
+    this.title = title;
+  }
+}
+
 /** 声明式界面入口，由 kind 注册表统一发布。 */
 export class SourcePresentation {
   kind: SourceKind | null = null;
   shortLabel: string = '';
   description: string = '';
-  describeEndpoint: boolean = false;
   iconToken: string = 'cloud';
   useAccent: boolean = false;
+  section: SourceSection = 'online';
   idJumpPlaceholder: string = '';
   idJumpLabel: string = '';
   registrable: boolean = false;
@@ -16,7 +40,7 @@ export class SourcePresentation {
   settingsToken: string = '';
 }
 
-export type SourceActionKind = 'route' | 'search' | 'import' | 'settings' | 'connect' | 'remove';
+export type SourceActionKind = 'route' | 'import' | 'settings' | 'connect' | 'remove';
 
 export class SourceAction {
   label: string;
@@ -38,11 +62,6 @@ export class SourceAction {
 
 export function presentationFor(kind: SourceKind | null): SourcePresentation {
   return kind === null ? new SourcePresentation() : definitionFor(kind).presentation;
-}
-
-export function sourceSubtitle(entry: SourceEntry): string {
-  const pres: SourcePresentation = presentationFor(entry.kind);
-  return pres.describeEndpoint ? `${entry.language === '' ? '' : entry.language + ' · '}${entry.endpoint}` : pres.description;
 }
 
 export function registrablePresentation(): SourcePresentation | null {

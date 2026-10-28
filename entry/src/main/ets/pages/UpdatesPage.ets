@@ -1,4 +1,4 @@
-import { HdsNavigation, HdsNavigationTitleMode, TitleSize } from '@kit.UIDesignKit';
+import { BottomBuilderShowType, HdsNavigation, HdsNavigationTitleMode, HideMode, TitleSize } from '@kit.UIDesignKit';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import promptAction from '@ohos.promptAction';
 import { library, LibraryWork } from '../data/Library';
@@ -147,6 +147,15 @@ export struct UpdatesPage {
   }
 
   @Builder
+  private SectionHeader() {
+    Row({ space: 4 }) {
+      this.SegmentPill({ label: '更新', count: this.updatedWorks().length, index: 0 })
+      this.SegmentPill({ label: '阅读历史', count: this.history.length, index: 1 })
+    }.padding(3).borderRadius(21).backgroundColor(SUB_CARD)
+    .border({ width: 0.5, color: DIVIDER }).margin({ left: 16, right: 16, bottom: 12 })
+  }
+
+  @Builder
   private Entry(title: string, cover: string, subtitle: string, key: string, reading: boolean) {
     Row({ space: 14 }) {
       Row({ space: 14 }) {
@@ -170,11 +179,6 @@ export struct UpdatesPage {
   build() {
     HdsNavigation() {
       Column() {
-        Row({ space: 4 }) {
-          this.SegmentPill({ label: '更新', count: this.updatedWorks().length, index: 0 })
-          this.SegmentPill({ label: '阅读历史', count: this.history.length, index: 1 })
-        }.padding(3).borderRadius(21).backgroundColor(SUB_CARD)
-        .border({ width: 0.5, color: DIVIDER }).margin({ left: 16, right: 16, bottom: 12 })
         Scroll(this.scroller) {
           Column({ space: 8 }) {
             if (this.busy) { Text('正在检查更新').fontSize(13).fontColor(TEXT_SUB) }
@@ -195,12 +199,22 @@ export struct UpdatesPage {
         }.layoutWeight(1).width('100%').align(Alignment.TopStart).scrollBar(BarState.Off).clip(false)
       }.width('100%').height('100%').alignItems(HorizontalAlign.Start)
     }
-    .titleBar({ content: { title: { mainTitle: '动态', mainTitleSize: TitleSize.TITLE_ML }, menu: { value: [
+    .titleBar({ content: { title: { mainTitle: '动态', mainTitleSize: TitleSize.TITLE_ML },
+      bottomBuilder: { builder: (): void => this.SectionHeader(), height: 54, showType: BottomBuilderShowType.DIRECTLY_SHOW },
+      menu: { value: [
       { content: { icon: $r('sys.symbol.arrow_clockwise'), label: '检查更新', action: (): void => { this.refresh(); } } },
       { content: { icon: $r('sys.symbol.arrow_down_circle'), label: '下载', action: (): void => { this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams); } } },
       { content: { icon: $r('sys.symbol.trash'), label: '清空阅读历史', action: (): void => this.clearHistory() } }
     ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
     .titleMode(HdsNavigationTitleMode.MINI)
+    .dynamicHideTitleBar({
+      hideTitleArea: false,
+      hideBottomBuilder: true,
+      hideStatusBar: false,
+      mode: HideMode.SCROLL_UP_TO,
+      hideOffset: 0,
+      hideRatio: 2
+    })
     .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller]).width('100%').height('100%').backgroundColor(BG)
   }
 }

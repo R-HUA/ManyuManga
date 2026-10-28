@@ -2,7 +2,7 @@ import { HdsNavigation, HdsNavigationTitleMode, TitleSize } from '@kit.UIDesignK
 import common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import promptAction from '@ohos.promptAction';
-import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_DOWNLOADS, ROUTE_STATS } from '../common/Route';
+import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_DOWNLOADS, ROUTE_STATS, ROUTE_SOURCE_SETTINGS } from '../common/Route';
 import { Prefs } from '../util/Prefs';
 import { exportBackup, importBackup } from '../data/Backup';
 import { cleanLegacyData } from '../data/LegacyCleanup';
@@ -33,6 +33,7 @@ export struct ProfilePage {
   @State theme: number = 0;
   @State reader: number = 0;
   @State preload: number = 3;
+  @State archiveQuality: number = 0;
   @State cache: number = 0;
   @State autoCache: boolean = true;
   @State history: boolean = true;
@@ -57,6 +58,7 @@ export struct ProfilePage {
       this.theme = Math.max(0, ['system', 'light', 'dark'].indexOf(await prefs.themeMode()));
       this.reader = Math.max(0, this.modes.indexOf(await prefs.readerMode()));
       this.preload = await prefs.preloadPages();
+      this.archiveQuality = await prefs.archiveImgQuality() === 'compact' ? 1 : 0;
       this.autoCache = await prefs.autoCache();
       this.history = await prefs.historyEnabled();
       this.securityLock = await prefs.securityLock();
@@ -97,6 +99,9 @@ export struct ProfilePage {
       } else if (key === 'preload') {
         await prefs.setPreloadPages(value as number);
         this.preload = value as number;
+      } else if (key === 'archiveQuality') {
+        await prefs.setArchiveImgQuality(value === 1 ? 'compact' : 'visual');
+        this.archiveQuality = value as number;
       } else if (key === 'cache') {
         await prefs.setAutoCache(value as boolean);
         this.autoCache = value as boolean;
@@ -283,6 +288,10 @@ export struct ProfilePage {
             this.NavRow($r('sys.symbol.shield_checkered'), '全局屏蔽规则', '', () => {
               this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: '' } as MangaRouteParams);
             })
+            Divider().color(DIVIDER).margin({ left: 32 })
+            this.NavRow($r('sys.symbol.square_grid_2x2'), '图源设置', '', () => {
+              this.stack.pushPathByName(ROUTE_SOURCE_SETTINGS, {} as MangaRouteParams);
+            })
           }
           .padding({ left: 16, right: 16, top: 8, bottom: 8 })
           .width('100%')
@@ -370,6 +379,14 @@ export struct ProfilePage {
 
           // 4. 存储、隐私与数据备份
           Column({ space: 4 }) {
+            SettingSelectRow({
+              title: $r('app.string.export_quality'),
+              options: [$r('app.string.export_quality_visual'), $r('app.string.export_quality_compact')],
+              selectedIndex: this.archiveQuality,
+              onChanged: (index: number): void => { this.saveOption('archiveQuality', index); }
+            })
+            Divider().color(DIVIDER).margin({ left: 16 })
+
             this.ToggleRow({ icon: $r('sys.symbol.lock_fill'), title: '应用锁保护', isOn: this.securityLock, enabled: true,
               onChange: (on: boolean): void => { this.confirmLock(on); } })
             Divider().color(DIVIDER).margin({ left: 32 })

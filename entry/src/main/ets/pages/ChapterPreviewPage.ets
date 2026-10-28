@@ -1,15 +1,13 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
-import { IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
 import { EmptyView } from '../common/Components';
-import { BG, SUB_CARD, PRIMARY, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
+import { BG, BAR_LIGHT, SUB_CARD, PRIMARY, TEXT_SUB, COVER_R } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
-
 
 @Component
 export struct ChapterPreviewPage {
@@ -23,9 +21,11 @@ export struct ChapterPreviewPage {
   @State allPages: Array<string> = [];
   @State scrambleId: number = 220980;
   @State currentPageIndex: number = 0;
+  @State columns: number = 3;
+  @State sliderDragging: boolean = false;
   @State loading: boolean = true;
   @State error: string = '';
-  @State gridWidthVp: number = 360;
+  private scroller: Scroller = new Scroller();
   private loadToken: number = 0;
   private loadSignal: RequestAbortGroup = new RequestAbortGroup();
 
@@ -38,15 +38,19 @@ export struct ChapterPreviewPage {
     this.loadSignal.abortAll();
   }
 
-  /** 按设备宽度计算列数：最小 3 列，宽屏自动扩展 */
-  private columnsCount(): number {
-    return Math.max(3, Math.floor((this.gridWidthVp - 32) / 112));
+  private cycleColumns(): void {
+    if (this.columns === 2) {
+      this.columns = 3;
+    } else if (this.columns === 3) {
+      this.columns = 4;
+    } else {
+      this.columns = 2;
+    }
   }
 
   private columnsTemplateStr(): string {
-    const cols: number = this.columnsCount();
     const parts: Array<string> = [];
-    for (let i = 0; i < cols; i++) {
+    for (let i: number = 0; i < this.columns; i++) {
       parts.push('1fr');
     }
     return parts.join(' ');
@@ -85,6 +89,60 @@ export struct ChapterPreviewPage {
     } as MangaRouteParams);
   }
 
+  @Builder
+  private JumpBar() {
+    Row({ space: 8 }) {
+      Button('从头阅读', {
+        type: ButtonType.Capsule,
+        buttonStyle: ButtonStyleMode.TEXTUAL,
+        controlSize: ControlSize.SMALL
+      })
+        .onClick(() => {
+          this.openReaderAt(0);
+        })
+
+      Slider({
+        value: Math.min(this.currentPageIndex + 1, Math.max(this.allPages.length, 1)),
+        min: 1,
+        max: Math.max(this.allPages.length, 1),
+        step: 1,
+        style: SliderStyle.OutSet
+      })
+        .selectedColor(PRIMARY)
+        .layoutWeight(1)
+        .enabled(this.allPages.length > 1)
+        .onChange((value: number, mode: SliderChangeMode) => {
+          const targetIdx: number = Math.max(0, Math.min(this.allPages.length - 1, Math.round(value) - 1));
+          this.currentPageIndex = targetIdx;
+          if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
+            this.sliderDragging = true;
+            this.scroller.scrollToIndex(targetIdx, false);
+          } else {
+            this.sliderDragging = false;
+            if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
+              this.scroller.scrollToIndex(targetIdx, true);
+            }
+          }
+        })
+
+      Button(`读 P.${Math.min(this.currentPageIndex + 1, Math.max(1, this.allPages.length))}/${this.allPages.length}`, {
+        type: ButtonType.Capsule,
+        buttonStyle: ButtonStyleMode.EMPHASIZED,
+        controlSize: ControlSize.SMALL
+      })
+        .onClick(() => {
+          this.openReaderAt(this.currentPageIndex);
+        })
+    }
+    .width('100%')
+    .height(52)
+    .padding({ left: 12, right: 12 })
+    .borderRadius(26)
+    .backgroundColor(BAR_LIGHT)
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+    .alignItems(VerticalAlign.Center)
+  }
+
   build() {
     HdsNavDestination() {
       Column() {
@@ -111,64 +169,92 @@ export struct ChapterPreviewPage {
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
         } else {
-          Grid() {
-            ForEach(this.allPages, (filename: string, idx: number) => {
-              GridItem() {
-                Column({ space: 4 }) {
-                  Stack({ alignContent: Alignment.BottomStart }) {
-                    PagePreview({
-                      chapter: this.chapterId,
-                      filename: filename,
-                      scramble: this.scrambleId,
-                      thumbWidth: 240
-                    })
-                      .width('100%')
-                      .height('100%')
+          Stack({ alignContent: Alignment.Bottom }) {
+            Grid(this.scroller) {
+              ForEach(this.allPages, (filename: string, idx: number) => {
+                GridItem() {
+                  Column({ space: 4 }) {
+                    Stack({ alignContent: Alignment.BottomStart }) {
+                      PagePreview({
+                        chapter: this.chapterId,
+                        filename: filename,
+                        scramble: this.scrambleId,
+                        thumbWidth: 240
+                      })
+                        .width('100%')
+                        .height('100%')
 
-                    Text(`P.${idx + 1}`)
-                      .fontSize(10)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor(Color.White)
-                      .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-                      .borderRadius(6)
-                      .backgroundColor('rgba(14,17,26,0.75)')
-                      .margin(6)
+                      Text(`P.${idx + 1}`)
+                        .fontSize(10)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor(Color.White)
+                        .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                        .borderRadius(6)
+                        .backgroundColor('rgba(14,17,26,0.72)')
+                        .margin(6)
+                    }
+                    .width('100%')
+                    .aspectRatio(0.72)
+                    .borderRadius(COVER_R)
+                    .clip(true)
+                    .backgroundColor(SUB_CARD)
                   }
                   .width('100%')
-                  .aspectRatio(0.72)
-                  .borderRadius(COVER_R)
-                  .clip(true)
-                  .backgroundColor(SUB_CARD)
-                  .border({ width: 0.5, color: DIVIDER })
+                  .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+                  .onClick(() => {
+                    this.openReaderAt(idx);
+                  })
                 }
-                .width('100%')
-                .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-                .onClick(() => {
-                  this.openReaderAt(idx);
-                })
+              }, (filename: string, idx: number) => `${idx}_${filename}`)
+            }
+            .columnsTemplate(this.columnsTemplateStr())
+            .columnsGap(10)
+            .rowsGap(12)
+            .padding({ left: 16, right: 16, top: 12, bottom: 84 + this.bottomInset })
+            .width('100%')
+            .height('100%')
+            .onScrollIndex((first: number) => {
+              if (!this.sliderDragging && first >= 0 && first < this.allPages.length) {
+                this.currentPageIndex = first;
               }
-            }, (filename: string, idx: number) => `${idx}_${filename}`)
+            })
+
+            if (this.allPages.length > 0) {
+              Column() {
+                this.JumpBar()
+              }
+              .width('100%')
+              .padding({ left: 16, right: 16, bottom: 12 + this.bottomInset })
+            }
           }
-          .columnsTemplate(this.columnsTemplateStr())
-          .columnsGap(10)
-          .rowsGap(12)
-          .padding({ left: 16, right: 16, top: 12, bottom: 16 + this.bottomInset })
           .width('100%')
           .layoutWeight(1)
-          .onAreaChange((_oldArea: Area, newArea: Area) => {
-            const w: number = Number(newArea.width);
-            if (!Number.isNaN(w) && w > 0) {
-              this.gridWidthVp = w;
-            }
-          })
         }
       }
       .width('100%')
       .height('100%')
       .backgroundColor(BG)
     }
-    .titleBar({ content: { title: { mainTitle: this.chapterTitle || '章节速览' }, menu: { value: [{ content: { label: '从头阅读', isEnabled: this.allPages.length > 0, action: (): void => this.openReaderAt(0) } }] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleBar({
+      content: {
+        title: { mainTitle: this.chapterTitle || '章节速览' },
+        menu: {
+          value: [{
+            content: {
+              icon: $r('sys.symbol.dot_grid_2x2'),
+              label: `${this.columns}列`,
+              isEnabled: this.allPages.length > 0,
+              action: (): void => this.cycleColumns()
+            }
+          }]
+        }
+      },
+      style: HDS_TITLE_STYLE,
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: true
+    })
     .titleMode(HdsNavDestinationTitleMode.MINI)
+    .bindToScrollable([this.scroller])
     .onHidden((): void => { this.cancelLoad(); })
     .onShown((): void => {
       if (this.loading && this.loadSignal.aborted()) { this.load(); }
@@ -184,4 +270,3 @@ export struct ChapterPreviewPage {
     })
   }
 }
-

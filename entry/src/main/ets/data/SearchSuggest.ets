@@ -3,7 +3,7 @@ import { sourceId } from './Sources';
 import { searchAlbumTags } from './db/LibraryDao';
 import { AlbumTagRow } from './db/RowCodec';
 import { albumCacheStore } from './stores/CacheStores';
-import { favStore } from './stores/FavoriteStore';
+import { searchFavoriteTags } from './db/CatalogDao';
 import { searchHistoryStore } from './stores/FilterStores';
 
 const SUGGEST_LIMIT: number = 10;
@@ -74,7 +74,7 @@ export async function suggestLocal(text: string, onlySource: string): Promise<Ar
       new MetadataTerm(tag.value, tag.label, tag.namespace)), onlySource);
     if (items.length >= SUGGEST_LIMIT) { return items; }
   }
-  const favorites: Array<string> = await favStore.searchTags(needle, SUGGEST_LIMIT);
+  const favorites: Array<string> = await searchFavoriteTags(needle, SUGGEST_LIMIT);
   for (const tag of favorites) {
     const suggestion: SearchSuggestion = tagSuggestion('', new MetadataTerm(tag));
     if (suggestion.label.trim().toLowerCase() === needle || suggestion.label.toLowerCase().indexOf(needle) < 0) {

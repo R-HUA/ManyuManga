@@ -2,15 +2,6 @@
  * 数据模型与 JSON 解析辅助
  */
 
-/** 榜单排序（categories/filter 的 o 参数）：最新/总榜/月榜/周榜/日榜 */
-export type RankingType = 'mr' | 'mv' | 'mv_m' | 'mv_w' | 'mv_t';
-
-/** 搜索排序（/search 的 o 参数）：最新/最多观看/最多图片/最多爱心 */
-export type SearchOrderType = 'mr' | 'mv' | 'mp' | 'tf';
-
-/** 搜索时间范围（/search 的 t 参数）：全部/今日/本周/本月 */
-export type SearchTimeType = 'a' | 't' | 'w' | 'm';
-
 /** 阅读器模式（S 级：双页/右翻渲染可后补，枚举与切换保留） */
 export type ReaderMode = 'vertical' | 'pagedVertical' | 'horizontal' | 'rtl' | 'double';
 
@@ -188,24 +179,6 @@ export class SearchOptions {
     this.time = time;
     this.year = year;
     this.month = month;
-  }
-}
-
-/** 收藏条目（FavStore.kt:16-23） */
-export class FavItem {
-  id: string;
-  title: string;
-  author: string;
-  coverUrl: string;
-  addedAt: number;
-
-  constructor(id: string = '', title: string = '', author: string = '',
-    coverUrl: string = '', addedAt: number = 0) {
-    this.id = id;
-    this.title = title;
-    this.author = author;
-    this.coverUrl = coverUrl;
-    this.addedAt = addedAt;
   }
 }
 

@@ -250,21 +250,6 @@ export class JmApi {
     return this.domainPool.scrambleId(photoId, signal);
   }
 
-    /** 轮换到下一个图片域名（图床失败重试用）（JmApi.kt:564-570） */
-  nextImageHost(current: string): string | null {
-    return this.domainPool.nextImageHost(current);
-  }
-
-  /** 记录图片域名失败：从健康池移除并触发下一轮探测（JmApi.kt:573-578） */
-  reportImgHostFailure(host: string): void {
-    return this.domainPool.reportImgHostFailure(host);
-  }
-
-  /** 后台轻量探测：按 HEAD 延迟维护健康池（30 分钟节流）（JmApi.kt:581-604） */
-  refreshImageHostsAsync(): void {
-    return this.domainPool.refreshImageHostsAsync();
-  }
-
       /** 章节图片完整地址（retry 递增可轮换图片域名）（JmApi.kt:613-615） */
   imageUrl(photoId: string, filename: string, retry: number = 0): string {
     return this.domainPool.imageUrl(photoId, filename, retry);
@@ -330,24 +315,9 @@ export class JmApi {
     return this.domainPool.setPreferredDomain(domain);
   }
 
-  /** 当前图片 CDN 域名（诊断展示） */
-  getImageHost(): string {
-    return this.domainPool.getImageHost();
-  }
-
-  /** 接口版本号（诊断展示） */
-  getAppVersion(): string {
-    return this.domainPool.getAppVersion();
-  }
-
   /** 一键测速：对全部候选域名请求 /setting（带 token 头）计时，按延迟升序返回 */
   testDomains(): Promise<Array<DomainSpeed>> {
     return this.domainPool.testDomains();
-  }
-
-  /** 调试信息（设置页展示，对应 JmApi.debugInfo） */
-  debugInfo(): string {
-    return this.domainPool.debugInfo();
   }
 }
 

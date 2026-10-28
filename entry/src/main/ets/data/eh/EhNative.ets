@@ -231,42 +231,6 @@ export interface NativeGalleryImagePage {
   originalHeight?: number;
 }
 
-export interface NativeTopListEntry {
-  rank: string;
-  score: string;
-  title: string;
-  url: string;
-  gid: number;
-  token: string;
-  thumb: string;
-}
-
-export interface NativeTopListEntryPageResult {
-  items: NativeTopListEntry[];
-  requestUrl: string;
-  firstUrl: string;
-  prevUrl: string;
-  nextUrl: string;
-  lastUrl: string;
-}
-
-export interface NativeTopListPeriod {
-  label: string;
-  follow: string;
-  url: string;
-  entries: NativeTopListEntry[];
-}
-
-export interface NativeTopListGroup {
-  title: string;
-  periods: NativeTopListPeriod[];
-}
-
-export interface NativeTopListDetail {
-  title: string;
-  groups: NativeTopListGroup[];
-}
-
 export interface NativeUserTag {
   id: string;
   tagName: string;
@@ -274,39 +238,6 @@ export interface NativeUserTag {
   tagWeight: number;
   watched: boolean;
   hidden: boolean;
-}
-
-export function createEmptyNativeGalleryDetail(): NativeGalleryDetail {
-  return {
-    gid: 0,
-    token: '',
-    title: '',
-    titleJpn: '',
-    cover: '',
-    categoryLabel: '',
-    posted: '',
-    uploader: '',
-    rating: -1,
-    ratingCount: 0,
-    pages: 0,
-    favoriteCount: 0,
-    isFavorited: false,
-    favoriteName: '',
-    apiUid: -1,
-    apiKey: '',
-    torrentCount: 0,
-    torrentUrl: '',
-    archiveUrl: '',
-    visible: '',
-    language: '',
-    fileSize: '',
-    parentUrl: '',
-    detailUrl: '',
-    previewPageCount: 0,
-    tagGroups: [],
-    comments: [],
-    hasMoreComments: false
-  };
 }
 
 type JsonPrimitive = string | number | boolean | null;
@@ -344,25 +275,12 @@ export class EhUrl {
     return site === GallerySite.EX ? `${EhUrl.DOMAIN_EX}watched` : `${EhUrl.DOMAIN_E}watched`;
   }
 
-  static topList(): string {
-    // Android 端固定走 E 站排行榜；EX 不提供 toplist 入口。
-    return `${EhUrl.DOMAIN_E}toplist.php`;
-  }
-
   static myTags(site: string): string {
     return site === GallerySite.EX ? `${EhUrl.DOMAIN_EX}mytags` : `${EhUrl.DOMAIN_E}mytags`;
   }
 
-  static uConfig(site: string): string {
-    return site === GallerySite.EX ? `${EhUrl.DOMAIN_EX}uconfig.php` : `${EhUrl.DOMAIN_E}uconfig.php`;
-  }
-
   static news(): string {
     return `${EhUrl.DOMAIN_E}news.php`;
-  }
-
-  static signIn(): string {
-    return 'https://forums.e-hentai.org/index.php?act=Login';
   }
 
   static api(site: string): string {
@@ -421,10 +339,6 @@ export class EhUrl {
       return `${EhUrl.host(site)}${value.substring(1)}`;
     }
     return `${EhUrl.host(site)}${value}`;
-  }
-
-  static cookieTargets(): string[] {
-    return [EhUrl.DOMAIN_FORUMS, EhUrl.DOMAIN_E, EhUrl.DOMAIN_EX];
   }
 
   static siteLabel(site: string): string {
@@ -1720,121 +1634,6 @@ function buildPreviewPageUrl(detailUrl: string, pageIndex: number): string {
   return detailUrl.indexOf('?') >= 0 ? `${detailUrl}&p=${pageIndex}` : `${detailUrl}?p=${pageIndex}`;
 }
 
-function parseFirstReaderPageUrl(html: string, site: string): string {
-  const items = parsePreviewItems(html, site);
-  return items.length > 0 ? items[0].pageUrl : '';
-}
-
-function parseTopList(html: string, site: string): NativeTopListDetail {
-  const title = extractInnerText(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i) || 'EHG Toplists';
-  const groups: NativeTopListGroup[] = [];
-  const groupPattern: RegExp = /<h2[^>]*>([\s\S]*?)<\/h2>([\s\S]*?)(?=<h2[^>]*>|<p id=["']nf["']|<div id=["']dc["']|$)/gi;
-  let groupMatch: RegExpExecArray | null = groupPattern.exec(html);
-  while (groupMatch !== null) {
-    const groupTitle = stripTags(groupMatch[1] || '');
-    const groupBody = groupMatch[2] || '';
-    const periods: NativeTopListPeriod[] = [];
-    const periodPattern: RegExp =
-      /<p>[\s\S]*?<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/p>\s*<table[^>]*>([\s\S]*?)<\/table>/gi;
-    let periodMatch: RegExpExecArray | null = periodPattern.exec(groupBody);
-    while (periodMatch !== null) {
-      const periodUrl = EhUrl.normalize(site, periodMatch[1] || '');
-      const label = stripTags(periodMatch[2] || '');
-      const tableHtml = periodMatch[3] || '';
-      const followMatch = /[?&](tl=\d+)/i.exec(periodUrl);
-      const entries: NativeTopListEntry[] = [];
-      const rowPattern: RegExp =
-        /<tr[^>]*>\s*<td[^>]*class=["']pso["'][^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/td>\s*<\/tr>/gi;
-      let rowMatch: RegExpExecArray | null = rowPattern.exec(tableHtml);
-      while (rowMatch !== null) {
-        const entryUrl = EhUrl.normalize(site, rowMatch[2] || '');
-        const detailMatch = /\/g\/(\d+)\/([0-9a-f]{10})/i.exec(entryUrl);
-        entries.push({
-          rank: stripTags(rowMatch[1] || ''),
-          score: '',
-          title: stripTags(rowMatch[3] || ''),
-          url: entryUrl,
-          gid: detailMatch && detailMatch[1] ? Number(detailMatch[1]) : 0,
-          token: detailMatch && detailMatch[2] ? detailMatch[2] : '',
-          thumb: ''
-        });
-        rowMatch = rowPattern.exec(tableHtml);
-      }
-      periods.push({
-        label,
-        follow: followMatch && followMatch[1] ? followMatch[1] : '',
-        url: periodUrl,
-        entries
-      });
-      periodMatch = periodPattern.exec(groupBody);
-    }
-    if (groupTitle.length > 0 && periods.length > 0) {
-      groups.push({
-        title: groupTitle,
-        periods
-      });
-    }
-    groupMatch = groupPattern.exec(html);
-  }
-  return {
-    title,
-    groups
-  };
-}
-
-function topListRankNumber(value: string): number {
-  const numeric = Number(value.replace(/[^0-9]/g, ''));
-  return Number.isFinite(numeric) ? numeric : 0;
-}
-
-function parseTopListEntryPage(html: string, site: string, requestUrl: string): NativeTopListEntryPageResult {
-  const items: NativeTopListEntry[] = [];
-  const tablePattern: RegExp = /<table([^>]*)>([\s\S]*?)<\/table>/gi;
-  let tableMatch: RegExpExecArray | null = tablePattern.exec(html);
-  while (tableMatch !== null) {
-    const attributes = tableMatch[1] || '';
-    const classMatch = /class=["']([^"']+)["']/i.exec(attributes);
-    const classValue = classMatch && classMatch[1] ? classMatch[1] : '';
-    if (hasClassToken(classValue, 'itg') && !hasClassToken(classValue, 'gltc')) {
-      const tableHtml = tableMatch[2] || '';
-      const entryPattern: RegExp =
-        /<td[^>]+class=["'][^"']*\bdr\b[^"']*["'][^>]*>([\s\S]*?)<\/td>\s*<td[^>]+class=["'][^"']*\bds\b[^"']*["'][^>]*>([\s\S]*?)<\/td>\s*<td[^>]+class=["'][^"']*\bdu\b[^"']*["'][^>]*>([\s\S]*?)<\/td>/gi;
-      let entryMatch: RegExpExecArray | null = entryPattern.exec(tableHtml);
-      while (entryMatch !== null) {
-        const nameHtml = entryMatch[3] || '';
-        const hrefMatch = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i.exec(nameHtml);
-        const entryUrl = hrefMatch && hrefMatch[1] ? EhUrl.normalize(site, hrefMatch[1]) : '';
-        const title = hrefMatch && hrefMatch[2] ? stripTags(hrefMatch[2]) : stripTags(nameHtml);
-        const detailMatch = /\/g\/(\d+)\/([0-9a-f]{10})/i.exec(entryUrl);
-        if (title.length > 0) {
-          items.push({
-            rank: stripTags(entryMatch[1] || ''),
-            score: stripTags(entryMatch[2] || ''),
-            title,
-            url: entryUrl,
-            gid: detailMatch && detailMatch[1] ? Number(detailMatch[1]) : 0,
-            token: detailMatch && detailMatch[2] ? detailMatch[2] : '',
-            thumb: ''
-          });
-        }
-        entryMatch = entryPattern.exec(tableHtml);
-      }
-      break;
-    }
-    tableMatch = tablePattern.exec(html);
-  }
-  items.sort((left: NativeTopListEntry, right: NativeTopListEntry): number =>
-    topListRankNumber(left.rank) - topListRankNumber(right.rank));
-  return {
-    items,
-    requestUrl,
-    firstUrl: findPagerUrl(html, site, 'first'),
-    prevUrl: findPagerUrl(html, site, 'prev'),
-    nextUrl: findPagerUrl(html, site, 'next'),
-    lastUrl: findPagerUrl(html, site, 'last')
-  };
-}
-
 function extractElementStartTagById(segment: string, id: string): string {
   const pattern = new RegExp(`<[^>]+id\\s*=\\s*["']${escapeRegex(id)}["'][^>]*>`, 'i');
   const match = pattern.exec(segment);
@@ -2607,10 +2406,6 @@ export class EhTagTranslator {
     return EhTagTranslator.loading;
   }
 
-  static isLoaded(): boolean {
-    return EhTagTranslator.loaded;
-  }
-
   static configureCacheDir(filesDir: string): void {
     EhTagTranslator.cacheDir = filesDir;
   }
@@ -2674,36 +2469,6 @@ export class EhTagTranslator {
     const lookupKey = prefix !== undefined ? `${prefix}${tag}` : `${namespace}:${tag}`;
     const translated = EhTagTranslator.translations[lookupKey] || EhTagTranslator.translations[`${namespace}:${tag}`];
     return translated && translated.length > 0 ? translated : tag;
-  }
-
-  static translateFullTag(tag: string): string {
-    const separatorIndex = tag.indexOf(':');
-    if (separatorIndex < 0) {
-      return EhTagTranslator.translateTag('misc', tag);
-    }
-    const namespace = tag.substring(0, separatorIndex);
-    const body = tag.substring(separatorIndex + 1);
-    const translatedNamespace = EhTagTranslator.translateNamespace(namespace);
-    const translatedBody = EhTagTranslator.translateTag(namespace, body);
-    return `${translatedNamespace}:${translatedBody}`;
-  }
-
-  static suggest(keyword: string, limit: number): TagTranslationSuggestion[] {
-    EhTagTranslator.ensureFallback();
-    const query = keyword.trim();
-    if (query.length === 0 || limit <= 0) {
-      return [];
-    }
-    const result: TagTranslationSuggestion[] = [];
-    for (const item of EhTagTranslator.entries) {
-      if (result.length >= limit) {
-        break;
-      }
-      if (item.key.indexOf(query) >= 0 || item.translation.indexOf(query) >= 0) {
-        result.push(item);
-      }
-    }
-    return result;
   }
 }
 
@@ -3298,67 +3063,6 @@ export class NativeEhClient {
     return parseGDataResponse(body, site, identities);
   }
 
-  private static topListEntryKey(gid: number, token: string): string {
-    return `${gid}:${token}`;
-  }
-
-  private static collectTopListIdentities(detail: NativeTopListDetail): NativeGalleryIdentity[] {
-    const identities: NativeGalleryIdentity[] = [];
-    const seenKeys: string[] = [];
-    for (const group of detail.groups) {
-      for (const period of group.periods) {
-        for (const entry of period.entries) {
-          if (entry.gid <= 0 || entry.token.length === 0) {
-            continue;
-          }
-          const key = NativeEhClient.topListEntryKey(entry.gid, entry.token);
-          if (seenKeys.indexOf(key) >= 0) {
-            continue;
-          }
-          seenKeys.push(key);
-          identities.push({
-            gid: entry.gid,
-            token: entry.token,
-            detailUrl: entry.url
-          });
-        }
-      }
-    }
-    return identities;
-  }
-
-  private static applyTopListSummaries(detail: NativeTopListDetail, summaries: NativeGallerySummary[]): void {
-    const thumbMap: Record<string, string> = {};
-    for (const summary of summaries) {
-      if (summary.gid <= 0 || summary.token.length === 0 || summary.thumb.length === 0) {
-        continue;
-      }
-      thumbMap[NativeEhClient.topListEntryKey(summary.gid, summary.token)] = summary.thumb;
-    }
-    for (const group of detail.groups) {
-      for (const period of group.periods) {
-        for (const entry of period.entries) {
-          const thumb = thumbMap[NativeEhClient.topListEntryKey(entry.gid, entry.token)];
-          if (thumb && thumb.length > 0) {
-            entry.thumb = thumb;
-          }
-        }
-      }
-    }
-  }
-
-  private static async enrichTopListThumbnails(detail: NativeTopListDetail, referer: string): Promise<void> {
-    const identities = NativeEhClient.collectTopListIdentities(detail);
-    const summaries: NativeGallerySummary[] = [];
-    const chunkSize = 25;
-    for (let index = 0; index < identities.length; index += chunkSize) {
-      const chunk = identities.slice(index, index + chunkSize);
-      const partial = await NativeEhClient.requestApiBatch(GallerySite.E, chunk, referer);
-      summaries.push(...partial);
-    }
-    NativeEhClient.applyTopListSummaries(detail, summaries);
-  }
-
   private static async requestMultipart(
     url: string,
     site: string,
@@ -3486,39 +3190,6 @@ export class NativeEhClient {
       throw new Error('请求已取消');
     }
     return NativeEhClient.createGalleryListResultFromHtml(site, requestUrl, html, control);
-  }
-
-  public static async fetchTopList(site: string): Promise<NativeTopListDetail> {
-    const requestUrl = EhUrl.topList();
-    const html = await NativeEhClient.requestText(
-      requestUrl,
-      GallerySite.E,
-      http.RequestMethod.GET,
-      requestUrl
-    );
-    const detail = parseTopList(html, GallerySite.E);
-    if (detail.groups.length === 0) {
-      throw new Error('No toplist entries were parsed.');
-    }
-    try {
-      await NativeEhClient.enrichTopListThumbnails(detail, requestUrl);
-    } catch (error) {
-    }
-    return detail;
-  }
-
-  public static async fetchTopListEntryPage(requestUrl: string): Promise<NativeTopListEntryPageResult> {
-    const html = await NativeEhClient.requestText(
-      requestUrl,
-      GallerySite.E,
-      http.RequestMethod.GET,
-      EhUrl.topList()
-    );
-    const result = parseTopListEntryPage(html, GallerySite.E, requestUrl);
-    if (result.items.length === 0) {
-      throw new Error('No plain toplist entries were parsed from this page.');
-    }
-    return result;
   }
 
   public static async fetchUserTags(site: string): Promise<NativeUserTag[]> {
@@ -3841,16 +3512,6 @@ export class NativeEhClient {
       pageCount: parsePreviewPageCount(html)
     };
     return page;
-  }
-
-  public static async fetchFirstReaderPageUrl(site: string, detailUrl: string): Promise<string> {
-    const html = await NativeEhClient.requestText(
-      detailUrl,
-      site,
-      http.RequestMethod.GET,
-      detailUrl
-    );
-    return parseFirstReaderPageUrl(html, site);
   }
 
   public static async fetchReaderPage(

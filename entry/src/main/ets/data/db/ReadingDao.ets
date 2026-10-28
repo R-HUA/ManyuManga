@@ -111,10 +111,6 @@ export async function loadBookmarks(aid: string): Promise<Array<ReadingProgress>
     'SELECT * FROM bookmark WHERE aid = ? ORDER BY at ASC, chapter_id ASC, page ASC', [aid]));
 }
 
-export async function loadAllBookmarks(): Promise<Array<ReadingProgress>> {
-  return readProgressRows(await dbQuery('SELECT * FROM bookmark ORDER BY at ASC, aid ASC, chapter_id ASC, page ASC', []));
-}
-
 export function toggleBookmark(item: ReadingProgress): Promise<void> {
   return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
     const args: Array<relationalStore.ValueType> = [item.aid, item.chapterId, item.page];

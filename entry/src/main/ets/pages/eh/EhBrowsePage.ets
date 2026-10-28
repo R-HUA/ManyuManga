@@ -164,11 +164,10 @@ export struct EhBrowsePage {
         }
       },
       style: HDS_TITLE_STYLE,
-      avoidLayoutSafeArea: true,
-      enableComponentSafeArea: true
+      avoidLayoutSafeArea: true
     })
     .titleMode(HdsNavDestinationTitleMode.MINI)
-    .bindToScrollable([this.scrollers[this.tab]])
+    .bindToScrollable(this.scrollers)
     .backgroundColor(BG)
     .bindSheet($$this.filterSheet, this.FilterSheetPanel(), {
       height: SheetSize.FIT_CONTENT,

@@ -1,78 +1,10 @@
 import { relationalStore } from '@kit.ArkData';
-import { FavItem } from '../../models/Models';
 import { dbQuery, dbTransaction, txExecute, txQuery } from './AppDatabase';
-import { appendPage, cellLong, cellString, readRows, sourcePrefix, txExists, txPosition, txUpsert, escapeLike } from './RowCodec';
-
-export function loadFavorites(): Promise<Array<FavItem>> { return loadFavoritePage(0, 0); }
-
-export async function loadFavoritePage(offset: number, limit: number): Promise<Array<FavItem>> {
-  const args: Array<relationalStore.ValueType> = [];
-  const sql: string = appendPage('SELECT * FROM favorite ORDER BY position ASC, id ASC', args, limit, offset);
-  const items: Array<FavItem> = [];
-  await readRows(await dbQuery(sql, args), (row: relationalStore.ResultSet): void => {
-    items.push(new FavItem(cellString(row, 'id'), cellString(row, 'title'), cellString(row, 'author'),
-      cellString(row, 'cover_url'), cellLong(row, 'added_at')));
-  });
-  return items;
-}
-
-export async function hasFavorite(id: string): Promise<boolean> {
-  let found: boolean = false;
-  await readRows(await dbQuery('SELECT id FROM favorite WHERE id = ?', [id]), (): void => { found = true; });
-  return found;
-}
-
-async function insertFavorite(tx: relationalStore.Transaction, item: FavItem, first: boolean): Promise<boolean> {
-  if (await txExists(tx, 'SELECT id FROM favorite WHERE id = ?', [item.id])) { return false; }
-  await txExecute(tx,
-    'INSERT INTO favorite (id, title, author, cover_url, source_id, added_at, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [item.id, item.title, item.author, item.coverUrl, sourcePrefix(item.id), item.addedAt,
-      await txPosition(tx, 'favorite', first)]);
-  return true;
-}
-
-export function addFavorite(item: FavItem): Promise<void> {
-  return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => { await insertFavorite(tx, item, true); });
-}
-
-export function removeFavorite(id: string): Promise<void> {
-  return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
-    await txExecute(tx, 'DELETE FROM favorite WHERE id = ?', [id]);
-  });
-}
-
-export function importFavorites(items: Array<FavItem>): Promise<number> {
-  return dbTransaction(async (tx: relationalStore.Transaction): Promise<number> => {
-    let added: number = 0;
-    for (const item of items) { if (await insertFavorite(tx, item, false)) { added++; } }
-    return added;
-  });
-}
-
-export function loadFavoriteTags(): Promise<Array<string>> {
-  return loadColumn('SELECT tag FROM favorite_tag ORDER BY position ASC, tag ASC', [], 'tag');
-}
+import { appendPage, cellLong, cellString, readRows, txExists, txPosition, txUpsert, escapeLike } from './RowCodec';
 
 export function searchFavoriteTags(needle: string, limit: number): Promise<Array<string>> {
   return loadColumn("SELECT tag FROM favorite_tag WHERE LOWER(tag) LIKE ? ESCAPE '\\' " +
     'ORDER BY position ASC, tag ASC LIMIT ?', ['%' + escapeLike(needle.toLowerCase()) + '%', limit], 'tag');
-}
-
-export function addFavoriteTags(tags: Array<string>): Promise<void> {
-  return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
-    for (const raw of tags) {
-      const tag: string = raw.trim();
-      if (tag === '' || await txExists(tx, 'SELECT tag FROM favorite_tag WHERE tag = ?', [tag])) { continue; }
-      await txExecute(tx, 'INSERT INTO favorite_tag (tag, position, updated_at) VALUES (?, ?, ?)',
-        [tag, await txPosition(tx, 'favorite_tag', false), Date.now()]);
-    }
-  });
-}
-
-export function removeFavoriteTag(tag: string): Promise<void> {
-  return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
-    await txExecute(tx, 'DELETE FROM favorite_tag WHERE tag = ?', [tag]);
-  });
 }
 
 export function loadSearchHistory(): Promise<Array<string>> { return loadSearchHistoryPage(0, 0); }

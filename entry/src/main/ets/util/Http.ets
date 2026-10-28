@@ -42,19 +42,6 @@ export class Http {
       http.HttpDataType.STRING, connectTimeoutMs, readTimeoutMs, timeoutMs, signal);
   }
 
-  /** cookie 总条数（诊断用，对应 cookieJar.size()） */
-  cookieCount(): number {
-    let n: number = 0;
-    this.cookieStore.forEach((v: string, k: string) => {
-      n += v.split('; ').length;
-    });
-    return n;
-  }
-
-  clearCookies(): void {
-    this.cookieStore.clear();
-  }
-
   private async request(url: string, method: http.RequestMethod,
     headers: Record<string, string> | null, expect: http.HttpDataType,
     connectTimeoutMs: number, readTimeoutMs: number,

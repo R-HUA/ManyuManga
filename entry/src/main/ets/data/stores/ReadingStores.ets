@@ -4,12 +4,8 @@ import {
   loadHistory, loadHistoryPage, recordHistory, removeHistory, clearHistory, importHistory,
   loadProgress, loadProgressPage, loadProgressFor, putProgress, removeProgress, clearProgress, copyProgress
 } from '../db/ReadingDao';
-import { StoreQueue } from './StoreSupport';
+import { notifyBookshelfChanged, StoreQueue } from './StoreSupport';
 import { assertDatabaseGeneration } from '../db/AppDatabase';
-
-function bumpBookshelfVersion(): void {
-  AppStorage.setOrCreate('bookshelfDataVersion', Date.now());
-}
 
 export class HistoryStore {
   private queue: StoreQueue = new StoreQueue();
@@ -24,8 +20,6 @@ export class HistoryStore {
     return loadHistoryPage(offset, limit);
   }
 
-  invalidate(): void {}
-
   record(album: Album, coverUrl: string): Promise<void> {
     const item: HistoryItem = new HistoryItem(album.id, album.name,
       album.author.map((term: MetadataTerm): string => term.label).join(', '), coverUrl, Date.now());
@@ -34,7 +28,7 @@ export class HistoryStore {
       if (!await prefs.historyEnabled()) { return; }
       assertDatabaseGeneration(generation);
       await recordHistory(item);
-      bumpBookshelfVersion();
+      notifyBookshelfChanged();
     });
   }
 
@@ -42,14 +36,14 @@ export class HistoryStore {
     const snapshot: Array<string> = ids.slice();
     return this.queue.run(async (): Promise<void> => {
       await removeHistory(snapshot);
-      bumpBookshelfVersion();
+      notifyBookshelfChanged();
     });
   }
 
   clear(): Promise<void> {
     return this.queue.run(async (): Promise<void> => {
       await clearHistory();
-      bumpBookshelfVersion();
+      notifyBookshelfChanged();
     });
   }
 
@@ -58,7 +52,7 @@ export class HistoryStore {
       new HistoryItem(item.id, item.title, item.author, item.coverUrl, item.viewedAt));
     return this.queue.run(async (): Promise<number> => {
       const added: number = await importHistory(snapshot);
-      bumpBookshelfVersion();
+      notifyBookshelfChanged();
       return added;
     });
   }
@@ -72,7 +66,7 @@ export class ReadProgressStore {
     snapshot.at = Date.now();
     return this.queue.run(async (): Promise<void> => {
       await putProgress(snapshot);
-      bumpBookshelfVersion();
+      notifyBookshelfChanged();
     });
   }
 
@@ -91,19 +85,17 @@ export class ReadProgressStore {
     return loadProgressPage(offset, limit);
   }
 
-  invalidate(): void {}
-
   remove(aid: string): Promise<void> {
     return this.queue.run(async (): Promise<void> => {
       await removeProgress(aid);
-      bumpBookshelfVersion();
+      notifyBookshelfChanged();
     });
   }
 
   clearAll(): Promise<void> {
     return this.queue.run(async (): Promise<void> => {
       await clearProgress();
-      bumpBookshelfVersion();
+      notifyBookshelfChanged();
     });
   }
 }

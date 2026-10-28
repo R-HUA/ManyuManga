@@ -10,10 +10,13 @@ export const HDS_TITLE_STYLE: TitleBarStyleOptions = {
     enableScrollEffect: true,
     scrollEffectType: ScrollEffectType.GRADIENT_BLUR,
     blurEffectiveStartOffset: LengthMetrics.vp(0),
-    blurEffectiveEndOffset: LengthMetrics.vp(20)
+    blurEffectiveEndOffset: LengthMetrics.vp(56)
   },
   systemMaterialEffect: HDS_NATIVE_MATERIAL
 };
+
+/** 显式关闭沉浸光感材质（如去除 Select 的默认高亮胶囊材质） */
+export const EMPTY_MATERIAL: uiMaterial.Material = uiMaterial.Material.empty;
 
 /** 沉浸材质只使用这四档。Toggle / Select / Slider 用 REGULAR。 */
 export const IMMERSIVE_CONTROL_MATERIAL: uiMaterial.ImmersiveMaterial =

@@ -19,12 +19,7 @@ export class PrefKeys {
   static readonly AUTO_CACHE: string = 'auto_cache';
   static readonly HISTORY_ENABLED: string = 'history_enabled';
   static readonly PRIVACY_MODE: string = 'privacy_mode';
-  static readonly RANDOM_PAGE_SIZE: string = 'random_page_size';
-  static readonly FAV_SORT: string = 'fav_sort';
-  static readonly HISTORY_SORT: string = 'history_sort';
-  static readonly DOWNLOAD_FORMAT: string = 'download_format';
   static readonly ARCHIVE_IMG_QUALITY: string = 'archive_img_quality';
-  static readonly DOWNLOAD_REMEMBER: string = 'download_remember';
   // ── 鸿蒙版新增（conventions §4：主题模式、阅读器默认模式/预加载页数、亮度记忆、安全锁）──
   static readonly THEME_MODE: string = 'theme_mode';
   static readonly READER_MODE: string = 'reader_mode';
@@ -47,7 +42,6 @@ export class PrefKeys {
   static readonly DOWNLOAD_TASKS: string = 'store_download_tasks';
   static readonly ALBUM_CACHE: string = 'store_album_cache';
   static readonly PAGES_CACHE: string = 'store_pages_cache';
-  static readonly HOME_CACHE: string = 'store_home_cache';
 }
 
 let appContext: common.Context | null = null;
@@ -143,26 +137,6 @@ export class Prefs {
     return p.storeRef;
   }
 
-  /** 恢复备份时一次落盘；失败时恢复内存中的旧偏好。 */
-  putStrings(values: Record<string, string>): Promise<void> {
-    const next: Promise<void> = this.pendingWrite.then(async (): Promise<void> => {
-      const store: preferences.Preferences = await this.prefs();
-      const previous: Map<string, preferences.ValueType> = new Map();
-      try {
-        for (const key of Object.keys(values)) {
-          previous.set(key, store.getSync(key, ''));
-          await store.put(key, values[key]);
-        }
-        await store.flush();
-      } catch (e) {
-        for (const key of Array.from(previous.keys())) { await store.put(key, previous.get(key)!); }
-        throw e as Error;
-      }
-    });
-    this.pendingWrite = next.catch((): void => {});
-    return next;
-  }
-
   async remove(key: string): Promise<void> {
     const removal: Promise<void> = this.pendingWrite.then(async (): Promise<void> => {
       const store: preferences.Preferences = await this.prefs();
@@ -216,10 +190,6 @@ export class Prefs {
     return this.getBool(PrefKeys.READER_BG, false);
   }
 
-  async setReaderBgPaper(v: boolean): Promise<void> {
-    return this.putBool(PrefKeys.READER_BG, v);
-  }
-
   /** 阅读器预加载页数（默认 3） */
   async preloadPages(): Promise<number> {
     return this.getNumber(PrefKeys.PRELOAD_PAGES, 3);
@@ -232,10 +202,6 @@ export class Prefs {
   /** 图片解码并发（0=自动→默认 4；1..512 取设置值，ImageDecode 内部封顶 32；PageLoader.kt:31-44） */
   async decodeConcurrency(): Promise<number> {
     return this.getNumber(PrefKeys.DECODE_CONCURRENCY, 0);
-  }
-
-  async setDecodeConcurrency(v: number): Promise<void> {
-    return this.putNumber(PrefKeys.DECODE_CONCURRENCY, v);
   }
 
   /** 亮度记忆（0..100；-1 = 未设置，页面用系统亮度） */
@@ -273,29 +239,6 @@ export class Prefs {
     }
   }
 
-  /** 收藏排序：time_desc / time_asc / title_asc / title_desc */
-  async favSort(): Promise<string> {
-    return this.getString(PrefKeys.FAV_SORT, 'time_desc');
-  }
-
-  async setFavSort(v: string): Promise<void> {
-    return this.putString(PrefKeys.FAV_SORT, v);
-  }
-
-  /** 历史排序：time_desc / time_asc / title_asc / title_desc */
-  async historySort(): Promise<string> {
-    return this.getString(PrefKeys.HISTORY_SORT, 'time_desc');
-  }
-
-  async setHistorySort(v: string): Promise<void> {
-    return this.putString(PrefKeys.HISTORY_SORT, v);
-  }
-
-  /** 随机推荐每页数量（默认 24） */
-  async randomPageSize(): Promise<number> {
-    return this.getNumber(PrefKeys.RANDOM_PAGE_SIZE, 24);
-  }
-
   /** 压缩包图像质量：visual（默认）/ compact（CBZ 导出用） */
   async archiveImgQuality(): Promise<string> {
     return this.getString(PrefKeys.ARCHIVE_IMG_QUALITY, 'visual');
@@ -305,17 +248,4 @@ export class Prefs {
     return this.putString(PrefKeys.ARCHIVE_IMG_QUALITY, v);
   }
 
-  /** 下载设置弹窗「以后不再弹出」 */
-  async downloadRemember(): Promise<boolean> {
-    return this.getBool(PrefKeys.DOWNLOAD_REMEMBER, false);
-  }
-
-  async setDownloadRemember(v: boolean): Promise<void> {
-    return this.putBool(PrefKeys.DOWNLOAD_REMEMBER, v);
-  }
-
-  /** 下载格式（鸿蒙版固定 cbz；保留键以便展示） */
-  async downloadFormat(): Promise<string> {
-    return this.getString(PrefKeys.DOWNLOAD_FORMAT, 'cbz');
-  }
 }

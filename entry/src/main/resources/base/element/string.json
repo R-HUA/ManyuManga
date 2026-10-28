@@ -11,6 +11,18 @@
     {
       "name": "EntryAbility_label",
       "value": "漫屿"
+    },
+    {
+      "name": "export_quality",
+      "value": "导出画质"
+    },
+    {
+      "name": "export_quality_visual",
+      "value": "高清"
+    },
+    {
+      "name": "export_quality_compact",
+      "value": "节省空间"
     }
   ]
 }

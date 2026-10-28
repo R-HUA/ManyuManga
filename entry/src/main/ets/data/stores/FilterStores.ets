@@ -65,8 +65,6 @@ export class SearchHistoryStore {
     return this.queue.run(async (): Promise<void> => { await clearSearchHistory(); });
   }
 
-  invalidate(): void {}
-
   importAll(queries: Array<string>): Promise<void> {
     const snapshot: Array<string> = queries.slice();
     return this.queue.run(async (): Promise<void> => { await importSearchHistory(snapshot); });
@@ -282,7 +280,6 @@ export class CustomCatStore {
     return this.queue.run(async (): Promise<void> => { await removeCustomCategory(name); });
   }
 
-  invalidate(): void {}
 }
 
 export const searchHistoryStore: SearchHistoryStore = new SearchHistoryStore();

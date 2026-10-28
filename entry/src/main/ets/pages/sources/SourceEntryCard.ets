@@ -1,34 +1,32 @@
-import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
-import { SourceEntry, copySource, sourceStore } from '../../data/Sources';
+import { SourceEntry, sourceStore } from '../../data/Sources';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { GallerySite } from '../../data/eh/EhNative';
-import { SourceCapabilities, capabilitiesFor } from '../../data/source/SourceContracts';
 import {
   SourceAction,
   SourcePresentation,
   presentationFor,
   sourceActions
 } from '../../data/source/SourceCatalog';
-import { sourceGlyph } from '../../common/SourceGlyph';
-import { MangaRouteParams, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS, ROUTE_SEARCH } from '../../common/Route';
+import { MangaRouteParams } from '../../common/Route';
 import { errorMessage } from '../../models/Models';
-import { IconCircleButton } from '../../common/Components';
-import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 
+/**
+ * 图源平铺列表行：无卡片底色、无左侧图标、无行内按钮，整行点击直接进入对应图源。
+ */
 @Component
 export struct SourceEntryCard {
   @Consume('navPathStack') stack: NavPathStack;
   @Prop source: SourceEntry = new SourceEntry();
   @Prop busy: boolean = false;
+  @Prop settingsOnly: boolean = false;
+  @Prop showSettings: boolean = false;
+  @State actionsVisible: boolean = false;
   reportError: (message: string) => void = (_message: string): void => {};
   connectSource: (source: SourceEntry) => void = (_source: SourceEntry): void => {};
   openSettings: (entry: SourceEntry) => void = (_entry: SourceEntry): void => {};
   importLocal: () => void = (): void => {};
   reloadSources: () => void = (): void => {};
-
-  private caps(): SourceCapabilities {
-    return capabilitiesFor(this.source.kind);
-  }
 
   private presentation(): SourcePresentation {
     return presentationFor(this.source.kind);
@@ -39,9 +37,9 @@ export struct SourceEntryCard {
       (EhSettings.effectiveSite() === GallerySite.EX ? 'ExHentai' : 'E-Hentai') : this.source.name;
   }
 
-  /** 主动作：点击整行直接进入该图源的发现广场或检索页 */
-  private onPrimaryBrowse(): void {
-    if (!this.source.enabled) {
+  /** 主动作：点击整行直接进入该图源的发现页或浏览页 */
+  onPrimaryBrowse(): void {
+    if (this.settingsOnly || !this.source.enabled) {
       this.openSourceConfig();
       return;
     }
@@ -52,20 +50,20 @@ export struct SourceEntryCard {
     }
   }
 
-  /** 次动作：点击齿轮按钮进入节点/账号/连接设置 */
+  secondaryActions(): Array<SourceAction> {
+    return sourceActions(this.source).filter((action: SourceAction): boolean => !action.primary && action.kind !== 'import');
+  }
+
   private openSourceConfig(): void {
-    if (this.source.kind === 'jm') {
-      this.stack.pushPathByName(ROUTE_JM_SETTINGS, {} as MangaRouteParams);
-    } else if (this.source.kind === 'eh') {
-      this.openSettings(this.source);
-    } else if (this.source.kind === 'suwayomi') {
-      this.connectSource(this.source);
-    } else if (this.source.kind === 'local') {
-      this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: this.source.id } as MangaRouteParams);
+    const actions: Array<SourceAction> = this.secondaryActions();
+    if (actions.length === 1) {
+      this.run(actions[0]);
+    } else {
+      this.actionsVisible = true;
     }
   }
 
-  private run(action: SourceAction): void {
+  run(action: SourceAction): void {
     if (action.requiresEnabled && (!this.source.enabled || this.busy)) {
       return;
     }
@@ -85,10 +83,6 @@ export struct SourceEntryCard {
       this.confirmRemove();
       return;
     }
-    if (action.kind === 'search') {
-      this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: this.source.id } as MangaRouteParams);
-      return;
-    }
     if (action.route !== '') {
       this.stack.pushPathByName(action.route, { sourceId: this.source.id } as MangaRouteParams);
     }
@@ -103,7 +97,9 @@ export struct SourceEntryCard {
         value: '移除',
         fontColor: DANGER,
         action: (): void => {
-          sourceStore.remove(this.source.id).catch((e: Error) => {
+          sourceStore.remove(this.source.id).then((): void => {
+            this.reloadSources();
+          }).catch((e: Error) => {
             this.reportError(errorMessage(e));
             this.reloadSources();
           });
@@ -114,27 +110,14 @@ export struct SourceEntryCard {
 
   build() {
     Row({ space: 12 }) {
-      Row({ space: 12 }) {
-      // 左侧图源光感图标
-      Stack({ alignContent: Alignment.Center }) {
-        SymbolGlyph(sourceGlyph(this.presentation().iconToken))
-          .fontSize(22)
-          .fontColor([this.source.enabled ? TEXT_MAIN : TEXT_SUB])
-      }
-      .width(46)
-      .height(46)
-      .borderRadius(14)
-      .backgroundColor(SUB_CARD)
-
-      // 中间名称与精简状态
       Column({ space: 4 }) {
         Text(this.displayName())
           .fontColor(this.source.enabled ? TEXT_MAIN : TEXT_SUB)
           .fontSize(16)
-          .fontWeight(FontWeight.Bold)
-          .maxLines(2)
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.source.enabled ? (this.source.kind === 'local' ? '本地文件' : this.source.kind === 'suwayomi' ? '扩展图源' : '在线画廊') : '已停用')
+        Text(this.statusLine())
           .fontColor(TEXT_SUB)
           .fontSize(12)
           .maxLines(1)
@@ -142,51 +125,25 @@ export struct SourceEntryCard {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
-      }.layoutWeight(1)
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
-      .onClick(() => this.onPrimaryBrowse())
 
-      // 本地漫画专属快捷导入按钮
-      if (this.source.kind === 'local' && this.source.enabled) {
-        Button('导入', { buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(PRIMARY)
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .borderRadius(14)
-          .backgroundColor(PRIMARY_SOFT)
-          .onClick(() => {
-            this.importLocal();
-          })
-      }
-
-      // 配置齿轮按钮（收敛节点设置、账号登录、屏蔽规则）
-      IconCircleButton({
-        glyph: $r('sys.symbol.gearshape'),
-        btnSize: 36,
-        iconSize: 20,
-        bg: SUB_CARD,
-        onTap: (): void => {
-          this.openSourceConfig();
-        }
-      })
-
-      // 启停开关
-      Toggle({ type: ToggleType.Switch, isOn: this.source.enabled })
-        .selectedColor(PRIMARY)
-        .onChange((enabled: boolean) => {
-          const updated: SourceEntry = copySource(this.source);
-          updated.enabled = enabled;
-          sourceStore.save(updated).catch((e: Error) => {
-            this.reportError(errorMessage(e));
-            this.reloadSources();
-          });
-        })
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(16)
+        .fontColor([TEXT_SUB])
     }
-    .padding(14)
     .width('100%')
-    .backgroundColor(CARD)
-    .borderRadius(18)
-    .border({ width: 0.5, color: DIVIDER })
+    .constraintSize({ minHeight: 60 })
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.99 })
+    .onClick(() => this.onPrimaryBrowse())
+  }
+
+  private statusLine(): string {
+    if (!this.source.enabled) {
+      return '已停用';
+    }
+    if (this.source.kind === 'local') {
+      return '已导入的本地漫画文件';
+    }
+    return this.presentation().description;
   }
 }

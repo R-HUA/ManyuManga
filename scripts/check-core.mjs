@@ -91,7 +91,7 @@ function environment() {
       source = source.replace(/  build\(\) \{[\s\S]*?(?=  private reportVisibility)/, '');
     }
     // 保留真实页面方法，只移除本地 Node 无法执行的 ArkUI 声明式布局。
-    if (/[/\\]pages[/\\](SearchAllPage|ExplorePage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|detail[/\\]WorkTags|reader[/\\]ReaderImageItem|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
+    if (/[/\\]pages[/\\](SearchAllPage|ExplorePage|CategoryPage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|sources[/\\](SourceEntryCard|SourceManagementPage|SuwayomiSourcesPage)|detail[/\\]WorkTags|reader[/\\]ReaderImageItem|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
       const builder = source.indexOf('  @Builder');
       const end = builder >= 0 ? builder : source.indexOf('  build()');
       assert.ok(end > 0);
@@ -110,6 +110,8 @@ function environment() {
         decodeSync(value) { return new Uint8Array(Buffer.from(value, 'base64')); }
       }, TextDecoder: { create: () => ({ decodeToString: bytes => Buffer.from(bytes).toString('utf8') }) } },
       '@ohos.app.ability.common': {}, '@ohos.multimedia.image': {},
+      '@ohos.arkui.uiMaterial': { Material: { empty: {} }, ImmersiveMaterial: class { constructor() {} }, ImmersiveStyle: { ULTRA_THIN: 0, THIN: 1, REGULAR: 2, ULTRA_THICK: 3 } },
+      '@ohos.arkui.modifier': { SymbolGlyphModifier: class {} },
       '@ohos.display': { getDefaultDisplaySync: () => ({ width: 1080 }) }, '@kit.ArkUI': { window: {} },
       '@ohos.app.ability.ConfigurationConstant': {}, '@ohos.promptAction': { showToast: () => {} },
       '@ohos.window': { findWindow: name => {
