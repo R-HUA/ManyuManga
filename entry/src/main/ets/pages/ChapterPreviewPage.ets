@@ -1,12 +1,12 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
-import { EMPTY_MATERIAL, HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
+import { EMPTY_MATERIAL, HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
 import { EmptyView } from '../common/Components';
-import { BG, BAR_LIGHT, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
+import { BG, SUB_CARD, PRIMARY, TEXT_SUB, DIVIDER, COVER_R, NEUTRAL_PROGRESS, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -25,7 +25,6 @@ export struct ChapterPreviewPage {
   @State sliderDragging: boolean = false;
   @State loading: boolean = true;
   @State error: string = '';
-  @State narrowBar: boolean = false;
   private scroller: Scroller = new Scroller();
   private loadToken: number = 0;
   private loadSignal: RequestAbortGroup = new RequestAbortGroup();
@@ -47,6 +46,13 @@ export struct ChapterPreviewPage {
     } else {
       this.columns = 2;
     }
+  }
+
+  columnsIcon(): Resource {
+    if (this.columns === 2) {
+      return $r('sys.symbol.square_grid_2x2');
+    }
+    return $r('sys.symbol.square_grid_3x3');
   }
 
   private columnsTemplateStr(): string {
@@ -90,8 +96,10 @@ export struct ChapterPreviewPage {
     } as MangaRouteParams);
   }
 
+  /** 底栏与阅读器 ProgressCard 同款：InSet 滑杆 + x/y，中性色；点缩略图即进入阅读。 */
   @Builder
-  private ProgressSlider() {
+  private JumpBar() {
+    Row({ space: 8 }) {
       Slider({
         value: Math.min(this.currentPageIndex + 1, Math.max(this.allPages.length, 1)),
         min: 1,
@@ -99,10 +107,9 @@ export struct ChapterPreviewPage {
         step: 1,
         style: SliderStyle.InSet
       })
-        .selectedColor(PRIMARY)
-        .trackColor(SUB_CARD)
-        .trackThickness(24)
-        .blockColor(Color.White)
+        .selectedColor(NEUTRAL_PROGRESS)
+        .trackThickness(20)
+        .showTips(false)
         .systemMaterial(EMPTY_MATERIAL)
         .layoutWeight(1)
         .enabled(this.allPages.length > 1)
@@ -119,39 +126,19 @@ export struct ChapterPreviewPage {
             }
           }
         })
-  }
 
-  @Builder
-  private JumpBar() {
-    Column({ space: 4 }) {
-      if (this.narrowBar) {
-        Row() { this.ProgressSlider() }.width('100%').height(32)
-      }
-      Row({ space: 8 }) {
-        Button('从头阅读', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-          .height(36).fontSize(14).fontWeight(FontWeight.Medium)
-          .backgroundColor(SUB_CARD).fontColor(TEXT_MAIN).padding({ left: 12, right: 12 })
-          .responseRegion({ x: 0, y: -4, width: '100%', height: 44 })
-          .onClick(() => this.openReaderAt(0))
-        if (this.narrowBar) { Blank().layoutWeight(1) } else { this.ProgressSlider() }
-        Button({ type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.EMPHASIZED }) {
-          Text(`读 P.${Math.min(this.currentPageIndex + 1, Math.max(1, this.allPages.length))}/${this.allPages.length}`)
-            .fontSize(14).fontWeight(FontWeight.Medium).fontFeature('"tnum" 1').fontColor(Color.White)
-        }
-        .height(36).padding({ left: 12, right: 12 })
-        .width((64 + `${this.allPages.length}`.length * 16) * this.getUIContext().fp2px(1) / this.getUIContext().vp2px(1))
-        .responseRegion({ x: 0, y: -4, width: '100%', height: 44 })
-        .onClick(() => this.openReaderAt(this.currentPageIndex))
-      }.width('100%').height(40)
+      Text(`${Math.min(this.currentPageIndex + 1, Math.max(1, this.allPages.length))}/${this.allPages.length}`)
+        .fontSize(12)
+        .fontFeature('"tnum" 1')
+        .fontColor($r('sys.color.font_secondary'))
+        .constraintSize({ minWidth: 38 })
+        .textAlign(TextAlign.Center)
     }
     .width('100%')
-    .height(this.narrowBar ? 92 : 56)
-    .padding({ left: 10, right: 10, top: 8, bottom: 8 })
-    .borderRadius(28)
-    .backgroundColor(BAR_LIGHT)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
-    .border({ width: '1px', color: DIVIDER })
-    .shadow(ShadowStyle.OUTER_FLOATING_SM)
+    .height(52)
+    .padding({ left: 14, right: 14 })
+    .borderRadius(26)
+    .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
   }
 
   build() {
@@ -223,8 +210,10 @@ export struct ChapterPreviewPage {
             .columnsTemplate(this.columnsTemplateStr())
             .columnsGap(10)
             .rowsGap(12)
-            .padding({ left: 16, right: 16, top: 12 })
-            .contentEndOffset((this.narrowBar ? 120 : 84) + this.bottomInset)
+            .padding({ left: 16, right: 16 })
+            .contentStartOffset(this.topInset + HDS_TITLE_BAR_HEIGHT + 12)
+            .contentEndOffset(84 + this.bottomInset)
+            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
             .width('100%')
             .height('100%')
             .onScrollIndex((first: number) => {
@@ -243,9 +232,6 @@ export struct ChapterPreviewPage {
           }
           .width('100%')
           .layoutWeight(1)
-          .onAreaChange((_old: Area, area: Area) => {
-            this.narrowBar = Number(area.width) < 360 * this.getUIContext().fp2px(1) / this.getUIContext().vp2px(1);
-          })
         }
       }
       .width('100%')
@@ -258,7 +244,7 @@ export struct ChapterPreviewPage {
         menu: {
           value: [{
             content: {
-              icon: $r('sys.symbol.square_grid_2x2'),
+              icon: this.columnsIcon(),
               label: `${this.columns}列`,
               isEnabled: this.allPages.length > 0,
               action: (): void => this.cycleColumns()
@@ -268,7 +254,7 @@ export struct ChapterPreviewPage {
       },
       style: HDS_TITLE_STYLE,
       avoidLayoutSafeArea: true,
-      enableComponentSafeArea: true
+      enableComponentSafeArea: false
     })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])

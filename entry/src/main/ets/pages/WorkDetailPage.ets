@@ -15,7 +15,7 @@ import { readProgressStore, albumCacheStore } from '../data/Stores';
 import { downloadManager } from '../data/DownloadManager';
 import { prepareSourceSwitch, switchedProgress, SourceSwitchResult, discoverSources, SourceDiscovery } from '../data/SourceSwitch';
 import { matchingChapter } from '../data/Matching';
-import { BG, CARD, PRIMARY, DANGER, TEXT_SUB } from '../common/Theme';
+import { BG, CARD, PRIMARY, DANGER, TEXT_SUB, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 
@@ -350,6 +350,14 @@ export struct WorkDetailPage {
     }
   }
 
+  sourceMenuLabel(): string {
+    return this.work !== null && this.work.albums.length > 1 ? `换源（${this.work.albums.length}源）` : '换源';
+  }
+
+  remoteMenuLabel(): string {
+    return this.remoteSaved ? '移出远程书架' : '加入远程书架';
+  }
+
   @Builder
   private Info() {
     Column({ space: 8 }) {
@@ -366,27 +374,24 @@ export struct WorkDetailPage {
       add: (): Promise<void> => this.add(),
       toggleShelf: (): Promise<void> => this.toggleShelf(),
       download: (): Promise<void> => this.download(),
-      descExpanded: this.$descExpanded
+      descExpanded: this.$descExpanded,
+      topInset: this.topInset + HDS_TITLE_BAR_HEIGHT
       })
-      if (this.remoteAvailable) {
-        Column({ space: 8 }) {
-          Button(this.remoteSaved ? $r('app.string.remove_remote_title') : $r('app.string.add_remote_title'),
-            { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(14).height(40).enabled(this.remoteReady && !this.remoteBusy)
-            .onClick(() => this.toggleRemoteShelf())
-          if (this.remoteBusy) { LoadingProgress().width(24).height(24) }
+      if (this.remoteAvailable && (this.remoteBusy || this.remoteError !== '')) {
+        Row({ space: 8 }) {
+          if (this.remoteBusy) { LoadingProgress().width(20).height(20) }
           if (this.remoteError !== '') {
-            Text(this.remoteError).fontSize(12).fontColor(DANGER)
+            Text(this.remoteError).fontSize(12).fontColor(DANGER).layoutWeight(1)
             Button($r('app.string.retry_action'), { buttonStyle: ButtonStyleMode.TEXTUAL })
               .onClick(() => { this.loadRemoteShelf(); })
           }
-        }.width('100%').padding({ left: 16, right: 16, bottom: 12 })
+        }.width('100%').padding({ left: 16, right: 16, bottom: 8 })
       }
     }.width('100%')
   }
 
   @Builder
-  private Chapters() {
+  private Chapters(withHero: boolean) {
     WorkChapterList({
       album: this.$album,
       ascending: this.$ascending,
@@ -398,8 +403,15 @@ export struct WorkDetailPage {
       aid: this.aid,
       comments: this.$comments,
       commentsDone: this.commentsDone,
-      loadComments: (): Promise<void> => this.loadComments()
-    })
+      loadComments: (): Promise<void> => this.loadComments(),
+      scroller: withHero ? this.mainScroller : this.chaptersScroller,
+      topOffset: withHero ? 0 : this.topInset + HDS_TITLE_BAR_HEIGHT,
+      bottomOffset: this.bottomInset + 16
+    }) {
+      if (withHero) {
+        this.Info()
+      }
+    }
   }
 
   @Builder
@@ -457,29 +469,18 @@ export struct WorkDetailPage {
             .height('100%')
             .scrollBar(BarState.Off)
             .align(Alignment.TopStart)
+            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
 
-            Scroll(this.chaptersScroller) {
-              this.Chapters()
+            Column() {
+              this.Chapters(false)
             }
             .width('58%')
             .height('100%')
-            .scrollBar(BarState.Off)
-            .align(Alignment.TopStart)
           }
           .layoutWeight(1)
           .width('100%')
         } else {
-          Scroll(this.mainScroller) {
-            Column() {
-              this.Info()
-              this.Chapters()
-            }
-            .width('100%')
-          }
-          .layoutWeight(1)
-          .width('100%')
-          .scrollBar(BarState.Off)
-          .align(Alignment.TopStart)
+          this.Chapters(true)
         }
       }
       .width('100%')
@@ -492,7 +493,22 @@ export struct WorkDetailPage {
         systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }
-    .titleBar({ content: { title: { mainTitle: this.album === null ? '漫画详情' : this.album.name } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleBar({ content: { title: { mainTitle: this.album === null ? '漫画详情' : this.album.name },
+      menu: { value: this.fromLibrary && this.remoteAvailable ? [
+        { content: { icon: $r('sys.symbol.arrow_left_arrow_right'), label: this.sourceMenuLabel(),
+          action: (): void => { this.sourceSheet = true; } } },
+        { content: { icon: this.remoteSaved ? $r('sys.symbol.cloud_fill') : $r('sys.symbol.cloud'),
+          label: this.remoteMenuLabel(), isEnabled: this.remoteReady && !this.remoteBusy,
+          action: (): void => { this.toggleRemoteShelf(); } } }
+      ] : this.fromLibrary ? [
+        { content: { icon: $r('sys.symbol.arrow_left_arrow_right'), label: this.sourceMenuLabel(),
+          action: (): void => { this.sourceSheet = true; } } }
+      ] : this.remoteAvailable ? [
+        { content: { icon: this.remoteSaved ? $r('sys.symbol.cloud_fill') : $r('sys.symbol.cloud'),
+          label: this.remoteMenuLabel(), isEnabled: this.remoteReady && !this.remoteBusy,
+          action: (): void => { this.toggleRemoteShelf(); } } }
+      ] : [] } },
+      style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: false })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.mainScroller, this.chaptersScroller])
     .backgroundColor(BG)

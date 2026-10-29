@@ -109,3 +109,8 @@ export function eyeComfortTint(level: number): string {
 export function comicColumns(width: number): number {
   return Math.max(3, Math.floor((width + 12) / 116));
 }
+
+/** 中性进度色：浅色模式深灰、深色模式白色，用于进度条与滑杆，避免品牌色过度使用 */
+export const NEUTRAL_PROGRESS: Resource = $r('sys.color.font_primary');
+/** 三级文字色：已读章节等弱化信息 */
+export const TEXT_TERTIARY: Resource = $r('sys.color.font_tertiary');

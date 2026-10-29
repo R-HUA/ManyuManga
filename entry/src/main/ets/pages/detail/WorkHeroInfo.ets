@@ -6,7 +6,7 @@ import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
-import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 
 @Component
 export struct WorkHeroInfo {
@@ -25,6 +25,7 @@ export struct WorkHeroInfo {
   toggleShelf: () => Promise<void> = async (): Promise<void> => {};
   download: () => Promise<void> = async (): Promise<void> => {};
   @Link descExpanded: boolean;
+  @Prop topInset: number = 0;
 
   private canContinue(): boolean {
     const saved: ReadingProgress | null = this.progress;
@@ -144,7 +145,7 @@ export struct WorkHeroInfo {
         .width('100%')
         .alignItems(VerticalAlign.Top)
 
-        // 动作栏：主阅读 CTA + 收藏 + （仅书架进入显示换源） + 下载
+        // 动作栏：主阅读 CTA + 收藏 + 下载（换源移至标题栏菜单）
         Row({ space: 8 }) {
           Button(this.canContinue() ? this.continueLabel() : '开始阅读', {
             type: ButtonType.Capsule,
@@ -154,61 +155,34 @@ export struct WorkHeroInfo {
             .height(42)
             .onClick(() => { this.read(); })
 
-          Column({ space: 2 }) {
+          Row() {
             SymbolGlyph(this.work !== null ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
-              .fontSize(18)
+              .fontSize(20)
               .fontColor([this.work !== null ? PRIMARY : TEXT_MAIN])
-            Text(this.work !== null ? '已在架' : '收藏')
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.work !== null ? PRIMARY : TEXT_SUB)
           }
-          .width(52)
+          .width(42)
           .height(42)
           .justifyContent(FlexAlign.Center)
-          .borderRadius(14)
+          .borderRadius(21)
           .backgroundColor(this.work !== null ? PRIMARY_SOFT : SUB_CARD)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
+          .accessibilityText(this.work !== null ? '已在书架，点按移出' : '加入书架')
           .onClick(() => {
             this.toggleShelf();
           })
 
-          if (this.fromLibrary) {
-            Column({ space: 2 }) {
-              SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
-                .fontSize(18)
-                .fontColor([this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_MAIN])
-              Text(this.work !== null && this.work.albums.length > 1 ? `${this.work.albums.length}源` : '换源')
-                .fontSize(10)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.work !== null && this.work.albums.length > 1 ? PRIMARY : TEXT_SUB)
-            }
-            .width(52)
-            .height(42)
-            .justifyContent(FlexAlign.Center)
-            .borderRadius(14)
-            .backgroundColor(SUB_CARD)
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
-            .onClick(() => {
-              this.sourceSheet = true;
-            })
-          }
-
-          Column({ space: 2 }) {
+          Row() {
             SymbolGlyph($r('sys.symbol.arrow_down_circle'))
-              .fontSize(18)
+              .fontSize(20)
               .fontColor([TEXT_MAIN])
-            Text('下载')
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(TEXT_SUB)
           }
-          .width(52)
+          .width(42)
           .height(42)
           .justifyContent(FlexAlign.Center)
-          .borderRadius(14)
+          .borderRadius(21)
           .backgroundColor(SUB_CARD)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
+          .accessibilityText('下载')
           .onClick(() => {
             this.download();
           })
@@ -238,9 +212,36 @@ export struct WorkHeroInfo {
           WorkTags({ aid: this.aid, terms: this.album.tags, sourceId: sourceId(this.aid), sourceName: this.sourceName })
         }
       }
-      .padding({ left: 16, right: 16, top: 12, bottom: 16 })
+      .padding({ left: 16, right: 16, top: this.topInset + 12, bottom: 16 })
       .alignItems(HorizontalAlign.Start)
       .width('100%')
+      .background(this.HeroBackdrop(), { align: Alignment.Top })
+    }
+  }
+
+  /** 沉浸式头部背景：封面高斯模糊铺满标题栏下方，再以渐变过渡到页面底色。 */
+  @Builder
+  HeroBackdrop() {
+    if (this.album !== null) {
+      Stack({ alignContent: Alignment.Top }) {
+        Column() {
+          SourceCover({ url: this.album.coverUrl, sourceKey: this.aid, radius: 0 })
+        }
+        .width('100%')
+        .blur(40)
+        .opacity(0.55)
+
+        Column()
+          .width('100%')
+          .height('100%')
+          .linearGradient({
+            direction: GradientDirection.Bottom,
+            colors: [['rgba(0,0,0,0)', 0.0], [BG, 0.92]]
+          })
+      }
+      .width('100%')
+      .height(this.topInset + 240)
+      .clip(true)
     }
   }
 }

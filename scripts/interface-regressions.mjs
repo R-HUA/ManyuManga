@@ -627,4 +627,60 @@ export async function interfaceTests(test) {
     }
   });
 
+  await test('详情页章节行：已读弱化、当前章进度、未读过滤与倒序、LazyForEach 数据源重载', async env => {
+    const { Album, Chapter, ReadingProgress } = env.load('models/Models');
+    const { buildChapterRows, ChapterDataSource, ChapterDownloadInfo } = env.load('pages/detail/ChapterRows');
+    const album = new Album('jm~1', '作品');
+    album.episodes = [new Chapter('a', '第1话', '1'), new Chapter('b', '第2话', '2'), new Chapter('c', '', '3')];
+    const progress = new ReadingProgress('jm~1', 'b', 1, 4, 10);
+    const downloads = new Map([['c', new ChapterDownloadInfo('running', 2, 5)]]);
+    const rows = buildChapterRows(album, progress, '', false, true, downloads);
+    assert.deepEqual(rows.map(row => [row.chapter.id, row.read, row.current, row.progressText]),
+      [['a', true, false, ''], ['b', false, true, '5/10'], ['c', false, false, '']]);
+    assert.equal(rows[2].download.state, 'running');
+    assert.equal(rows[0].download.state, 'none');
+    assert.deepEqual(buildChapterRows(album, progress, '', true, false, new Map()).map(row => row.chapter.id), ['c', 'b']);
+    assert.deepEqual(buildChapterRows(album, progress, '第2', false, true, new Map()).map(row => row.chapter.id), ['b']);
+    const finished = new ReadingProgress('jm~1', 'b', 1, 9, 10);
+    assert.equal(buildChapterRows(album, finished, '', true, true, new Map()).length, 1);
+    assert.deepEqual(buildChapterRows(null, null, '', false, true, new Map()), []);
+    assert.notEqual(rows[0].key(), buildChapterRows(album, null, '', false, true, new Map())[0].key());
+    const source = new ChapterDataSource();
+    let reloaded = 0;
+    const listener = { onDataReloaded: () => { reloaded++; } };
+    source.registerDataChangeListener(listener);
+    source.registerDataChangeListener(listener);
+    source.setRows(rows);
+    assert.equal(reloaded, 1);
+    assert.equal(source.totalCount(), 3);
+    assert.equal(source.getData(1).chapter.id, 'b');
+    source.unregisterDataChangeListener(listener);
+    source.setRows([]);
+    assert.equal(reloaded, 1);
+  });
+
+  await test('详情页沉浸式单列表：无眼睛按钮、换源进标题菜单、预览页中性滑杆', async () => {
+    const fs = await import('node:fs');
+    const nodePath = await import('node:path');
+    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const read = file => fs.readFileSync(nodePath.join(root, file), 'utf8');
+    const list = read('pages/detail/WorkChapterList.ets');
+    assert.match(list, /LazyForEach\(this\.source/);
+    assert.match(list, /swipeAction\(/);
+    assert.match(list, /LongPressGesture/);
+    assert.match(list, /SegmentButton\(/);
+    assert.doesNotMatch(list, /阅读中/);
+    const detail = read('pages/WorkDetailPage.ets');
+    assert.match(detail, /enableComponentSafeArea: false/);
+    assert.match(detail, /label: this\.sourceMenuLabel\(\)/);
+    assert.match(detail, /label: this\.remoteMenuLabel\(\)/);
+    assert.doesNotMatch(detail, /Scroll\(this\.chaptersScroller\)/);
+    const hero = read('pages/detail/WorkHeroInfo.ets');
+    assert.doesNotMatch(hero, /'换源'/);
+    assert.match(hero, /blur\(40\)/);
+    const preview = read('pages/ChapterPreviewPage.ets');
+    assert.doesNotMatch(preview, /从头阅读|读 P\./);
+    assert.match(preview, /selectedColor\(NEUTRAL_PROGRESS\)/);
+    assert.match(preview, /contentStartOffset/);
+  });
 }
