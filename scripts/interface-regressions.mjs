@@ -683,4 +683,22 @@ export async function interfaceTests(test) {
     assert.match(preview, /selectedColor\(NEUTRAL_PROGRESS\)/);
     assert.match(preview, /contentStartOffset/);
   });
+  await test('静态检查：下载管理按作品分组展开章节、单行摘要、详情页多选工具栏', async () => {
+    const fs = await import('node:fs');
+    const nodePath = await import('node:path');
+    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const read = file => fs.readFileSync(nodePath.join(root, file), 'utf8');
+    const page = read('pages/DownloadsPage.ets');
+    assert.match(page, /ListItemGroup\(\{ ?header: this\.TaskRow\(item\)/);
+    assert.match(page, /removeChapter\(/);
+    assert.doesNotMatch(page, /bindSheet/);
+    const summary = read('pages/downloads/DownloadSummary.ets');
+    assert.match(summary, /downloadSummaryText\(/);
+    assert.doesNotMatch(summary, /Grid\(|Progress\(/);
+    const detail = read('pages/WorkDetailPage.ets');
+    assert.match(detail, /showActionMenu/);
+    for (const label of ['标记已读', '标记未读', '自定义选择']) assert.ok(detail.includes(label), label);
+    const card = read('pages/downloads/DownloadTaskCard.ets');
+    assert.match(card, /NEUTRAL_PROGRESS/);
+  });
 }

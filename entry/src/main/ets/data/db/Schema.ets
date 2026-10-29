@@ -1,10 +1,10 @@
 /** 新库版本。后续升级从 1 起，在 AppDatabase.upgradeFrom 里追加。 */
-export const APP_DB_VERSION: number = 1;
+export const APP_DB_VERSION: number = 2;
 export const APP_DB_NAME: string = 'manyu_business_v2.db';
 
 /** 子表在前，便于清空。 */
 export const TABLE_DELETE_ORDER: Array<string> = [
-  'download_page', 'offline_page', 'offline_book', 'export_record', 'download_task', 'local_book',
+  'download_chapter', 'download_page', 'offline_page', 'offline_book', 'export_record', 'download_task', 'local_book',
   'bookmark', 'reading_progress', 'reader_pref', 'history', 'favorite_tag', 'favorite',
   'search_history', 'block_rule', 'custom_category',
   'activity_page', 'activity_book', 'activity_stat',
@@ -77,4 +77,10 @@ export const SCHEMA_V1: Array<string> = [
   'CREATE TABLE IF NOT EXISTS source_entry (id TEXT PRIMARY KEY, instance_id TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, endpoint TEXT NOT NULL, remote_id TEXT NOT NULL, language TEXT NOT NULL, auth TEXT NOT NULL, enabled INTEGER NOT NULL, latency INTEGER NOT NULL, position INTEGER NOT NULL)',
   'CREATE INDEX IF NOT EXISTS idx_source_entry_instance ON source_entry(instance_id)',
   'CREATE TABLE IF NOT EXISTS source_setting (source_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (source_id, key))'
+];
+
+/** v2：下载任务按章节记录，支持追加章节与单章状态。 */
+export const SCHEMA_V2: Array<string> = [
+  'CREATE TABLE IF NOT EXISTS download_chapter (task_id INTEGER NOT NULL, chapter_id TEXT NOT NULL, title TEXT NOT NULL, position INTEGER NOT NULL, state TEXT NOT NULL, done INTEGER NOT NULL, total INTEGER NOT NULL, error TEXT NOT NULL, PRIMARY KEY (task_id, chapter_id))',
+  'CREATE INDEX IF NOT EXISTS idx_download_chapter_task ON download_chapter(task_id)'
 ];

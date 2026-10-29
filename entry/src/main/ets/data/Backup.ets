@@ -15,6 +15,9 @@ import { albumFromJson, cellLong, cellString, readRows } from './db/RowCodec';
 import { TABLE_DELETE_ORDER } from './db/Schema';
 import { isRegisteredSourceKind } from './source/SourceRegistry';
 
+/** 后续版本新增、旧备份可缺省的表。 */
+const OPTIONAL_TABLES: Array<string> = ['download_chapter'];
+
 export const BACKUP_MAGIC: string = 'manyu-backup';
 export const BACKUP_VERSION: number = 3;
 
@@ -65,6 +68,8 @@ const FIELDS: Record<string, Array<FieldSpec>> = {
   'download_task': [num('id'), new FieldSpec('album_id', false), new FieldSpec('title', false), new FieldSpec('state', false),
     num('done'), num('total'), num('failed_pages'), new FieldSpec('saved_to', false), new FieldSpec('cover', false),
     num('created_at'), new FieldSpec('error', false), num('exporting'), num('export_done'), num('export_total'), num('updated_at')],
+  'download_chapter': textFields(['chapter_id', 'title', 'state', 'error']).concat([
+    num('task_id'), num('position'), num('done'), num('total')]),
   'offline_book': textFields(['album_id', 'source_id', 'directory', 'payload']).concat([num('updated_at')]),
   'offline_page': textFields(['album_id', 'chapter_id', 'relative_path', 'filename']).concat([
     num('page_order'), num('file_size'), num('complete'), num('scramble_id')]),
@@ -217,7 +222,9 @@ function parseBackup(text: string): BackupDocument {
   const document: BackupDocument = new BackupDocument();
   document.createdAt = asNumber(root['createdAt'], 0);
   for (const table of TABLE_DELETE_ORDER) {
-    const rows: Array<Object> | null = asArray(tables[table]);
+    // v2 新增的 download_chapter 在旧备份里不存在，按空表恢复（任务按整本处理）。
+    const rows: Array<Object> | null = tables[table] === undefined && OPTIONAL_TABLES.indexOf(table) >= 0 ?
+      [] : asArray(tables[table]);
     if (rows === null || FIELDS[table] === undefined) {
       throw new Error('备份数据不完整');
     }

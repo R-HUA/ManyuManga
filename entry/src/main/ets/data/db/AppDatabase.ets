@@ -1,7 +1,7 @@
 import { relationalStore } from '@kit.ArkData';
 import common from '@ohos.app.ability.common';
 import { getAppContext } from '../../util/Prefs';
-import { APP_DB_NAME, APP_DB_VERSION, SCHEMA_V1 } from './Schema';
+import { APP_DB_NAME, APP_DB_VERSION, SCHEMA_V1, SCHEMA_V2 } from './Schema';
 
 let opening: Promise<relationalStore.RdbStore> | null = null;
 let writeGate: Promise<void> = Promise.resolve();
@@ -50,12 +50,17 @@ async function openNow(context: common.Context): Promise<relationalStore.RdbStor
 }
 
 /**
- * 版本升级入口。当前只有 v1 建表。
- * 下一版在这里追加 from < 2 的增量语句，不要改写已发布的 v1 语句。
+ * 版本升级入口：v1 建表，v2 增加 download_chapter。
+ * 后续版本继续追加 from < N 的增量语句，不要改写已发布的语句。
  */
 async function upgradeFrom(store: relationalStore.RdbStore, from: number): Promise<void> {
   if (from < 1) {
     for (const sql of SCHEMA_V1) {
+      await store.executeSql(sql);
+    }
+  }
+  if (from < 2) {
+    for (const sql of SCHEMA_V2) {
       await store.executeSql(sql);
     }
   }

@@ -193,7 +193,7 @@ export async function sourceContractTests(test) {
     const failed = await Promise.allSettled([db.openDatabase(), db.openDatabase()]);
     assert.ok(failed.every(result => result.status === 'rejected' && /SQL/.test(result.reason.message)));
     assert.deepEqual(env.state.closedStores, ['manyu_business_v2.db']);
-    const store = await db.openDatabase(); assert.equal(store.version, 1);
+    const store = await db.openDatabase(); assert.equal(store.version, 2);
     const { TABLE_DELETE_ORDER } = env.load('data/db/Schema');
     for (const table of TABLE_DELETE_ORDER) assert.equal(await scalar(env, `SELECT COUNT(*) FROM ${table}`), '0');
     assert.equal(env.state.opens.length, 2);

@@ -29,6 +29,8 @@ export struct WorkChapterList {
   @Prop bottomOffset: number = 0;
   @Prop chapterDownloads: boolean = false;
   @Prop @Watch('rebuild') downloadStamp: number = 0;
+  @Prop @Watch('rebuild') selecting: boolean = false;
+  @Prop @Watch('rebuild') selectionStamp: number = 0;
   @State rowCount: number = 0;
   @State @Watch('sortChanged') sortIndexes: number[] = [0];
   @State @Watch('scopeChanged') scopeIndexes: number[] = [0];
@@ -48,6 +50,8 @@ export struct WorkChapterList {
   downloadChapter: (chapter: Chapter) => void = (_chapter: Chapter): void => {};
   downloads: () => Map<string, ChapterDownloadInfo> = (): Map<string, ChapterDownloadInfo> =>
     new Map<string, ChapterDownloadInfo>();
+  selection: () => Set<string> = (): Set<string> => new Set<string>();
+  toggleSelect: (chapter: Chapter) => void = (_chapter: Chapter): void => {};
   loadComments: () => Promise<void> = async (): Promise<void> => {};
   onHeroVisible: (visible: boolean) => void = (_visible: boolean): void => {};
   @BuilderParam hero: () => void = this.EmptyHero;
@@ -62,6 +66,11 @@ export struct WorkChapterList {
   rebuild(): void {
     const rows: Array<ChapterRow> = buildChapterRows(this.album, this.progress, this.filter, this.unread,
       this.ascending, this.downloads());
+    const picked: Set<string> = this.selection();
+    for (const row of rows) {
+      row.selecting = this.selecting;
+      row.selected = this.selecting && picked.has(row.chapter.id);
+    }
     this.source.setRows(rows);
     this.rowCount = rows.length;
   }
@@ -158,7 +167,16 @@ export struct WorkChapterList {
       }
 
       Row() {
-        this.DownloadMark(row)
+        if (row.selecting) {
+          Checkbox({ name: row.chapter.id })
+            .select(row.selected)
+            .selectedColor(PRIMARY)
+            .width(20)
+            .height(20)
+            .hitTestBehavior(HitTestMode.None)
+        } else {
+          this.DownloadMark(row)
+        }
       }
       .width(40)
       .height(40)
@@ -267,12 +285,18 @@ export struct WorkChapterList {
           }
           .backgroundColor(CARD)
           .borderRadius(settingsRowRadius(index, this.rowCount))
-          .swipeAction({ end: { builder: (): void => { this.PreviewAction(row.chapter); } } })
+          .swipeAction(row.selecting ? {} : { end: { builder: (): void => { this.PreviewAction(row.chapter); } } })
           .onClick(() => {
-            this.read(row.chapter);
+            if (row.selecting) {
+              this.toggleSelect(row.chapter);
+            } else {
+              this.read(row.chapter);
+            }
           })
           .gesture(LongPressGesture().onAction(() => {
-            this.preview(row.chapter);
+            if (!row.selecting) {
+              this.preview(row.chapter);
+            }
           }))
         }, (row: ChapterRow) => row.key())
       }

@@ -5,7 +5,7 @@ import { ensureDir, fileExists, rmTree } from '../util/FileUtil';
 import { md5Hex } from './JmApi';
 import { cbzFileName, copyBytesAsync, readBytesAsync } from './CbzPacker';
 import {
-  deleteOffline, DownloadPageRow, loadDownloadPages, loadOfflineAlbum,
+  deleteOffline, DownloadPageRow, loadCompletePages, loadDownloadPages, loadOfflineAlbum,
   loadOfflineAlbumIds, loadOfflinePages, OfflineBookRow, OfflinePageRow, pageRow, publishOffline,
   saveDownloadPage, TaskRow
 } from './db/ContentDao';
@@ -58,6 +58,27 @@ class OfflineStore {
       if (row.taskId !== taskId || row.albumId !== albumId || row.complete !== 1 ||
         !row.relativePath.startsWith(`resume/${taskId}/`) || row.relativePath.includes('..')) { continue; }
       if (await this.validFile(`${getAppContext().filesDir}/${row.relativePath}`, row.fileSize)) { kept.push(row); }
+    }
+    return kept;
+  }
+
+  /** 已发布离线书的页面，追加章节重跑任务时直接复用，不重复下载。 */
+  async installedPages(albumId: string): Promise<Array<DownloadPageRow>> {
+    const rows: Array<OfflinePageRow> = await loadCompletePages(albumId);
+    const kept: Array<DownloadPageRow> = [];
+    for (const row of rows) {
+      if (row.albumId !== albumId || row.relativePath.includes('..') || !row.relativePath.startsWith('content/')) { continue; }
+      if (!await this.validFile(`${getAppContext().filesDir}/${row.relativePath}`, row.fileSize)) { continue; }
+      const page: DownloadPageRow = new DownloadPageRow();
+      page.albumId = row.albumId;
+      page.chapterId = row.chapterId;
+      page.pageOrder = row.pageOrder;
+      page.relativePath = row.relativePath;
+      page.fileSize = row.fileSize;
+      page.complete = row.complete;
+      page.scrambleId = row.scrambleId;
+      page.filename = row.filename;
+      kept.push(page);
     }
     return kept;
   }

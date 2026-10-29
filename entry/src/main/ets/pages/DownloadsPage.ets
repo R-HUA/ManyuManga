@@ -3,12 +3,13 @@ import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { saveDownload } from './downloads/DownloadFileExporter';
 import { DownloadedPane } from './downloads/DownloadedPane';
 import { BasicDataSource } from '../common/DataSource';
-import { DownloadTaskCard } from './downloads/DownloadTaskCard';
+import { DownloadTaskCard, chapterStatusText } from './downloads/DownloadTaskCard';
 import { DownloadSummary } from './downloads/DownloadSummary';
-import { PRIMARY, PRIMARY_SOFT, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK } from '../common/Theme';
+import { PRIMARY, PRIMARY_SOFT, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK, NEUTRAL_PROGRESS } from '../common/Theme';
+import { IconCircleButton } from '../common/Components';
 import { EmptyView } from '../common/Components';
 import { errorMessage } from '../models/Models';
-import { downloadManager, DownloadTask } from '../data/DownloadManager';
+import { downloadManager, DownloadTask, DownloadChapter } from '../data/DownloadManager';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 /* ===== 任务列表懒加载数据源 ===== */
@@ -168,6 +169,29 @@ export struct DownloadsPage {
     }
   }
 
+  /** 取消单章：从任务中移除尚未完成的章节。 */
+  private async onCancelChapter(t: DownloadTask, c: DownloadChapter): Promise<void> {
+    try {
+      await downloadManager.removeChapter(t.id, c.chapterId);
+      this.showToast('已取消该章节');
+    } catch (e) {
+      this.showToast(`取消失败：${errorMessage(e as Error)}`);
+    }
+  }
+
+  /** 单章重试：任务续传，已完成页面会被复用。 */
+  private async onRetryChapter(t: DownloadTask): Promise<void> {
+    if (t.state === 'running' || t.state === 'queued') {
+      return;
+    }
+    await this.onRetry(t);
+  }
+
+  /** 分组内展示的章节：已完成任务折叠章节，只看分组头。 */
+  private visibleChapters(t: DownloadTask): Array<DownloadChapter> {
+    return this.selectMode || t.state === 'done' ? [] : t.chapters;
+  }
+
   /* ===== 已完成任务：打开 / 保存到用户所选位置 ===== */
 
   private async onOpenFile(t: DownloadTask): Promise<void> {
@@ -269,11 +293,20 @@ export struct DownloadsPage {
               this.SummaryHeader()
             }
 
-            List({ space: 10 }) {
+            List({ space: 12 }) {
               LazyForEach(this.taskDS, (item: DownloadTask) => {
-                ListItem() {
-                  this.TaskRow(item)
+                ListItemGroup({ header: this.TaskRow(item) }) {
+                  ForEach(this.visibleChapters(item), (c: DownloadChapter) => {
+                    ListItem() {
+                      this.ChapterItem(item, c)
+                    }
+                    .swipeAction(c.state === 'done' ? {} : { end: { builder: (): void => { this.CancelAction(item, c); } } })
+                  }, (c: DownloadChapter) => `${item.id}_${c.chapterId}_${c.state}_${c.done}_${c.total}`)
                 }
+                .padding({ left: 12, right: 12, bottom: 4 })
+                .backgroundColor(CARD)
+                .borderRadius(16)
+                .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 48, endMargin: 0 })
               }, (item: DownloadTask) => `task_${item.id}`)
             }
             .width('100%')
@@ -464,6 +497,62 @@ export struct DownloadsPage {
       enterSelect: (id: number): void => this.enterSelect(id),
       item: item
     })
+  }
+
+  @Builder
+  private CancelAction(t: DownloadTask, c: DownloadChapter) {
+    Row() {
+      Text('取消').fontSize(14).fontColor(Color.White)
+    }
+    .width(72)
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(DANGER)
+    .accessibilityText('取消下载本章')
+    .onClick(() => {
+      this.onCancelChapter(t, c);
+    })
+  }
+
+  @Builder
+  private ChapterItem(t: DownloadTask, c: DownloadChapter) {
+    Row({ space: 10 }) {
+      Column({ space: 4 }) {
+        Row({ space: 8 }) {
+          Text(c.title)
+            .fontSize(13)
+            .fontColor(c.state === 'done' ? TEXT_SUB : TEXT_MAIN)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          Text(chapterStatusText(c, t.state))
+            .fontSize(11)
+            .fontColor(c.state === 'failed' ? DANGER : TEXT_SUB)
+            .maxLines(1)
+            .constraintSize({ maxWidth: '50%' })
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .width('100%')
+        if (c.state === 'running' && t.state === 'running' && c.total > 0) {
+          Progress({ value: c.done, total: Math.max(1, c.total), type: ProgressType.Linear })
+            .width('100%')
+            .height(2)
+            .color(NEUTRAL_PROGRESS)
+            .backgroundColor(SUB_CARD)
+        }
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      if (c.state === 'failed') {
+        IconCircleButton({ glyph: $r('sys.symbol.arrow_clockwise'), btnSize: 36, iconSize: 16, iconColor: DANGER,
+          onTap: (): void => { this.onRetryChapter(t); } }).accessibilityText('重试本章')
+      }
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 44 })
+    .padding({ left: 48, right: 4 })
+    .alignItems(VerticalAlign.Center)
   }
 
   /** 删除确认弹层 */

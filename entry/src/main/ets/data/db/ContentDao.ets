@@ -18,6 +18,17 @@ export class TaskRow {
   exporting: number = 0;
   exportDone: number = 0;
   exportTotal: number = 0;
+  chapters: Array<TaskChapterRow> = [];
+}
+
+export class TaskChapterRow {
+  chapterId: string = '';
+  title: string = '';
+  position: number = 0;
+  state: string = 'queued';
+  done: number = 0;
+  total: number = 0;
+  error: string = '';
 }
 
 export class OfflinePageRow {
@@ -62,6 +73,27 @@ export async function loadTasks(): Promise<Array<TaskRow>> {
   await readRows(result, (row: relationalStore.ResultSet): void => {
     items.push(taskFrom(row));
   });
+  const byTask: Map<number, TaskRow> = new Map<number, TaskRow>();
+  for (const item of items) {
+    byTask.set(item.id, item);
+  }
+  const chapters: relationalStore.ResultSet = await dbQuery(
+    'SELECT * FROM download_chapter ORDER BY task_id ASC, position ASC', []);
+  await readRows(chapters, (row: relationalStore.ResultSet): void => {
+    const owner: TaskRow | undefined = byTask.get(cellLong(row, 'task_id'));
+    if (owner === undefined) {
+      return;
+    }
+    const chapter: TaskChapterRow = new TaskChapterRow();
+    chapter.chapterId = cellString(row, 'chapter_id');
+    chapter.title = cellString(row, 'title');
+    chapter.position = cellLong(row, 'position');
+    chapter.state = cellString(row, 'state');
+    chapter.done = cellLong(row, 'done');
+    chapter.total = cellLong(row, 'total');
+    chapter.error = cellString(row, 'error');
+    owner.chapters.push(chapter);
+  });
   return items;
 }
 
@@ -78,11 +110,19 @@ async function writeTask(tx: relationalStore.Transaction, item: TaskRow): Promis
     'INSERT OR REPLACE INTO download_task (id, album_id, title, state, done, total, failed_pages, saved_to, cover, created_at, error, exporting, export_done, export_total, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [item.id, item.albumId, item.title, item.state, item.done, item.total, item.failedPages, item.savedTo,
       item.cover, item.createdAt, item.error, item.exporting, item.exportDone, item.exportTotal, Date.now()]);
+  await txExecute(tx, 'DELETE FROM download_chapter WHERE task_id = ?', [item.id]);
+  for (const chapter of item.chapters) {
+    await txExecute(tx,
+      'INSERT INTO download_chapter (task_id, chapter_id, title, position, state, done, total, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [item.id, chapter.chapterId, chapter.title, chapter.position, chapter.state, chapter.done, chapter.total,
+        chapter.error]);
+  }
 }
 
 export function deleteTask(id: number): Promise<void> {
   return dbTransaction(async (tx: relationalStore.Transaction): Promise<void> => {
     await txExecute(tx, 'DELETE FROM download_page WHERE task_id = ?', [id]);
+    await txExecute(tx, 'DELETE FROM download_chapter WHERE task_id = ?', [id]);
     await txExecute(tx, 'DELETE FROM download_task WHERE id = ?', [id]);
   });
 }

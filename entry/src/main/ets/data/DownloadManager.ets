@@ -4,15 +4,50 @@ import { ZipEntry } from './CbzPacker';
 import fs from '@ohos.file.fs';
 import common from '@ohos.app.ability.common';
 import { Prefs, getAppContext } from '../util/Prefs';
-import { deleteTask, DownloadPageRow, loadTasks, saveTasks, TaskRow } from './db/ContentDao';
+import { deleteTask, DownloadPageRow, loadTasks, saveTasks, TaskChapterRow, TaskRow } from './db/ContentDao';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { sourceApi as jmApi } from './SourceApi';
 import { offlineStore } from './OfflineStore';
 import { cachedRawFilePath } from './ImageDecode';
-import { Album, ChapterPage, errorMessage } from '../models/Models';
+import { Album, Chapter, ChapterPage, errorMessage } from '../models/Models';
+import { ChapterDownloadInfo } from './DownloadTypes';
+import { albumFromJson, albumToJson } from './db/RowCodec';
+
+export { ChapterDownloadInfo };
 export { ZipEntry } from './CbzPacker';
 /** 任务状态机 */
 export type DownloadState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';
+
+/** 单章状态：queued / running / done / failed */
+export class DownloadChapter {
+  chapterId: string = '';
+  title: string = '';
+  position: number = 0;
+  state: string = 'queued';
+  done: number = 0;
+  total: number = 0;
+  error: string = '';
+}
+
+function cloneChapter(c: DownloadChapter): DownloadChapter {
+  const n: DownloadChapter = new DownloadChapter();
+  n.chapterId = c.chapterId;
+  n.title = c.title;
+  n.position = c.position;
+  n.state = c.state;
+  n.done = c.done;
+  n.total = c.total;
+  n.error = c.error;
+  return n;
+}
+
+function newChapter(chapter: Chapter, position: number): DownloadChapter {
+  const n: DownloadChapter = new DownloadChapter();
+  n.chapterId = chapter.id;
+  n.title = chapter.title !== '' ? chapter.title : `第 ${chapter.sort} 章`;
+  n.position = position;
+  return n;
+}
 
 /** 下载任务 */
 export class DownloadTask {
@@ -30,6 +65,10 @@ export class DownloadTask {
   exporting: boolean = false;
   exportDone: number = 0;
   exportTotal: number = 0;
+  /** 本任务包含的章节；为空表示旧版整本任务。 */
+  chapters: Array<DownloadChapter> = [];
+  /** 运行中追加/移除章节后需要按新章节集重跑（不落盘）。 */
+  restart: boolean = false;
 }
 
 /** 任务字段快照（浅拷贝，回调与持久化用；不用展开/解构） */
@@ -49,12 +88,14 @@ function cloneTask(t: DownloadTask): DownloadTask {
   c.exporting = t.exporting;
   c.exportDone = t.exportDone;
   c.exportTotal = t.exportTotal;
+  c.chapters = t.chapters.map((item: DownloadChapter): DownloadChapter => cloneChapter(item));
+  c.restart = t.restart;
   return c;
 }
 
 /** 协作式中断信号（取消/暂停） */
 class DownloadAbortError extends Error {
-  readonly kind: string; // 'canceled' | 'paused'
+  readonly kind: string; // 'canceled' | 'paused' | 'restart'
   constructor(kind: string) {
     super(kind);
     this.kind = kind;
@@ -236,6 +277,17 @@ export class DownloadManager {
         t.exporting = rec.exporting === 1;
         t.exportDone = rec.exportDone;
         t.exportTotal = rec.exportTotal;
+        for (const row of rec.chapters) {
+          const chapter: DownloadChapter = new DownloadChapter();
+          chapter.chapterId = row.chapterId;
+          chapter.title = row.title;
+          chapter.position = row.position;
+          chapter.state = row.state === 'running' ? 'queued' : row.state;
+          chapter.done = row.done;
+          chapter.total = row.total;
+          chapter.error = row.error;
+          t.chapters.push(chapter);
+        }
         if (t.state === 'running' || t.state === 'queued') {
           t.state = 'paused';
           t.error = '';
@@ -266,27 +318,148 @@ export class DownloadManager {
     this.listeners = this.listeners.filter((l: (task: DownloadTask) => void) => l !== listener);
   }
 
-  /** 入队 */
-  enqueue(album: Album): Promise<void> { return this.mutate(() => this.enqueueNow(album)); }
-  private async enqueueNow(album: Album): Promise<void> {
+  /** 入队整本：等同于把全部章节加入下载。 */
+  enqueue(album: Album): Promise<void> {
+    return this.enqueueChapters(album, album.episodes.map((chapter: Chapter): string => chapter.id));
+  }
+
+  /** 按章节入队：同一作品已有任务时去重追加，新章节加入后任务重新排队。 */
+  enqueueChapters(album: Album, ids: Array<string>): Promise<void> {
+    return this.mutate(() => this.enqueueChaptersNow(album, ids));
+  }
+
+  private async enqueueChaptersNow(album: Album, ids: Array<string>): Promise<void> {
     this.assertWritable();
     await this.init();
     this.assertWritable();
-    if (this.tasks.some((t: DownloadTask) => t.albumId === album.id && t.state !== 'canceled')) {
-      throw new Error('该漫画已有下载任务，请前往下载管理查看或重试');
+    const wanted: Set<string> = new Set<string>(ids);
+    let existing: DownloadTask | undefined = undefined;
+    for (const task of this.tasks) {
+      if (task.albumId === album.id && task.state !== 'canceled') {
+        existing = task;
+        break;
+      }
     }
-    const t: DownloadTask = new DownloadTask();
-    t.id = nextTaskId();
-    t.albumId = album.id;
-    t.title = album.name;
-    t.cover = jmApi.albumCoverUrl(album.id);
-    t.createdAt = Date.now();
-    this.tasks.push(t);
-    this.dirtyTasks.add(t.id);
-    try { await this.persistTasks(); }
-    catch (e) { this.tasks = this.tasks.filter((task: DownloadTask) => task.id !== t.id); throw e as Error; }
-    this.notify(t);
+    if (existing === undefined) {
+      const t: DownloadTask = new DownloadTask();
+      t.id = nextTaskId();
+      t.albumId = album.id;
+      t.title = album.name;
+      t.cover = jmApi.albumCoverUrl(album.id);
+      t.createdAt = Date.now();
+      for (let i = 0; i < album.episodes.length; i++) {
+        if (wanted.has(album.episodes[i].id)) {
+          t.chapters.push(newChapter(album.episodes[i], i));
+        }
+      }
+      if (t.chapters.length === 0) {
+        throw new Error('请选择要下载的章节');
+      }
+      this.tasks.push(t);
+      this.dirtyTasks.add(t.id);
+      try { await this.persistTasks(); }
+      catch (e) { this.tasks = this.tasks.filter((task: DownloadTask) => task.id !== t.id); throw e as Error; }
+      this.notify(t);
+      this.startWorker();
+      return;
+    }
+    const task: DownloadTask = existing;
+    await this.waitCommit(task.id);
+    if (task.chapters.length === 0) {
+      // 旧版整本任务：已包含全部章节，按当前目录补齐章节记录。
+      for (let i = 0; i < album.episodes.length; i++) {
+        const chapter: DownloadChapter = newChapter(album.episodes[i], i);
+        chapter.state = task.state === 'done' ? 'done' : 'queued';
+        task.chapters.push(chapter);
+      }
+    }
+    const known: Set<string> = new Set<string>(task.chapters.map((item: DownloadChapter): string => item.chapterId));
+    let added: number = 0;
+    for (let i = 0; i < album.episodes.length; i++) {
+      const chapter: Chapter = album.episodes[i];
+      if (wanted.has(chapter.id) && !known.has(chapter.id)) {
+        task.chapters.push(newChapter(chapter, i));
+        added++;
+      }
+    }
+    if (added === 0) {
+      throw new Error('已有下载任务包含所选章节，请前往下载管理查看或重试');
+    }
+    task.chapters.sort((x: DownloadChapter, y: DownloadChapter): number => x.position - y.position);
+    if (task.state === 'running') {
+      task.restart = true;
+    } else {
+      task.state = 'queued';
+      task.error = '';
+      task.failedPages = 0;
+    }
+    this.dirtyTasks.add(task.id);
+    await this.persistTasks();
+    this.notify(task);
     this.startWorker();
+  }
+
+  /** 从任务移除尚未完成的章节；移空则取消整个任务。 */
+  removeChapter(taskId: number, chapterId: string): Promise<void> {
+    return this.mutate(() => this.removeChapterNow(taskId, chapterId));
+  }
+
+  private async removeChapterNow(taskId: number, chapterId: string): Promise<void> {
+    this.assertWritable();
+    await this.waitCommit(taskId);
+    const task: DownloadTask | undefined = this.findTask(taskId);
+    if (task === undefined) {
+      return;
+    }
+    const target: DownloadChapter | undefined = task.chapters.find((item: DownloadChapter): boolean =>
+      item.chapterId === chapterId);
+    if (target === undefined || target.state === 'done') {
+      return;
+    }
+    task.chapters = task.chapters.filter((item: DownloadChapter): boolean => item.chapterId !== chapterId);
+    if (task.chapters.length === 0) {
+      await this.cancelNow(taskId);
+      return;
+    }
+    const pending: boolean = task.chapters.some((item: DownloadChapter): boolean => item.state !== 'done');
+    if (task.state === 'running') {
+      task.restart = true;
+    } else if (!pending && task.state === 'failed') {
+      task.state = 'queued';
+      task.error = '';
+      this.startWorker();
+    }
+    this.dirtyTasks.add(taskId);
+    this.notify(task);
+    this.scheduleSave();
+  }
+
+  /** 详情页章节行状态：同作品的全部未取消任务合并。 */
+  chapterStates(album: Album): Map<string, ChapterDownloadInfo> {
+    const states: Map<string, ChapterDownloadInfo> = new Map<string, ChapterDownloadInfo>();
+    for (const task of this.tasks) {
+      if (task.albumId !== album.id || task.state === 'canceled') {
+        continue;
+      }
+      if (task.chapters.length === 0) {
+        const state: string = task.state === 'done' ? 'done' : (task.state === 'failed' ? 'failed' : 'queued');
+        for (const chapter of album.episodes) {
+          states.set(chapter.id, new ChapterDownloadInfo(state));
+        }
+        continue;
+      }
+      for (const chapter of task.chapters) {
+        let state: string = chapter.state;
+        if (state === 'running' && task.state !== 'running') {
+          state = 'queued';
+        }
+        if (state === 'queued' && task.state === 'failed') {
+          state = 'failed';
+        }
+        states.set(chapter.chapterId, new ChapterDownloadInfo(state, chapter.done, chapter.total));
+      }
+    }
+    return states;
   }
 
   /** 暂停：排队/进行中 → paused。已完成页保留，恢复时跳过。 */
@@ -379,6 +552,42 @@ export class DownloadManager {
     await this.persistTasks();
     this.notify(task);
     this.startWorker();
+  }
+
+  /** 按任务章节过滤作品目录；旧版整本任务补齐章节记录。 */
+  private selectChapters(taskId: number, album: Album): Array<Chapter> {
+    const task: DownloadTask | undefined = this.findTask(taskId);
+    if (task === undefined) {
+      return [];
+    }
+    if (task.chapters.length === 0) {
+      for (let i = 0; i < album.episodes.length; i++) {
+        task.chapters.push(newChapter(album.episodes[i], i));
+      }
+      this.dirtyTasks.add(taskId);
+    }
+    const wanted: Set<string> = new Set<string>(task.chapters.map((item: DownloadChapter): string => item.chapterId));
+    const selected: Array<Chapter> = album.episodes.filter((chapter: Chapter): boolean => wanted.has(chapter.id));
+    const present: Set<string> = new Set<string>(selected.map((chapter: Chapter): string => chapter.id));
+    const before: number = task.chapters.length;
+    task.chapters = task.chapters.filter((item: DownloadChapter): boolean => present.has(item.chapterId));
+    if (task.chapters.length !== before) {
+      this.dirtyTasks.add(taskId);
+    }
+    if (selected.length === 0) {
+      throw new Error('所选章节已不在作品目录中');
+    }
+    return selected;
+  }
+
+  private updateChapter(taskId: number, chapterId: string, mutate: (c: DownloadChapter) => void): void {
+    this.update(taskId, (t: DownloadTask): void => {
+      for (const chapter of t.chapters) {
+        if (chapter.chapterId === chapterId) {
+          mutate(chapter);
+        }
+      }
+    });
   }
 
   private findTask(id: number): DownloadTask | undefined {
@@ -474,6 +683,9 @@ export class DownloadManager {
     if (t.state === 'paused') {
       throw new DownloadAbortError('paused');
     }
+    if (t.restart) {
+      throw new DownloadAbortError('restart');
+    }
   }
 
   private update(id: number, mutate: (t: DownloadTask) => void): void {
@@ -544,21 +756,37 @@ export class DownloadManager {
     const signal: RequestAbortGroup = this.openSignal(taskId);
     try {
       // 1) 本子信息（网络重试 3 次）
-      const album: Album | null = await this.retryNet<Album>(3, (): Promise<Album> => jmApi.album(task.albumId, false, signal));
-      if (album === null) {
+      const fetchedAlbum: Album | null = await this.retryNet<Album>(3, (): Promise<Album> => jmApi.album(task.albumId, false, signal));
+      if (fetchedAlbum === null) {
         throw new Error('获取本子信息失败');
       }
+      // 复制一份再按任务章节裁剪，避免改动来源缓存里的作品对象。
+      const album: Album = albumFromJson(albumToJson(fetchedAlbum));
 
-      // 2) 汇集全部页（含乱序参数）
+      // 2) 只汇集任务所含章节的页（含乱序参数）；旧版整本任务在此补齐章节记录
+      const selected: Array<Chapter> = this.selectChapters(taskId, album);
+      album.episodes = selected;
       const pages: Array<ChapterPage> = [];
-      for (const ep of album.episodes) {
+      for (const ep of selected) {
         this.checkAbort(taskId);
+        this.updateChapter(taskId, ep.id, (c: DownloadChapter): void => {
+          if (c.state !== 'done') { c.state = 'running'; c.error = ''; }
+          c.done = 0;
+        });
         const images: Array<string> | null = await this.retryNet<Array<string>>(
-          3, (): Promise<Array<string>> => jmApi.chapterImages(ep.id, signal));
+          3, (): Promise<Array<string>> => jmApi.chapterImages(ep.id, signal)).catch((e: Error): Array<string> | null => {
+            if (!(e instanceof DownloadAbortError) && !isRequestCancelled(e)) {
+              this.updateChapter(taskId, ep.id, (c: DownloadChapter): void => { c.state = 'failed'; c.error = errorMessage(e); });
+            }
+            throw e;
+          });
         if (images === null || images.length === 0) {
           const label: string = ep.title !== '' ? ep.title : ep.id;
+          this.updateChapter(taskId, ep.id, (c: DownloadChapter): void => { c.state = 'failed'; c.error = '章节图片获取失败'; });
           throw new Error(`章节图片获取失败：${label}`);
         }
+        const chapterTotal: number = images.length;
+        this.updateChapter(taskId, ep.id, (c: DownloadChapter): void => { c.total = chapterTotal; });
         const sid: number = await this.retryNet<number>(3, (): Promise<number> => jmApi.scrambleId(ep.id, signal)) ?? 0;
         for (const fn of images) {
           pages.push(new ChapterPage(ep.id, fn, sid));
@@ -581,7 +809,8 @@ export class DownloadManager {
       let failCnt: number = 0;
       const pageErrors: Array<Error> = [];
       const workers: Array<Promise<void>> = [];
-      const finished: Array<DownloadPageRow> = await offlineStore.completedPages(taskId, task.albumId);
+      const finished: Array<DownloadPageRow> = (await offlineStore.completedPages(taskId, task.albumId))
+        .concat(await offlineStore.installedPages(task.albumId));
       for (let idx: number = 0; idx < pages.length; idx++) {
         const pageIdx: number = idx;
         const ref: ChapterPage = pages[pageIdx];
@@ -594,7 +823,8 @@ export class DownloadManager {
             let reused: boolean = false;
             let kept: DownloadPageRow | undefined = undefined;
             for (const row of finished) {
-              if (row.pageOrder === pageIdx && row.chapterId === ref.photoId && row.filename === ref.filename &&
+              // 章节集合变化后页序会平移，按章节 + 文件名匹配续传页。
+              if (kept === undefined && row.chapterId === ref.photoId && row.filename === ref.filename &&
                 row.scrambleId === ref.scrambleId) {
                 kept = row;
               }
@@ -660,8 +890,11 @@ export class DownloadManager {
             }
             if (ok) {
               doneCnt++;
+              this.updateChapter(taskId, ref.photoId, (c: DownloadChapter): void => { c.done = Math.min(c.total, c.done + 1); });
             } else {
               failCnt++;
+              const reason: string = pageErrors.length > 0 ? errorMessage(pageErrors[pageErrors.length - 1]) : '页面下载失败';
+              this.updateChapter(taskId, ref.photoId, (c: DownloadChapter): void => { c.state = 'failed'; c.error = reason; });
             }
             const doneNow: number = doneCnt;
             const failNow: number = failCnt;
@@ -706,6 +939,11 @@ export class DownloadManager {
       }, (): void => this.checkAbort(taskId));
 
       const finalRow: TaskRow = taskRow(task);
+      for (const chapterRow of finalRow.chapters) {
+        chapterRow.state = 'done';
+        chapterRow.done = chapterRow.total;
+        chapterRow.error = '';
+      }
       const dest: string = await offlineStore.install(album, pages,
         pages.map((p: ChapterPage, index: number): string => `${tmpDir}/${pad5(index)}.bin`), outTemp, finalRow,
         (): void => this.checkAbort(taskId), async (): Promise<void> => {
@@ -725,6 +963,11 @@ export class DownloadManager {
       task.savedTo = dest;
       task.done = total;
       task.failedPages = 0;
+      for (const chapter of task.chapters) {
+        chapter.state = 'done';
+        chapter.done = chapter.total;
+        chapter.error = '';
+      }
       this.dirtyTasks.delete(taskId);
       this.notify(task);
     } catch (e) {
@@ -737,7 +980,14 @@ export class DownloadManager {
         }
       }
       if (err instanceof DownloadAbortError) {
-        if (err.kind === 'paused') {
+        if (err.kind === 'restart') {
+          this.update(taskId, (t: DownloadTask) => {
+            t.restart = false;
+            t.state = 'queued';
+            t.exporting = false;
+            t.done = 0;
+          });
+        } else if (err.kind === 'paused') {
           this.update(taskId, (t: DownloadTask) => {
             t.state = 'paused';
             t.exporting = false;
@@ -785,6 +1035,17 @@ function taskRow(task: DownloadTask): TaskRow {
   row.exporting = task.exporting ? 1 : 0;
   row.exportDone = task.exportDone;
   row.exportTotal = task.exportTotal;
+  for (const chapter of task.chapters) {
+    const item: TaskChapterRow = new TaskChapterRow();
+    item.chapterId = chapter.chapterId;
+    item.title = chapter.title;
+    item.position = chapter.position;
+    item.state = chapter.state;
+    item.done = chapter.done;
+    item.total = chapter.total;
+    item.error = chapter.error;
+    row.chapters.push(item);
+  }
   return row;
 }
 

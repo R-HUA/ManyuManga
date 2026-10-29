@@ -1,6 +1,6 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
-import { HDS_TITLE_STYLE, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
+import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { WorkSourceSheet } from './detail/WorkSourceSheet';
 import { WorkChapterList } from './detail/WorkChapterList';
 import { WorkHeroInfo } from './detail/WorkHeroInfo';
@@ -12,10 +12,11 @@ import { sourceId, nativeId, SourceEntry, sourceStore } from '../data/Sources';
 import { suwayomiLibrary } from '../data/SuwayomiLibrary';
 import { library, LibraryWork } from '../data/Library';
 import { readProgressStore, albumCacheStore } from '../data/Stores';
-import { downloadManager } from '../data/DownloadManager';
+import { downloadManager, DownloadTask } from '../data/DownloadManager';
+import { ChapterDownloadInfo, markedProgress, pickDownloadChapters } from './detail/ChapterRows';
 import { prepareSourceSwitch, switchedProgress, SourceSwitchResult, discoverSources, SourceDiscovery } from '../data/SourceSwitch';
 import { matchingChapter } from '../data/Matching';
-import { BG, CARD, PRIMARY, DANGER, TEXT_SUB, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
+import { BG, CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 
@@ -47,6 +48,17 @@ export struct WorkDetailPage {
   @State remoteReady: boolean = false;
   @State remoteBusy: boolean = false;
   @State remoteError: string = '';
+  @State downloadStamp: number = 0;
+  @State selecting: boolean = false;
+  @State selectionStamp: number = 0;
+  @State selectedCount: number = 0;
+  private downloadMap: Map<string, ChapterDownloadInfo> = new Map<string, ChapterDownloadInfo>();
+  private selected: Set<string> = new Set<string>();
+  private downloadListener: (task: DownloadTask) => void = (task: DownloadTask): void => {
+    if (this.album !== null && task.albumId === this.album.id) {
+      this.refreshDownloads();
+    }
+  };
   private remoteGeneration: number = 0;
 
   private aid: string = '';
@@ -70,9 +82,20 @@ export struct WorkDetailPage {
     this.commentRequests = new RequestAbortGroup();
   }
 
+  aboutToAppear(): void {
+    downloadManager.onChange(this.downloadListener);
+  }
+
   aboutToDisappear(): void {
     this.generation++;
     this.cancelRequests();
+    downloadManager.offChange(this.downloadListener);
+  }
+
+  private refreshDownloads(): void {
+    this.downloadMap = this.album === null ? new Map<string, ChapterDownloadInfo>() :
+      downloadManager.chapterStates(this.album);
+    this.downloadStamp++;
   }
 
   private async load(key: string): Promise<void> {
@@ -93,6 +116,7 @@ export struct WorkDetailPage {
       }
       this.album = album;
       this.aid = album.id;
+      this.refreshDownloads();
       this.sourceName = source.name;
       this.work = work;
       this.progress = progress;
@@ -231,12 +255,126 @@ export struct WorkDetailPage {
     }
   }
 
+  /** 下载范围选择：全部未下载 / 未读 / 接下来 N 章 / 自定义多选。 */
   private async download(): Promise<void> {
+    if (this.album === null) {
+      return;
+    }
+    await downloadManager.init().catch((): void => {});
+    this.refreshDownloads();
+    const missing: Array<string> = pickDownloadChapters(this.album, this.progress, 'missing', 0, this.downloadMap);
+    const unread: Array<string> = pickDownloadChapters(this.album, this.progress, 'unread', 0, this.downloadMap);
+    const next5: Array<string> = pickDownloadChapters(this.album, this.progress, 'next', 5, this.downloadMap);
+    const next10: Array<string> = pickDownloadChapters(this.album, this.progress, 'next', 10, this.downloadMap);
     try {
-      await downloadManager.enqueue(this.album!);
-      promptAction.showToast({ message: '已加入离线下载队列' });
+      const picked: promptAction.ActionMenuSuccessResponse = await this.getUIContext().getPromptAction().showActionMenu({
+        title: '下载章节',
+        buttons: [
+          { text: `全部未下载（${missing.length}）`, color: $r('sys.color.font_primary') },
+          { text: `未读章节（${unread.length}）`, color: $r('sys.color.font_primary') },
+          { text: `接下来 5 章（${next5.length}）`, color: $r('sys.color.font_primary') },
+          { text: `接下来 10 章（${next10.length}）`, color: $r('sys.color.font_primary') },
+          { text: '自定义选择…', color: $r('sys.color.font_primary') }
+        ]
+      });
+      if (picked.index === 4) {
+        this.startSelecting();
+        return;
+      }
+      const choices: Array<Array<string>> = [missing, unread, next5, next10];
+      if (picked.index >= 0 && picked.index < choices.length) {
+        await this.downloadIds(choices[picked.index]);
+      }
+    } catch (e) {
+      // 用户取消菜单不提示。
+    }
+  }
+
+  private async downloadIds(ids: Array<string>): Promise<void> {
+    if (this.album === null) {
+      return;
+    }
+    if (ids.length === 0) {
+      promptAction.showToast({ message: '没有需要下载的章节' });
+      return;
+    }
+    try {
+      await downloadManager.enqueueChapters(this.album, ids);
+      promptAction.showToast({ message: `已加入下载队列：${ids.length} 章` });
     } catch (e) {
       this.notifyError('加入下载队列失败', e as Error);
+    } finally {
+      this.refreshDownloads();
+    }
+  }
+
+  private downloadChapter(chapter: Chapter): void {
+    this.downloadIds([chapter.id]);
+  }
+
+  private startSelecting(): void {
+    this.selected = new Set<string>();
+    this.selectedCount = 0;
+    this.selecting = true;
+    this.selectionStamp++;
+  }
+
+  private stopSelecting(): void {
+    this.selecting = false;
+    this.selected = new Set<string>();
+    this.selectedCount = 0;
+    this.selectionStamp++;
+  }
+
+  private toggleSelect(chapter: Chapter): void {
+    if (this.selected.has(chapter.id)) {
+      this.selected.delete(chapter.id);
+    } else {
+      this.selected.add(chapter.id);
+    }
+    this.selectedCount = this.selected.size;
+    this.selectionStamp++;
+  }
+
+  private selectedIds(): Array<string> {
+    const ids: Array<string> = [];
+    if (this.album !== null) {
+      for (const chapter of this.album.episodes) {
+        if (this.selected.has(chapter.id)) {
+          ids.push(chapter.id);
+        }
+      }
+    }
+    return ids;
+  }
+
+  private async downloadSelected(): Promise<void> {
+    const ids: Array<string> = this.selectedIds().filter((id: string): boolean => {
+      const info: ChapterDownloadInfo | undefined = this.downloadMap.get(id);
+      return info === undefined || info.state === 'none' || info.state === 'failed';
+    });
+    this.stopSelecting();
+    await this.downloadIds(ids);
+  }
+
+  private async markSelected(read: boolean): Promise<void> {
+    if (this.album === null) {
+      return;
+    }
+    const next: ReadingProgress | null = markedProgress(this.album, this.progress, this.selectedIds(), read);
+    this.stopSelecting();
+    if (next === this.progress) {
+      return;
+    }
+    try {
+      if (next === null) {
+        await readProgressStore.remove(this.album.id);
+      } else {
+        await readProgressStore.save(next);
+      }
+      this.progress = next;
+    } catch (e) {
+      this.notifyError(read ? '标记已读失败' : '标记未读失败', e as Error);
     }
   }
 
@@ -406,12 +544,54 @@ export struct WorkDetailPage {
       loadComments: (): Promise<void> => this.loadComments(),
       scroller: withHero ? this.mainScroller : this.chaptersScroller,
       topOffset: withHero ? 0 : this.topInset + HDS_TITLE_BAR_HEIGHT,
-      bottomOffset: this.bottomInset + 16
+      bottomOffset: this.selecting ? 88 + this.bottomInset : this.bottomInset + 16,
+      chapterDownloads: true,
+      downloadStamp: this.downloadStamp,
+      downloads: (): Map<string, ChapterDownloadInfo> => this.downloadMap,
+      downloadChapter: (chapter: Chapter): void => this.downloadChapter(chapter),
+      selecting: this.selecting,
+      selectionStamp: this.selectionStamp,
+      selection: (): Set<string> => this.selected,
+      toggleSelect: (chapter: Chapter): void => this.toggleSelect(chapter)
     }) {
       if (withHero) {
         this.Info()
       }
     }
+  }
+
+  @Builder
+  private ToolAction(icon: Resource, label: string, enabled: boolean, action: () => void) {
+    Column({ space: 2 }) {
+      SymbolGlyph(icon).fontSize(20).fontColor([enabled ? TEXT_MAIN : TEXT_SUB])
+      Text(label).fontSize(11).fontColor(enabled ? TEXT_MAIN : TEXT_SUB)
+    }
+    .layoutWeight(1)
+    .height(56)
+    .justifyContent(FlexAlign.Center)
+    .enabled(enabled)
+    .accessibilityText(label)
+    .onClick(() => {
+      action();
+    })
+  }
+
+  @Builder
+  private SelectionBar() {
+    Row() {
+      this.ToolAction($r('sys.symbol.arrow_down_circle'), `下载（${this.selectedCount}）`, this.selectedCount > 0,
+        (): void => { this.downloadSelected(); })
+      this.ToolAction($r('sys.symbol.checkmark'), '标记已读', this.selectedCount > 0,
+        (): void => { this.markSelected(true); })
+      this.ToolAction($r('sys.symbol.arrow_counterclockwise'), '标记未读', this.selectedCount > 0,
+        (): void => { this.markSelected(false); })
+      this.ToolAction($r('sys.symbol.xmark'), '取消', true, (): void => { this.stopSelecting(); })
+    }
+    .width('100%')
+    .height(64)
+    .padding({ left: 8, right: 8 })
+    .borderRadius(32)
+    .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
   }
 
   @Builder
@@ -481,6 +661,14 @@ export struct WorkDetailPage {
           .width('100%')
         } else {
           this.Chapters(true)
+        }
+        if (this.selecting) {
+          Column() {
+            this.SelectionBar()
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, bottom: this.bottomInset + 12 })
+          .position({ left: 0, bottom: 0 })
         }
       }
       .width('100%')
