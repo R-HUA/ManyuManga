@@ -1,11 +1,10 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode, HdsTabs } from '@kit.UIDesignKit';
 import { SymbolGlyphModifier } from '@ohos.arkui.modifier';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_EH_SITE, ROUTE_SEARCH } from '../../common/Route';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { EhSearchFilter } from '../../data/eh/EhSearchFilter';
 import { EhFilterSheet } from './EhFilterSheet';
 import { EhGalleryPane } from './EhGalleryPane';
-import { SourceSettingsSheet } from '../sources/SourceSettingsSheet';
 import { GallerySite } from '../../data/eh/EhNative';
 import { AlbumLite } from '../../models/Models';
 import { IMMERSIVE_SHEET_MATERIAL, HDS_NATIVE_MATERIAL, HDS_TITLE_STYLE } from '../../common/ImmersiveMaterials';
@@ -21,7 +20,6 @@ export struct EhBrowsePage {
   @State siteLabel: string = 'E-Hentai';
   @State filter: EhSearchFilter = new EhSearchFilter();
   @State filterSheet: boolean = false;
-  @State private settingsSheet: boolean = false;
 
   private scrollers: Array<Scroller> = [
     new Scroller(),
@@ -55,17 +53,6 @@ export struct EhBrowsePage {
       },
       close: (): void => {
         this.filterSheet = false;
-      }
-    })
-  }
-
-  @Builder
-  private SettingsPanel() {
-    SourceSettingsSheet({
-      token: 'eh.site',
-      close: (): void => {
-        this.settingsSheet = false;
-        this.siteLabel = EhSettings.site() === GallerySite.EX ? 'ExHentai' : 'E-Hentai';
       }
     })
   }
@@ -156,7 +143,7 @@ export struct EhBrowsePage {
                 icon: $r('sys.symbol.gearshape'),
                 label: '设置',
                 action: (): void => {
-                  this.settingsSheet = true;
+                  this.stack.pushPathByName(ROUTE_EH_SITE, { sourceId: 'eh' } as MangaRouteParams);
                 }
               }
             }
@@ -169,14 +156,11 @@ export struct EhBrowsePage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable(this.scrollers)
     .backgroundColor(BG)
+    .onShown((): void => {
+      this.siteLabel = EhSettings.site() === GallerySite.EX ? 'ExHentai' : 'E-Hentai';
+    })
     .bindSheet($$this.filterSheet, this.FilterSheetPanel(), {
       height: SheetSize.FIT_CONTENT,
-      dragBar: true,
-      showClose: false,
-      systemMaterial: IMMERSIVE_SHEET_MATERIAL
-    })
-    .bindSheet($$this.settingsSheet, this.SettingsPanel(), {
-      height: SheetSize.LARGE,
       dragBar: true,
       showClose: false,
       systemMaterial: IMMERSIVE_SHEET_MATERIAL

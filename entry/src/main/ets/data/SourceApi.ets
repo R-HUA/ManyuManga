@@ -226,6 +226,12 @@ class SourceApi {
         kept.push(item);
         continue;
       }
+      const owner: SourceEntry | null = sourceStore.peek(sourceId(item.id));
+      if (owner !== null && owner.kind === 'local') {
+        // 屏蔽规则只作用于在线图源，本地导入的漫画始终可见。
+        kept.push(item);
+        continue;
+      }
       const blocked: boolean = await blockTagsStore.isBlocked(
         item.title, item.author, item.category, item.categorySub, sourceId(item.id));
       if (!blocked) {

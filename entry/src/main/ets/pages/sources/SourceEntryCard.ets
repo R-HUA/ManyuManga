@@ -7,7 +7,7 @@ import {
   presentationFor,
   sourceActions
 } from '../../data/source/SourceCatalog';
-import { MangaRouteParams } from '../../common/Route';
+import { MangaRouteParams, ROUTE_EH_SITE, ROUTE_SOURCE_SETTINGS, ROUTE_SUWAYOMI_CONNECT } from '../../common/Route';
 import { errorMessage } from '../../models/Models';
 import { DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 
@@ -23,8 +23,13 @@ export struct SourceEntryCard {
   @Prop showSettings: boolean = false;
   @State actionsVisible: boolean = false;
   reportError: (message: string) => void = (_message: string): void => {};
-  connectSource: (source: SourceEntry) => void = (_source: SourceEntry): void => {};
-  openSettings: (entry: SourceEntry) => void = (_entry: SourceEntry): void => {};
+  connectSource: (source: SourceEntry) => void = (source: SourceEntry): void => {
+    this.stack.pushPathByName(ROUTE_SUWAYOMI_CONNECT, { sourceId: source.id } as MangaRouteParams);
+  };
+  openSettings: (entry: SourceEntry) => void = (entry: SourceEntry): void => {
+    const route: string = entry.kind === 'eh' ? ROUTE_EH_SITE : ROUTE_SOURCE_SETTINGS;
+    this.stack.pushPathByName(route, { sourceId: entry.id } as MangaRouteParams);
+  };
   importLocal: () => void = (): void => {};
   reloadSources: () => void = (): void => {};
 
@@ -56,7 +61,10 @@ export struct SourceEntryCard {
 
   private openSourceConfig(): void {
     const actions: Array<SourceAction> = this.secondaryActions();
-    if (actions.length === 1) {
+    if (actions.length === 0) {
+      // 本地图源无专属配置：停用时进入图源设置页，在那里恢复显示。
+      this.stack.pushPathByName(ROUTE_SOURCE_SETTINGS, { sourceId: this.source.id } as MangaRouteParams);
+    } else if (actions.length === 1) {
       this.run(actions[0]);
     } else {
       this.actionsVisible = true;

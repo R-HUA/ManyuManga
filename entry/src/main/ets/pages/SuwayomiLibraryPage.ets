@@ -4,7 +4,7 @@ import { EMPTY_MATERIAL, HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { ComicGrid } from '../common/ComicGrid';
 import { EmptyView, SkeletonGrid } from '../common/Components';
 import { BG, CARD, DIVIDER, PRIMARY, PRIMARY_SOFT, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SOURCE_SETTINGS } from '../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SUWAYOMI_CONNECT } from '../common/Route';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { sourceStore, SourceEntry, copySource } from '../data/Sources';
 import { sourceApi } from '../data/SourceApi';
@@ -201,7 +201,7 @@ export struct SuwayomiLibraryPage {
     if (this.explore !== explore) { this.explore = explore; this.submit(); }
   }
   private openSettings(): void {
-    this.stack.pushPathByName(ROUTE_SOURCE_SETTINGS, { sourceId: 'suwayomi' } as MangaRouteParams);
+    this.stack.pushPathByName(ROUTE_SUWAYOMI_CONNECT, { sourceId: 'suwayomi' } as MangaRouteParams);
   }
   private openAlbum(item: AlbumLite): void {
     this.stack.pushPathByName(ROUTE_ALBUM, { aid: item.id } as MangaRouteParams);

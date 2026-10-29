@@ -44,6 +44,12 @@ export const ROUTE_STATS: string = 'readingStats';
 export const ROUTE_SOURCE_BROWSE: string = 'sourceBrowse';
 export const ROUTE_SUWAYOMI_LIBRARY: string = 'suwayomiLibrary';
 export const ROUTE_SOURCE_SETTINGS: string = 'sourceSettings';
+export const ROUTE_SUWAYOMI_CONNECT: string = 'suwayomiConnect';
+export const ROUTE_EH_SITE: string = 'ehSite';
+export const ROUTE_READER_SETTINGS: string = 'readerSettings';
+export const ROUTE_APPEARANCE: string = 'appearanceSettings';
+export const ROUTE_PRIVACY: string = 'privacySettings';
+export const ROUTE_STORAGE: string = 'storageSettings';
 
 /** 导航参数在来源边界之外始终使用完整来源标识。 */
 export interface MangaRouteParams {

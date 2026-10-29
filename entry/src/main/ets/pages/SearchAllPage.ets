@@ -295,6 +295,22 @@ export struct SearchAllPage {
     return this.groups.filter((g: SearchGroup) => g.loading || g.items.length > 0 || g.error !== '');
   }
 
+  /** 图源内搜索必须先拿到图源元数据（名称、kind 决定的搜索能力），再发起首次搜索。 */
+  async openScopedSource(): Promise<void> {
+    const ticket: number = ++this.ticket;
+    try {
+      const source: SourceEntry = await sourceStore.get(this.onlySource);
+      if (ticket !== this.ticket || !this.active) { return; }
+      this.sourceName = source.name;
+      this.searchKind = source.kind;
+      if (this.query.trim() !== '') {
+        this.search();
+      }
+    } catch (e) {
+      if (ticket === this.ticket && this.active) { this.error = errorMessage(e as Error); }
+    }
+  }
+
   @Builder
   private SearchTitle() {
     Row({ space: 8 }) {
@@ -418,15 +434,10 @@ export struct SearchAllPage {
         }).catch((e: Error) => {
           if (ticket === this.ticket && this.active) { this.error = errorMessage(e); }
         });
+      } else if (this.scope === 'source') {
+        this.openScopedSource();
       } else if (this.query.trim() !== '') {
         this.search();
-      } else if (this.scope === 'source') {
-        const ticket: number = ++this.ticket;
-        sourceStore.get(this.onlySource).then((source: SourceEntry) => {
-          if (ticket === this.ticket && this.active) { this.sourceName = source.name; this.searchKind = source.kind; }
-        }).catch((e: Error) => {
-          if (ticket === this.ticket && this.active) { this.error = errorMessage(e); }
-        });
       }
     })
     .onHidden(() => {

@@ -73,7 +73,7 @@ function createRegistry(): Map<SourceKind, SourceDefinition> {
   local.presentation.defaultName = '本地漫画';
   local.presentation.section = 'local';
   local.actions = [new SourceAction('本地漫画', 'route', ROUTE_SOURCE_BROWSE, true, false, true),
-    new SourceAction('导入漫画包', 'import', '', false, false, true), new SourceAction('本源屏蔽规则', 'route', ROUTE_BLOCK_RULES)];
+    new SourceAction('导入漫画包', 'import', '', false, false, true)];
   definitions.set(local.kind, local);
 
   const remote: SourceDefinition = new SourceDefinition('suwayomi', suwayomiStrategy);

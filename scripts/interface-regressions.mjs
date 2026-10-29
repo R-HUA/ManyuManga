@@ -256,7 +256,7 @@ export async function interfaceTests(test) {
     const { SourceEntryCard } = env.load('pages/sources/SourceEntryCard');
     const { SourceEntry } = env.load('data/Sources');
     const { sourceActions } = env.load('data/source/SourceCatalog');
-    const { ROUTE_SOURCE_BROWSE, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS } = env.load('common/Route');
+    const { ROUTE_SOURCE_BROWSE, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS, ROUTE_SOURCE_SETTINGS } = env.load('common/Route');
     const card = new SourceEntryCard(), routes = [], configured = [];
     card.stack = { pushPathByName: (name, params) => routes.push({ name, params }) };
     card.openSettings = source => configured.push(source.id);
@@ -267,20 +267,20 @@ export async function interfaceTests(test) {
       card.onPrimaryBrowse();
       assert.equal(routes.at(-1).params.sourceId, card.source.id);
       const secondary = card.secondaryActions();
-      assert.ok(secondary.length > 0);
+      if (kind !== 'local') assert.ok(secondary.length > 0);
       for (const action of secondary.filter(action => !action.danger)) card.run(action);
     }
     assert.deepEqual(configured, ['opaque_eh', 'opaque_suwayomi']);
     assert.ok(routes.some(route => route.name === ROUTE_JM_SETTINGS));
     assert.ok(routes.some(route => route.name === ROUTE_SOURCE_BROWSE));
     assert.deepEqual(routes.filter(route => route.name === ROUTE_BLOCK_RULES).map(route => route.params.sourceId),
-      ['opaque_local', 'opaque_suwayomi']);
+      ['opaque_suwayomi']);
     card.source = new SourceEntry('local', '本地', 'local');
     const importAction = sourceActions(card.source).find(action => action.kind === 'import');
     card.run(importAction); assert.equal(imported, 1);
     card.busy = true; card.run(importAction); assert.equal(imported, 1); card.busy = false;
     card.source.enabled = false; card.run(importAction); assert.equal(imported, 1);
-    card.onPrimaryBrowse(); assert.equal(routes.at(-1).name, ROUTE_BLOCK_RULES);
+    card.onPrimaryBrowse(); assert.equal(routes.at(-1).name, ROUTE_SOURCE_SETTINGS);
     card.source = new SourceEntry('remote', '扩展', 'suwayomi'); card.source.enabled = false;
     card.onPrimaryBrowse(); assert.equal(card.actionsVisible, true);
     assert.ok(card.secondaryActions().some(action => action.kind === 'remove'));
@@ -308,7 +308,8 @@ export async function interfaceTests(test) {
   });
 
   await test('导出画质设置写入后参与编码，保存失败保留原选择', async env => {
-    const { ProfilePage } = env.load('pages/ProfilePage'), page = new ProfilePage();
+    const { StoragePage } = env.load('pages/settings/StoragePage'), page = new StoragePage();
+    page.getUIContext = () => ({ getPromptAction: () => ({ showToast: () => {} }) });
     const { Prefs } = env.load('util/Prefs'), prefs = await Prefs.getInstance();
     const { makeArchiveEntry } = env.load('data/CbzPacker');
     const { ChapterPage } = env.load('models/Models');
@@ -558,7 +559,7 @@ export async function interfaceTests(test) {
     await assert.rejects(prefs.setPreviewProtection(false, 'main-window'), /磁盘写入失败/); assert.equal(await prefs.previewProtection(), true);
     assert.deepEqual(env.state.privacyCalls, [false, false, true]);
     await prefs.setPreviewProtection(false, 'main-window'); assert.equal(await prefs.previewProtection(), false);
-    const { ProfilePage } = env.load('pages/ProfilePage'), page = new ProfilePage(); page.previewOn = false;
+    const { PrivacyPage } = env.load('pages/settings/PrivacyPage'), page = new PrivacyPage(); page.previewOn = false;
     page.getUIContext = () => ({ getWindowName: () => 'main-window', getPromptAction: () => ({
       showToast: ({ message }) => { env.state.toasts ??= []; env.state.toasts.push(message); }
     }) });
@@ -577,4 +578,53 @@ export async function interfaceTests(test) {
     assert.equal(page.previewOn, true); assert.equal(page.privacyBusy, true);
     gate.resolve(); await pending; assert.equal(page.privacyBusy, false);
   });
+
+  await test('静态检查：同一节点不重复链式 bindSheet，“我的”页只保留导航行', async () => {
+    const fs = await import('node:fs');
+    const nodePath = await import('node:path');
+    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const files = [];
+    const walk = dir => {
+      for (const name of fs.readdirSync(dir)) {
+        const full = nodePath.join(dir, name);
+        if (fs.statSync(full).isDirectory()) walk(full); else if (full.endsWith('.ets')) files.push(full);
+      }
+    };
+    walk(root);
+    const closeOf = (text, open) => {
+      let depth = 0;
+      for (let i = open; i < text.length; i++) {
+        if (text[i] === '(') depth++;
+        else if (text[i] === ')' && --depth === 0) return i;
+      }
+      return text.length;
+    };
+    const doubled = [];
+    for (const file of files) {
+      const text = fs.readFileSync(file, 'utf8').replace(/\/\/[^\n]*/g, '');
+      let at = text.indexOf('.bindSheet(');
+      while (at >= 0) {
+        let cursor = closeOf(text, at + '.bindSheet'.length) + 1;
+        for (;;) {
+          const rest = text.slice(cursor);
+          const match = /^\s*\.([A-Za-z]+)\(/.exec(rest);
+          if (match === null) break;
+          if (match[1] === 'bindSheet') { doubled.push(nodePath.relative(root, file)); break; }
+          cursor = closeOf(text, cursor + match[0].length - 1) + 1;
+        }
+        at = text.indexOf('.bindSheet(', at + 1);
+      }
+    }
+    assert.deepEqual(doubled, []);
+    const profile = fs.readFileSync(nodePath.join(root, 'pages/ProfilePage.ets'), 'utf8');
+    assert.doesNotMatch(profile, /\bToggle\(|SettingSelectRow|bindSheet/);
+    const registry = fs.readFileSync(nodePath.join(root, 'data/source/SourceRegistry.ets'), 'utf8');
+    const localBlock = registry.slice(registry.indexOf('local.actions'), registry.indexOf('definitions.set(local.kind'));
+    assert.doesNotMatch(localBlock, /ROUTE_BLOCK_RULES/);
+    const shell = fs.readFileSync(nodePath.join(root, 'pages/MainShell.ets'), 'utf8');
+    for (const route of ['ROUTE_SUWAYOMI_CONNECT', 'ROUTE_EH_SITE', 'ROUTE_READER_SETTINGS', 'ROUTE_APPEARANCE', 'ROUTE_PRIVACY', 'ROUTE_STORAGE']) {
+      assert.match(shell, new RegExp(`name === ${route}\\)`));
+    }
+  });
+
 }

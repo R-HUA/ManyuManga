@@ -1,15 +1,11 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import promptAction from '@ohos.promptAction';
-import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../../common/ImmersiveMaterials';
-import { SuwayomiConnectSheet } from './SuwayomiConnectSheet';
-import { SourceSettingsSheet } from './SourceSettingsSheet';
-import { SourceEntry, SourceAuth, SourceInstance, copySource, sourceStore } from '../../data/Sources';
+import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
+import { SourceEntry, SourceInstance, copySource, sourceStore } from '../../data/Sources';
 import { localSource } from '../../data/LocalSource';
-import { suwayomi } from '../../data/Suwayomi';
 import { library } from '../../data/Library';
 import { Album, asRecord, asString, errorMessage } from '../../models/Models';
-import { SourcePresentation, presentationFor, registrablePresentation } from '../../data/source/SourceCatalog';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS } from '../../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_EH_SITE, ROUTE_JM_SETTINGS, ROUTE_SUWAYOMI_CONNECT } from '../../common/Route';
 import { BG, CARD, DIVIDER, DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
@@ -25,18 +21,9 @@ export struct SourceManagementPage {
   @State sources: Array<SourceEntry> = [];
   @State hidden: Array<string> = [];
   @State connectionLabel: string = '未连接';
-  @State form: boolean = false;
-  @State endpoint: string = '';
-  @State name: string = '';
-  @State user: string = '';
-  @State password: string = '';
-  @State authIndex: number = 0;
   @State error: string = '';
   @State busy: boolean = false;
-  @State settingsForm: boolean = false;
-  @State settingsToken: string = '';
   private scroller: Scroller = new Scroller();
-  private instance: string = '';
 
   toggleHidden: (id: string, hidden: boolean) => Promise<void> =
     (id: string, hidden: boolean): Promise<void> => sourceStore.setHidden(id, hidden);
@@ -123,57 +110,8 @@ export struct SourceManagementPage {
     }
   }
 
-  private async openConnect(): Promise<void> {
-    try {
-      const current: SourceInstance | null = await sourceStore.connection();
-      this.instance = current === null ? '' : current.id;
-      this.endpoint = current === null ? '' : current.endpoint;
-      this.name = current === null ? '' : current.name;
-      this.authIndex = current !== null && current.auth === 'basic' ? 1 : (current !== null && current.auth === 'login' ? 2 : 0);
-      this.user = '';
-      this.password = '';
-      this.error = '';
-      this.form = true;
-    } catch (e) {
-      this.error = errorMessage(e as Error);
-    }
-  }
-
-  private async connect(replace: boolean = false): Promise<void> {
-    const current: SourceInstance | null = await sourceStore.connection();
-    const base: string = this.endpoint.trim().replace(/\/+$/, '');
-    if (!replace && current !== null && current.endpoint !== base) {
-      this.getUIContext().showAlertDialog({
-        title: '替换服务连接',
-        message: '更换服务地址将停用原服务的扩展，并为新服务建立独立书源身份。已有书架与离线漫画会保留。',
-        primaryButton: { value: '取消', action: (): void => {} },
-        secondaryButton: { value: '替换并连接', action: (): void => { this.connect(true); } }
-      });
-      return;
-    }
-    this.busy = true;
-    this.error = '';
-    try {
-      const modes: Array<SourceAuth> = ['none', 'basic', 'login'];
-      const pres: SourcePresentation | null = registrablePresentation();
-      await suwayomi.connect(
-        this.endpoint,
-        this.name.trim() || (pres === null ? 'Suwayomi' : pres.defaultName),
-        modes[this.authIndex],
-        this.user,
-        this.password,
-        this.instance,
-        replace
-      );
-      this.password = '';
-      this.form = false;
-      await this.load();
-      promptAction.showToast({ message: '已连接 Suwayomi 书库' });
-    } catch (e) {
-      this.error = errorMessage(e as Error);
-    } finally {
-      this.busy = false;
-    }
+  private openConnect(): void {
+    this.stack.pushPathByName(ROUTE_SUWAYOMI_CONNECT, { sourceId: 'suwayomi' } as MangaRouteParams);
   }
 
   private async importLocal(): Promise<void> {
@@ -264,35 +202,10 @@ export struct SourceManagementPage {
     .padding({ left: 12, right: 12, top: 10, bottom: 10 })
   }
 
-  @Builder
-  private ConnectionSheet() {
-    SuwayomiConnectSheet({
-      instance: this.instance,
-      name: this.$name,
-      endpoint: this.$endpoint,
-      authIndex: this.$authIndex,
-      user: this.$user,
-      password: this.$password,
-      error: this.$error,
-      busy: this.$busy,
-      connect: (): Promise<void> => this.connect()
-    })
-  }
-
-  @Builder
-  private SettingsSheet() {
-    SourceSettingsSheet({
-      token: this.settingsToken,
-      close: (): void => {
-        this.settingsForm = false;
-      }
-    })
-  }
-
   build() {
     HdsNavDestination() {
       Column() {
-        if (this.error !== '' && !this.form) {
+        if (this.error !== '') {
           Row({ space: 8 }) {
             SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
               .fontSize(16)
@@ -346,8 +259,7 @@ export struct SourceManagementPage {
               }
               ListItem() {
                 this.NavRow('站点与账号设置', '表里站切换、Cookie 登录与标签汉化', (): void => {
-                  this.settingsToken = presentationFor('eh').settingsToken;
-                  this.settingsForm = this.settingsToken !== '';
+                  this.stack.pushPathByName(ROUTE_EH_SITE, { sourceId: 'eh' } as MangaRouteParams);
                 })
               }
             }
@@ -367,11 +279,6 @@ export struct SourceManagementPage {
                   this.importLocal();
                 })
               }
-              ListItem() {
-                this.NavRow('本源屏蔽规则', '管理仅对本地漫画生效的过滤词', (): void => {
-                  this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: this.entryFor('local')!.id } as MangaRouteParams);
-                })
-              }
             }
             .backgroundColor(CARD)
             .borderRadius(16).padding({ top: 4, bottom: 4 })
@@ -384,27 +291,9 @@ export struct SourceManagementPage {
         .contentEndOffset(28 + this.bottomInset)
         .scrollBar(BarState.Off)
         .clip(false)
-
-        // 每个节点只能可靠地绑定一个 bindSheet；EH 站点设置单独挂在零尺寸锚点上，避免与 Suwayomi 连接表单串台。
-        Column()
-          .width(0)
-          .height(0)
-          .bindSheet($$this.settingsForm, this.SettingsSheet(), {
-            height: SheetSize.FIT_CONTENT,
-            dragBar: true,
-            showClose: false,
-            systemMaterial: IMMERSIVE_SHEET_MATERIAL
-          })
       }
       .width('100%')
       .height('100%')
-      .bindSheet($$this.form, this.ConnectionSheet(), {
-        height: SheetSize.FIT_CONTENT,
-        dragBar: true,
-        showClose: true,
-        title: { title: 'Suwayomi' },
-        systemMaterial: IMMERSIVE_SHEET_MATERIAL
-      })
     }
     .titleBar({ content: { title: { mainTitle: '图源设置' } }, style: HDS_TITLE_STYLE,
       avoidLayoutSafeArea: true, enableComponentSafeArea: true })

@@ -27,6 +27,7 @@ export struct EhSiteSheet {
   @State showWebLogin: boolean = false;
   private controller: web_webview.WebviewController = new web_webview.WebviewController();
   close: () => void = (): void => {};
+  @Prop embedded: boolean = false;
 
   aboutToAppear(): void {
     this.refreshStatus();
@@ -131,11 +132,13 @@ export struct EhSiteSheet {
   build() {
     Scroll() {
       Column({ space: 14 }) {
-        Text('E-Hentai 站点与账号')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .width('100%')
+        if (!this.embedded) {
+          Text('E-Hentai 站点与账号')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(TEXT_MAIN)
+            .width('100%')
+        }
 
         Text(this.loginLabel)
           .fontSize(12)
@@ -312,22 +315,26 @@ export struct EhSiteSheet {
           .width('100%')
           .height(40)
           .onClick(() => {
-            this.close();
+            if (!this.embedded) {
+              this.close();
+            }
             this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: 'eh' } as MangaRouteParams);
           })
 
-        Text('收起')
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .height(42)
-          .borderRadius(21)
-          .backgroundColor(SUB_CARD)
-          .onClick(() => {
-            this.close();
-          })
+        if (!this.embedded) {
+          Text('收起')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(TEXT_MAIN)
+            .textAlign(TextAlign.Center)
+            .width('100%')
+            .height(42)
+            .borderRadius(21)
+            .backgroundColor(SUB_CARD)
+            .onClick(() => {
+              this.close();
+            })
+        }
       }
       .width('100%')
       .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })

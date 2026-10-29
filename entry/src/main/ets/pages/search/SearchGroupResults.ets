@@ -2,7 +2,7 @@ import { ComicGrid } from '../../common/ComicGrid';
 import { AlbumLite } from '../../models/Models';
 import { SourceEntry } from '../../data/Sources';
 import { SourceSearchOptions } from '../../data/source/SourceContracts';
-import { DANGER, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 
 /** 异步结果逐字段更新，列表项必须观察同一个分组实例。 */
 @Observed
@@ -28,14 +28,22 @@ export struct SearchGroupResults {
 
   build() {
     Column({ space: 12 }) {
-      Row() {
-        Text(this.group.source.name).fontSize(18).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
-        if (this.group.loading) { LoadingProgress().width(22).height(22) }
+      Row({ space: 4 }) {
+        Text(this.group.source.name).fontSize(18).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).flexShrink(1)
         if (this.summary && this.group.items.length > 0) {
-          Button('查看全部', { buttonStyle: ButtonStyleMode.NORMAL }).fontColor(PRIMARY).backgroundColor(SUB_CARD)
-            .onClick(this.onViewAll)
+          SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(18).fontColor([TEXT_SUB])
         }
-      }.width('100%')
+        Blank()
+        if (this.group.loading) { LoadingProgress().width(22).height(22) }
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 32 })
+      .onClick((): void => {
+        if (this.summary && this.group.items.length > 0) {
+          this.onViewAll();
+        }
+      })
       if (this.group.error !== '') {
         Text(this.group.error).fontColor(DANGER).fontSize(13).width('100%')
         Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(this.onRetry)
