@@ -257,7 +257,7 @@ export struct DownloadsPage {
             .justifyContent(FlexAlign.Center)
           } else if (this.tasks.length === 0) {
             Column() {
-              EmptyView({ message: '还没有下载任务', showRetry: false })
+              EmptyView({ message: '还没有下载任务', showRetry: false, quiet: true })
             }
             .width('100%')
             .layoutWeight(1)
@@ -298,7 +298,11 @@ export struct DownloadsPage {
       .width('100%')
       .height('100%')
     }
-    .titleBar({ content: { title: { mainTitle: '离线下载' }, menu: { value: [{ content: { label: this.selectMode ? '完成' : '批量管理', isEnabled: this.section === 'tasks' && this.tasks.length > 0, action: (): void => { if (this.selectMode) { this.exitSelect(); } else { this.selectMode = true; this.selectedIds = []; } } } }] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleBar({ content: { title: { mainTitle: '离线下载' }, menu: { value: this.section === 'tasks' && this.tasks.length > 0 ? [{ content: {
+      icon: this.selectMode ? $r('sys.symbol.checkmark') : $r('sys.symbol.checkmark_square_on_square'),
+      label: this.selectMode ? '完成' : '批量管理', action: (): void => {
+        if (this.selectMode) { this.exitSelect(); } else { this.selectMode = true; this.selectedIds = []; }
+      } } }] : [] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .backgroundColor(BG)
   }
@@ -307,16 +311,18 @@ export struct DownloadsPage {
   private SectionBar() {
     Row({ space: 8 }) {
       Button('已下载', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .fontSize(13)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.section === 'offline' ? Color.White : PRIMARY)
-        .backgroundColor(this.section === 'offline' ? PRIMARY : PRIMARY_SOFT)
-        .onClick(() => { this.section = 'offline'; })
+        .height(36).padding({ left: 16, right: 16 }).fontSize(14)
+        .responseRegion({ x: 0, y: -4, width: '100%', height: 44 })
+        .fontWeight(this.section === 'offline' ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.section === 'offline' ? Color.White : TEXT_SUB)
+        .backgroundColor(this.section === 'offline' ? PRIMARY : SUB_CARD)
+        .onClick(() => { this.exitSelect(); this.section = 'offline'; })
       Button('下载任务', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .fontSize(13)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.section === 'tasks' ? Color.White : PRIMARY)
-        .backgroundColor(this.section === 'tasks' ? PRIMARY : PRIMARY_SOFT)
+        .height(36).padding({ left: 16, right: 16 }).fontSize(14)
+        .responseRegion({ x: 0, y: -4, width: '100%', height: 44 })
+        .fontWeight(this.section === 'tasks' ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.section === 'tasks' ? Color.White : TEXT_SUB)
+        .backgroundColor(this.section === 'tasks' ? PRIMARY : SUB_CARD)
         .onClick(() => { this.section = 'tasks'; })
     }
     .width('100%')

@@ -5,7 +5,9 @@ import { IMMERSIVE_CONTROL_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../common/
 import { SearchGroup, SearchGroupResults } from './search/SearchGroupResults';
 import { SearchFilterSheet } from './search/SearchFilterSheet';
 import { SearchHistory } from './search/SearchHistory';
-import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, SearchScope, SearchSelection, searchSelectionFromObject } from '../common/Route';
+import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH, ROUTE_SUWAYOMI_LIBRARY, SearchScope, SearchSelection, searchSelectionFromObject } from '../common/Route';
+import { RemoteMangaPage } from '../data/SuwayomiLibrary';
+import { RequestAbortGroup } from '../util/RequestAbort';
 import { sourceApi } from '../data/SourceApi';
 import { library, LibraryWork } from '../data/Library';
 import { searchLibraryWorks } from '../data/SearchQuery';
@@ -46,12 +48,14 @@ export struct SearchAllPage {
   private active: boolean = true;
   private pending: boolean = false;
   private resumeSearch: boolean = false;
+  private remoteRequests: RequestAbortGroup = new RequestAbortGroup();
 
   aboutToDisappear(): void {
     this.hideSearch();
   }
 
   private hideSearch(): void {
+    this.remoteRequests.abortAll();
     this.resumeSearch = this.pending || this.groups.some((group: SearchGroup) => group.loading);
     this.active = false;
     this.ticket++;
@@ -76,6 +80,7 @@ export struct SearchAllPage {
   }
 
   private editQuery(): void {
+    this.remoteRequests.abortAll();
     this.submitted = '';
     this.resumeSearch = false;
     this.matching = false;
@@ -101,6 +106,8 @@ export struct SearchAllPage {
   private async search(): Promise<void> {
     if (this.query.trim() === '') { this.editQuery(); return; }
     const ticket: number = ++this.ticket;
+    this.remoteRequests.abortAll();
+    this.remoteRequests = new RequestAbortGroup();
     const query: string = this.query.trim();
     this.submitted = query;
     const selection: SearchSelection | null = this.selection;
@@ -122,14 +129,14 @@ export struct SearchAllPage {
       }
       const sources: Array<SourceEntry> = this.scope === 'source' ?
         [await sourceStore.get(this.onlySource)] :
-        (await sourceStore.list()).filter((s: SourceEntry) => s.enabled);
+        await sourceApi.searchEntries();
       if (ticket !== this.ticket) {
         return;
       }
       this.groups = sources.map((source: SourceEntry): SearchGroup => {
         const group: SearchGroup = new SearchGroup();
         group.source = source;
-        group.query = selection === null ? query : sourceApi.searchExpression(source,
+        group.query = selection === null || (source.kind === 'suwayomi' && source.remoteId === '') ? query : sourceApi.searchExpression(source,
           selection.term.namespace, selection.term.value, selection.field);
         group.options = this.searchOptions.copy();
         return group;
@@ -164,6 +171,17 @@ export struct SearchAllPage {
     group.error = '';
     this.groups = this.groups.slice();
     try {
+      if (group.source.kind === 'suwayomi' && group.source.remoteId === '') {
+        const remote: RemoteMangaPage = await sourceApi.remoteLibrary(group.source, -1, group.query, 'added',
+          page === 1 ? '' : group.remoteCursor, this.remoteRequests);
+        if (ticket !== this.ticket || !this.active) { return; }
+        group.items = page === 1 ? remote.albums : group.items.concat(remote.albums.filter((item: AlbumLite): boolean =>
+          !group.items.some((existing: AlbumLite): boolean => existing.id === item.id)));
+        group.page = page;
+        group.remoteCursor = remote.endCursor;
+        group.more = remote.hasNextPage;
+        return;
+      }
       const result: SearchResult = await sourceApi.searchSource(group.source, group.query, page, group.options);
       if (ticket !== this.ticket || !this.active) {
         return;
@@ -333,6 +351,10 @@ export struct SearchAllPage {
                   SearchGroupResults({ group: group, summary: this.scope === 'all',
                     onOpen: (item: AlbumLite): void => { this.choose(item); },
                     onViewAll: (): void => {
+                      if (group.source.kind === 'suwayomi' && group.source.remoteId === '') {
+                        this.stack.pushPathByName(ROUTE_SUWAYOMI_LIBRARY, { query: this.submitted } as MangaRouteParams);
+                        return;
+                      }
                       this.stack.pushPathByName(ROUTE_SEARCH, { sourceId: group.source.id, scope: 'source',
                         query: this.submitted, selection: this.selection === null ? undefined : this.selection } as MangaRouteParams);
                     },

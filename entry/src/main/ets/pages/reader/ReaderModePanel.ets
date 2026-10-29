@@ -1,5 +1,5 @@
 import { ReaderMode } from '../../models/Models';
-import { PRIMARY, PRIMARY_SOFT, readerHudPalette } from '../../common/Theme';
+import { PRIMARY, PRIMARY_SOFT } from '../../common/Theme';
 
 class ModeItem {
   mode: ReaderMode;
@@ -16,7 +16,6 @@ class ModeItem {
 @Component
 export struct ReaderModePanel {
   @Link mode: ReaderMode;
-  @Prop bgPaper: boolean = false;
   switchMode: (m: ReaderMode) => void = (m: ReaderMode): void => {};
 
   private readonly modeList: ModeItem[] = [
@@ -33,11 +32,11 @@ export struct ReaderModePanel {
         Column({ space: 6 }) {
           SymbolGlyph(item.icon)
             .fontSize(22)
-            .fontColor([this.mode === item.mode ? PRIMARY : readerHudPalette(this.bgPaper).text])
+            .fontColor([this.mode === item.mode ? PRIMARY : $r('sys.color.font_primary')])
           Text(item.label)
             .fontSize(11)
             .fontWeight(this.mode === item.mode ? FontWeight.Bold : FontWeight.Medium)
-            .fontColor(this.mode === item.mode ? PRIMARY : readerHudPalette(this.bgPaper).textSub)
+            .fontColor(this.mode === item.mode ? PRIMARY : $r('sys.color.font_secondary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }

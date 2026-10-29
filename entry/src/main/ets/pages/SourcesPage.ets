@@ -74,10 +74,12 @@ export struct SourcesPage {
                   .fontSize(16)
                   .fontWeight(FontWeight.Medium)
                   .fontColor(TEXT_MAIN)
+                if (this.connectionLabel === '未连接服务端') {
                 Text(this.connectionLabel)
                   .fontSize(12)
                   .fontColor(TEXT_SUB)
                   .maxLines(1)
+                }
               }
               .layoutWeight(1)
               .alignItems(HorizontalAlign.Start)
@@ -115,7 +117,7 @@ export struct SourcesPage {
         .layoutWeight(1)
         .width('100%')
         .divider({ strokeWidth: 0.5, color: DIVIDER, startMargin: 16, endMargin: 16 })
-        .padding({ bottom: (this.breakpoint === 'lg' ? 28 : TAB_BAR_HEIGHT + 28) + this.bottomInset })
+        .contentEndOffset((this.breakpoint === 'lg' ? 16 : TAB_BAR_HEIGHT + 16) + this.bottomInset)
         .scrollBar(BarState.Off)
         .clip(false)
       }

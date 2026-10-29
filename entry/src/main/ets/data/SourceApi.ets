@@ -2,7 +2,8 @@ import common from '@ohos.app.ability.common';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { jmApi } from './JmApi';
 import { EhSettings } from './eh/EhSettings';
-import { sourceStore, sourceId, SourceEntry, SourceKind } from './Sources';
+import { sourceStore, sourceId, sourceKey, SourceEntry, SourceKind } from './Sources';
+import { suwayomiLibrary, LibrarySort, RemoteManga, RemoteMangaPage } from './SuwayomiLibrary';
 import { Album, AlbumLite, SearchResult, CategoryItem, CommentsResult, DomainSpeed, errorMessage } from '../models/Models';
 import { offlineStore } from './OfflineStore';
 import { blockTagsStore } from './stores/FilterStores';
@@ -58,6 +59,58 @@ class SourceApi {
       this.covers.set(item.id, item.coverUrl);
     }
     return result;
+  }
+
+  /** 主搜索只展示一个网关，扩展检索留在远程书库内部。 */
+  async searchEntries(): Promise<Array<SourceEntry>> {
+    const entries: Array<SourceEntry> = (await sourceStore.list()).filter((item: SourceEntry): boolean =>
+      item.enabled && item.kind !== 'suwayomi');
+    const gateway: SourceEntry | null = await sourceStore.gateway();
+    if (gateway !== null) { gateway.name = 'Suwayomi'; entries.push(gateway); }
+    return entries;
+  }
+
+  async remoteLibrary(source: SourceEntry, categoryId: number, query: string, sort: LibrarySort,
+    after: string, signal: RequestAbortGroup): Promise<RemoteMangaPage> {
+    const page: RemoteMangaPage = await suwayomiLibrary.library(source, categoryId, query, sort, after, signal);
+    return this.prepareRemotePage(source, page, signal);
+  }
+
+  async remoteSearch(source: SourceEntry, remoteId: string, query: string, pageNumber: number,
+    signal: RequestAbortGroup): Promise<RemoteMangaPage> {
+    const page: RemoteMangaPage = await suwayomiLibrary.browseSource(source, remoteId, query, pageNumber, signal);
+    return this.prepareRemotePage(source, page, signal);
+  }
+
+  private async prepareRemotePage(source: SourceEntry, page: RemoteMangaPage,
+    signal: RequestAbortGroup): Promise<RemoteMangaPage> {
+    signal.throwIfAborted();
+    const identities: Array<SourceEntry> = await sourceStore.bindSuwayomiSources(source,
+      page.items.map((item: RemoteManga): string => item.remoteSourceId));
+    signal.throwIfAborted();
+    const albums: Array<AlbumLite> = [];
+    for (let index: number = 0; index < page.items.length; index++) {
+      const item: RemoteManga = page.items[index];
+      item.key = sourceKey(identities[index].id, `${item.id}`);
+      let blocked: boolean = false;
+      for (const tag of item.tags.length === 0 ? [''] : item.tags) {
+        if (await blockTagsStore.isBlocked(item.title, item.author, tag, '', identities[index].id)) {
+          blocked = true;
+          break;
+        }
+      }
+      if (blocked) { continue; }
+      const album: AlbumLite = new AlbumLite(item.key, item.title, item.author, item.coverUrl);
+      album.category = [item.unread > 0 ? `${item.unread}章未读` : '',
+        item.downloaded > 0 ? '已下载' : ''].filter((label: string): boolean => label !== '').join(' / ');
+      albums.push(album);
+    }
+    page.albums = albums;
+    signal.throwIfAborted();
+    page.items = page.items.filter((item: RemoteManga): boolean =>
+      page.albums.some((album: AlbumLite): boolean => album.id === item.key));
+    for (const album of page.albums) { this.covers.set(album.id, album.coverUrl); }
+    return page;
   }
 
   /** 本地目录与扩展的热门入口独立于关键词搜索；远端请求格式保持原有约定。 */

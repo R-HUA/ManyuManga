@@ -233,7 +233,7 @@ export struct DownloadedPane {
     Column() {
       if (this.items.length === 0 && this.jobs.length === 0) {
         Column() {
-          EmptyView({ message: '还没有已下载的漫画', showRetry: false })
+          EmptyView({ message: '还没有已下载的漫画', showRetry: false, quiet: true })
         }
         .width('100%')
         .layoutWeight(1)

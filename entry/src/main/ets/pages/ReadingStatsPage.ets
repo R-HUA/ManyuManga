@@ -25,19 +25,31 @@ export struct ReadingStatsPage {
 
   @Builder
   private Metric(label: string, value: string) {
-    Row() {
-      Text(label).fontSize(16).fontColor(TEXT_SUB).layoutWeight(1)
-      Text(value).fontSize(24).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN)
-    }.width('100%').padding(20).backgroundColor(CARD).borderRadius(16)
+    Column({ space: 10 }) {
+      Text(label).fontSize(12).fontColor(TEXT_SUB)
+      Text() {
+        ForEach(value.split(' '), (part: string, index: number) => {
+          Span(index % 2 === 0 ? part : ` ${part} `)
+            .fontSize(index % 2 === 0 ? 24 : 12)
+            .fontWeight(index % 2 === 0 ? FontWeight.Bold : FontWeight.Regular)
+            .fontColor(index % 2 === 0 ? TEXT_MAIN : TEXT_SUB)
+        }, (part: string, index: number): string => `${index}_${part}`)
+      }.fontFeature('"tnum" 1')
+    }.width('100%').padding(14).backgroundColor(CARD).borderRadius(16)
+    .alignItems(HorizontalAlign.Start)
   }
 
   build() {
     HdsNavDestination() {
       Scroll() {
         Column({ space: 12 }) {
-          this.Metric('已读作品', `${this.stats.books.length} 部`)
-          this.Metric('已读页数', `${this.stats.pages.length} 页`)
-          this.Metric('阅读时长', this.duration())
+          GridRow({ columns: { xs: 1, sm: 3 }, gutter: { x: 10, y: 12 },
+            breakpoints: { value: [`${360 * this.getUIContext().fp2px(1) / this.getUIContext().vp2px(1)}vp`],
+              reference: BreakpointsReference.ComponentSize } }) {
+            GridCol() { this.Metric('已读作品', `${this.stats.books.length} 部`) }
+            GridCol() { this.Metric('已读页数', `${this.stats.pages.length} 页`) }
+            GridCol() { this.Metric('阅读时长', this.duration()) }
+          }
           if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(13) }
         }.width('100%').padding(16)
       }.width('100%').height('100%').align(Alignment.TopStart)

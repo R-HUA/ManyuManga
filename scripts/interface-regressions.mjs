@@ -7,6 +7,20 @@ function deferred() {
   return { promise, resolve };
 }
 
+async function remoteFixture(env) {
+  const { SourceEntry, SourceInstance, sourceStore } = env.load('data/Sources');
+  const instance = new SourceInstance();
+  instance.id = 'gateway'; instance.endpoint = 'https://example.invalid'; instance.name = '服务';
+  const source = new SourceEntry('existing_extension', '服务来源', 'suwayomi');
+  source.instanceId = instance.id; source.remoteId = '9007199254740993123'; source.endpoint = instance.endpoint;
+  await sourceStore.syncSuwayomi(instance, [source]);
+  const gateway = await sourceStore.gateway();
+  const manga = (id, saved = true, remoteId = source.remoteId) => ({ id, sourceId: remoteId,
+    url: `/manga/${id}`, title: `作品${id}`, author: '作者', artist: null, genre: ['冒险'], thumbnailUrl: `/cover/${id}.jpg`,
+    user: { inLibrary: saved, unreadCount: 2, downloadCount: 1 } });
+  return { sourceStore, source, gateway, manga };
+}
+
 function reader(env) {
   const { Album, Chapter } = env.load('models/Models');
   const album = new Album('jm~reading', '阅读作品');
@@ -46,17 +60,155 @@ export async function interfaceTests(test) {
     assert.equal((await sourceStore.get('jm_a')).enabled, true);
   });
 
-  await test('远程入口只显示当前连接中可用且未隐藏的扩展', async env => {
-    const { SourceEntry, SourceInstance, sourceStore } = env.load('data/Sources');
-    const { SuwayomiSourcesPage } = env.load('pages/sources/SuwayomiSourcesPage');
-    const instance = new SourceInstance(); instance.id = 'gateway'; instance.endpoint = 'https://example.invalid'; instance.name = '服务';
-    const a = new SourceEntry('gateway_a', '服务 · 甲', 'suwayomi'); a.instanceId = instance.id; a.remoteId = 'a';
-    const b = new SourceEntry('gateway_b', '服务 · 乙', 'suwayomi'); b.instanceId = instance.id; b.remoteId = 'b';
-    await sourceStore.syncSuwayomi(instance, [a, b]);
-    await sourceStore.setHidden(b.id, true);
-    const page = new SuwayomiSourcesPage(); await page.load();
-    assert.equal(page.connected, true); assert.deepEqual(page.sources.map(source => source.id), [a.id]);
-    assert.equal(page.displayName(page.sources[0]), '甲');
+  await test('远程书架保留分类与游标，缺失状态或重复游标明确失败', async env => {
+    const { gateway, manga } = await remoteFixture(env);
+    const { suwayomiLibrary } = env.load('data/SuwayomiLibrary');
+    let malformed = false;
+    env.state.handler = async request => {
+      if (request.body.query.includes('categories')) return { categories: { nodes: [{ id: 0, name: '默认', order: -1, default: true }] } };
+      return { mangas: { nodes: malformed ? [{ ...manga(1), user: {} }] : [manga(1)],
+        totalCount: 2, pageInfo: { hasNextPage: true, endCursor: 'next' } } };
+    };
+    assert.equal((await suwayomiLibrary.categories(gateway))[0].order, -1);
+    const page = await suwayomiLibrary.library(gateway, 0, '作品', 'added', '');
+    assert.equal(page.items[0].remoteSourceId, '9007199254740993123');
+    assert.equal(page.items[0].coverUrl, 'https://example.invalid/cover/1.jpg');
+    assert.equal(page.endCursor, 'next'); assert.equal(page.totalCount, 2); assert.equal(page.hasNextPage, true);
+    const variables = env.state.calls.at(-1).body.variables;
+    assert.deepEqual(variables.filter.categoryId, { isNull: true });
+    assert.deepEqual(variables.order, [{ by: 'IN_LIBRARY_AT', byType: 'DESC' }]);
+    await assert.rejects(suwayomiLibrary.library(gateway, -1, '', 'title', 'next'), /游标/);
+    malformed = true;
+    await assert.rejects(suwayomiLibrary.library(gateway, -1, '', 'title', ''), /状态|数字/);
+    env.state.handler = async () => ({ mangas: { nodes: [] } });
+    await assert.rejects(suwayomiLibrary.library(gateway, -1, '', 'title', ''), /格式/);
+  });
+
+  await test('网关搜索单独成组，隐藏扩展不丢旧作品身份，新身份保存失败不发布', async env => {
+    const { sourceStore, source, gateway, manga } = await remoteFixture(env);
+    const { sourceApi } = env.load('data/SourceApi');
+    const { RequestAbortGroup } = env.load('util/RequestAbort');
+    const { SourceManagementPage } = env.load('pages/sources/SourceManagementPage');
+    await sourceStore.setHidden(source.id, true);
+    const entries = await sourceApi.searchEntries();
+    assert.deepEqual(entries.filter(item => item.kind === 'suwayomi').map(item => item.id), [gateway.id]);
+    const settings = new SourceManagementPage(); await settings.load();
+    assert.equal(settings.sources.some(item => item.kind === 'suwayomi'), false);
+    let items = [manga(1)];
+    env.state.handler = async () => ({ mangas: { nodes: items, totalCount: items.length,
+      pageInfo: { hasNextPage: false, endCursor: null } } });
+    const result = await sourceApi.remoteLibrary(gateway, -1, '', 'added', '', new RequestAbortGroup());
+    assert.equal(result.albums[0].id, 'existing_extension~1');
+    assert.equal(result.items[0].key, result.albums[0].id);
+    const rules = env.load('data/stores/FilterStores').blockTagsStore;
+    await rules.addRule('', 'tag', '冒险');
+    const blocked = await sourceApi.remoteLibrary(gateway, -1, '', 'added', '', new RequestAbortGroup());
+    assert.equal(blocked.albums.length, 0);
+    items = [manga(2, true, 'new_remote')]; env.state.failFlush = true;
+    await assert.rejects(sourceApi.remoteLibrary(gateway, -1, '', 'added', '', new RequestAbortGroup()), /磁盘/);
+    assert.equal(sourceStore.peek('gateway_new_remote'), null);
+    const [a, b] = await Promise.all([
+      sourceStore.bindSuwayomiSources(gateway, ['new_remote']), sourceStore.bindSuwayomiSources(gateway, ['new_remote'])]);
+    assert.equal(a[0].id, b[0].id);
+    assert.equal((await sourceStore.list()).filter(item => item.remoteId === 'new_remote').length, 1);
+  });
+
+  await test('远程分类切换取消旧请求，空的可见页仍能按服务端游标继续，离页拒收结果', async env => {
+    const { gateway, manga } = await remoteFixture(env);
+    const api = env.load('data/SourceApi').sourceApi;
+    const { RemoteMangaPage } = env.load('data/SuwayomiLibrary');
+    const { AlbumLite } = env.load('models/Models');
+    const { SuwayomiLibraryPage } = env.load('pages/SuwayomiLibraryPage');
+    const pending = deferred(), requests = [];
+    api.remoteLibrary = async (_source, category, _query, _sort, cursor, signal) => {
+      requests.push({ category, cursor, signal });
+      if (category === 1) return pending.promise;
+      const result = new RemoteMangaPage();
+      if (cursor === '') { result.hasNextPage = true; result.endCursor = 'next'; }
+      else result.albums = [new AlbumLite('existing_extension~2', '新分类作品')];
+      return result;
+    };
+    const page = new SuwayomiLibraryPage(); page.active = true; page.gateway = gateway; page.connected = true;
+    page.categoryId = 1; const old = page.reload(); await until(() => requests.length === 1);
+    page.categoryId = 2; await page.reload();
+    assert.equal(requests[0].signal.aborted(), true); assert.equal(page.more, true); assert.equal(page.albums.length, 0);
+    await page.loadLibrary(); assert.equal(requests.at(-1).cursor, 'next');
+    assert.equal(page.albums[0].title, '新分类作品'); assert.equal(page.more, false);
+    const oldResult = new RemoteMangaPage(); oldResult.albums = [new AlbumLite('old~1', '旧分类')];
+    pending.resolve(oldResult); await old; assert.equal(page.albums[0].title, '新分类作品');
+    const hidden = deferred(); api.remoteLibrary = async () => hidden.promise;
+    const late = page.reload(); page.hide(); hidden.resolve(oldResult); await late;
+    assert.equal(page.albums.length, 0); assert.equal(page.loading, false);
+  });
+
+  await test('远程扩展检索隐藏已收藏不提前结束分页，单源失败独立重试', async env => {
+    const { gateway } = await remoteFixture(env);
+    const { suwayomiLibrary, RemoteSource, RemoteMangaPage, RemoteManga } = env.load('data/SuwayomiLibrary');
+    const { AlbumLite } = env.load('models/Models');
+    const api = env.load('data/SourceApi').sourceApi, calls = [];
+    suwayomiLibrary.serverSources = async () => ['a', 'b'].map(id => {
+      const source = new RemoteSource(); source.id = id; source.displayName = id; return source;
+    });
+    let fail = true;
+    api.remoteSearch = async (_gateway, source, query, number) => {
+      calls.push({ source, query, number });
+      if (source === 'b' && fail) throw new Error('单源失败');
+      const result = new RemoteMangaPage(), item = new RemoteManga();
+      item.key = `${source}~${number}`; item.inLibrary = number === 1;
+      result.items = [item]; result.albums = [new AlbumLite(item.key, '作品')]; result.hasNextPage = number === 1;
+      return result;
+    };
+    const page = new (env.load('pages/SuwayomiLibraryPage').SuwayomiLibraryPage)();
+    page.active = true; page.gateway = gateway; page.explore = true; page.submitted = '书名'; page.hideSaved = true;
+    await page.reload(); const [a, b] = page.groups;
+    assert.equal(a.items.length, 0); assert.equal(a.more, true); assert.equal(a.page, 1);
+    assert.match(b.error, /单源失败/); assert.equal(b.page, 0);
+    await page.loadRemote(a); assert.equal(a.items[0].id, 'a~2'); assert.equal(a.more, false);
+    fail = false; await page.loadRemote(b); assert.equal(b.page, 1); assert.equal(b.error, '');
+    assert.ok(calls.every(call => call.query === '书名'));
+  });
+
+  await test('详情远程收藏与本地收藏隔离，失败保留状态，迟到响应不覆盖新页面', async env => {
+    await remoteFixture(env);
+    const remote = env.load('data/SuwayomiLibrary').suwayomiLibrary;
+    const { library } = env.load('data/Library'), { Album } = env.load('models/Models');
+    const key = 'existing_extension~1'; await library.add(new Album(key, '本地收藏'));
+    const page = new (env.load('pages/WorkDetailPage').WorkDetailPage)(); page.aid = key;
+    remote.inLibrary = async () => false;
+    await page.loadRemoteShelf(); assert.equal(page.remoteReady, true); assert.equal(page.remoteSaved, false);
+    remote.setInLibrary = async () => { throw new Error('保存失败'); };
+    await page.saveRemoteShelf(true); assert.equal(page.remoteSaved, false); assert.match(page.remoteError, /保存失败/);
+    remote.setInLibrary = async (_source, _id, saved) => saved;
+    await page.saveRemoteShelf(true); assert.equal(page.remoteSaved, true);
+    let dialog; page.getUIContext = () => ({ showAlertDialog: value => { dialog = value; } });
+    page.toggleRemoteShelf(); assert.ok(dialog); assert.equal(page.remoteSaved, true);
+    dialog.primaryButton.action(); assert.equal(page.remoteSaved, true);
+    await page.saveRemoteShelf(false); assert.equal(page.remoteSaved, false);
+    assert.ok(await library.workFor(key));
+    const late = deferred(); let writeStarted = false;
+    remote.setInLibrary = async () => { writeStarted = true; return late.promise; };
+    const saving = page.saveRemoteShelf(true); await until(() => writeStarted);
+    page.cancelRequests(); late.resolve(true); await saving; assert.equal(page.remoteSaved, false);
+    assert.equal(page.remoteBusy, false);
+    page.renewRequests(); await page.loadRemoteShelf(); assert.equal(page.remoteReady, true);
+  });
+
+  await test('全局搜索只请求远程书架，不散开扩展分组且编辑时取消远程请求', async env => {
+    const { source, manga } = await remoteFixture(env);
+    const { sourceApi } = env.load('data/SourceApi'), { SearchResult } = env.load('models/Models');
+    sourceApi.searchSource = async () => new SearchResult(0, []);
+    env.state.handler = async request => {
+      assert.ok(request.body.query.includes('query Library'));
+      return { mangas: { nodes: [manga(1)], totalCount: 1, pageInfo: { hasNextPage: false, endCursor: null } } };
+    };
+    const page = new (env.load('pages/SearchAllPage').SearchAllPage)(); page.query = '作品';
+    await page.search(); const remote = page.groups.filter(group => group.source.kind === 'suwayomi');
+    assert.equal(remote.length, 1); assert.equal(remote[0].source.id, 'gateway');
+    assert.equal(remote[0].items[0].id, `${source.id}~1`); assert.equal(env.state.calls.length, 1);
+    const signal = page.remoteRequests; page.editQuery(); assert.equal(signal.aborted(), true);
+    const { Album } = env.load('models/Models');
+    await env.load('data/SourceSwitch').discoverSources(new Album('jm~1', '不同标题'), () => true);
+    assert.equal(env.state.calls.length, 2);
   });
 
   await test('图源入口按注册动作执行浏览、配置和导入，停用图源仍可管理', async env => {

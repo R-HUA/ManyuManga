@@ -91,7 +91,7 @@ function environment() {
       source = source.replace(/  build\(\) \{[\s\S]*?(?=  private reportVisibility)/, '');
     }
     // 保留真实页面方法，只移除本地 Node 无法执行的 ArkUI 声明式布局。
-    if (/[/\\]pages[/\\](SearchAllPage|ExplorePage|CategoryPage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|sources[/\\](SourceEntryCard|SourceManagementPage|SuwayomiSourcesPage)|detail[/\\]WorkTags|reader[/\\]ReaderImageItem|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
+    if (/[/\\]pages[/\\](SearchAllPage|SuwayomiLibraryPage|WorkDetailPage|ExplorePage|CategoryPage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|sources[/\\](SourceEntryCard|SourceManagementPage)|detail[/\\]WorkTags|reader[/\\]ReaderImageItem|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
       const builder = source.indexOf('  @Builder');
       const end = builder >= 0 ? builder : source.indexOf('  build()');
       assert.ok(end > 0);

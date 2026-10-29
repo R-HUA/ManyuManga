@@ -117,11 +117,9 @@ export struct SourceEntryCard {
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.statusLine())
-          .fontColor(TEXT_SUB)
-          .fontSize(12)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        if (!this.source.enabled) {
+          Text('已停用').fontColor(TEXT_SUB).fontSize(12)
+        }
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
@@ -131,19 +129,10 @@ export struct SourceEntryCard {
         .fontColor([TEXT_SUB])
     }
     .width('100%')
-    .constraintSize({ minHeight: 60 })
+    .constraintSize({ minHeight: 56 })
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.99 })
     .onClick(() => this.onPrimaryBrowse())
   }
 
-  private statusLine(): string {
-    if (!this.source.enabled) {
-      return '已停用';
-    }
-    if (this.source.kind === 'local') {
-      return '已导入的本地漫画文件';
-    }
-    return this.presentation().description;
-  }
 }

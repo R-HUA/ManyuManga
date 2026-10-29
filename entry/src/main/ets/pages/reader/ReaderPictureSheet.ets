@@ -2,7 +2,8 @@
  * entry/src/main/ets/pages/reader/ReaderPictureSheet.ets
  * 阅读器底部「画面」浮卡内容：随底栏胶囊上方展开，与工具栏共享调色板，不占用整屏半模态。
  */
-import { PRIMARY, PRIMARY_SOFT, readerHudPalette } from '../../common/Theme';
+import { PRIMARY, PRIMARY_SOFT } from '../../common/Theme';
+import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
 import { ReaderOptions, EYE_COMFORT_DEFAULT, EYE_COMFORT_MAX, EYE_COMFORT_MIN } from '../../data/ReaderOptions';
 
 @Component
@@ -25,7 +26,7 @@ export struct ReaderPictureSheet {
       Row({ space: 10 }) {
         Text('画布底色')
           .fontSize(14)
-          .fontColor(readerHudPalette(this.bgPaper).text)
+          .fontColor($r('sys.color.font_primary'))
           .width(66)
 
         Row({ space: 8 }) {
@@ -43,7 +44,7 @@ export struct ReaderPictureSheet {
 
       Divider()
         .strokeWidth(0.5)
-        .color(readerHudPalette(this.bgPaper).divider)
+        .color($r('sys.color.comp_divider'))
 
       this.SwitchRow('双页模式封面独占首页', this.options.coverOffset, (value: boolean): void => {
         this.options.coverOffset = value;
@@ -80,7 +81,7 @@ export struct ReaderPictureSheet {
       Text(label)
         .fontSize(12)
         .fontWeight(active ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(active ? PRIMARY : readerHudPalette(this.bgPaper).textSub)
+        .fontColor(active ? PRIMARY : $r('sys.color.font_secondary'))
     }
     .layoutWeight(1)
     .height(34)
@@ -98,9 +99,10 @@ export struct ReaderPictureSheet {
     Row() {
       Text(label)
         .fontSize(14)
-        .fontColor(readerHudPalette(this.bgPaper).text)
+        .fontColor($r('sys.color.font_primary'))
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: isOn })
+        .systemMaterial(EMPTY_MATERIAL)
         .selectedColor(PRIMARY)
         .onChange((value: boolean) => {
           onToggle(value);
@@ -116,9 +118,11 @@ export struct ReaderPictureSheet {
     Row({ space: 10 }) {
       Text(label)
         .fontSize(14)
-        .fontColor(readerHudPalette(this.bgPaper).text)
+        .fontColor($r('sys.color.font_primary'))
         .width(66)
       Slider({ value: value, min: min, max: max, step: 1, style: SliderStyle.OutSet })
+        .showTips(false)
+        .systemMaterial(EMPTY_MATERIAL)
         .selectedColor(PRIMARY)
         .layoutWeight(1)
         .onChange((next: number, mode: SliderChangeMode) => {
@@ -129,7 +133,7 @@ export struct ReaderPictureSheet {
         })
       Text(`${Math.round(value)}${unit}`)
         .fontSize(12)
-        .fontColor(readerHudPalette(this.bgPaper).textSub)
+        .fontColor($r('sys.color.font_secondary'))
         .width(40)
         .textAlign(TextAlign.End)
     }

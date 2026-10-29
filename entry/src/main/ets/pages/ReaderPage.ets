@@ -1,10 +1,10 @@
 import { ReaderController } from './reader/ReaderController';
-import { HdsNavDestination } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { ReaderHud, ReaderPanelKind } from './reader/ReaderHud';
 import { ReaderChapterSheet } from './reader/ReaderChapterSheet';
 import { ReaderZoneOverlay } from './reader/ReaderZoneOverlay';
 import { ReaderImageItem } from './reader/ReaderImageItem';
-import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
+import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { EmptyView } from '../common/Components';
 import { READER_BG, PRIMARY, ACCENT, CHIP_R, eyeComfortTint, readerHudPalette } from '../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode, asNumber, asRecord, asString } from '../models/Models';
@@ -14,6 +14,10 @@ import { MangaRouteParams, ROUTE_SEARCH } from '../common/Route';
 const SCRAMBLE_DEFAULT: number = 220980;
 /** 护眼米黄背景 */
 const PAPER_BG: string = '#F5EFE2';
+
+interface ReaderPopupState {
+  isVisible: boolean;
+}
 
 @Component
 export struct ReaderPage {
@@ -227,12 +231,9 @@ export struct ReaderPage {
   private HudLayer() {
     ReaderHud({
       panel: this.$panel,
-      hudVisible: this.$hudVisible,
       pages: this.$pages,
-      albumTitle: this.$albumTitle,
       currentPage: this.$currentPage,
-      zoomScale: this.$zoomScale,
-      topSafeVp: this.$topSafeVp,
+      maxPanelHeight: Math.max(80, this.canvasHeightVp - this.topSafeVp - this.bottomSafeVp - 156),
       sliderDragging: this.$sliderDragging,
       sliderValue: this.$sliderValue,
       scrambleId: this.$scrambleId,
@@ -241,13 +242,8 @@ export struct ReaderPage {
       mode: this.$mode,
       jumpToPage: (page: number): void => this.controller.jumpToPage(page),
       chapters: this.$chapters,
-      bottomSafeVp: this.$bottomSafeVp,
       switchMode: (m: ReaderMode): void => this.controller.switchMode(m),
       openSheet: (kind: ReaderSheetKind): void => this.controller.openSheet(kind),
-      goBack: (): void => this.controller.goBack(),
-      resetZoom: (animated: boolean): void => this.controller.resetZoom(animated),
-      toggleBookmark: (): Promise<void> => this.controller.toggleBookmark(),
-      bookmarks: this.$bookmarks,
       options: this.$options,
       brightnessValue: this.$brightnessValue,
       bgPaper: this.$bgPaper,
@@ -398,8 +394,28 @@ export struct ReaderPage {
           this.PagePill()
         }
         if (this.hudVisible) {
-          this.HudLayer()
+          Column().width('100%').height('100%').hitTestBehavior(HitTestMode.Block)
+            .onClick(() => { this.panel = 'none'; this.hudVisible = false; })
         }
+        Row().width(1).height(1).align(Alignment.Bottom)
+          .margin({ bottom: this.bottomSafeVp + 12 })
+          .bindPopup(this.hudVisible, {
+            builder: this.HudLayer,
+            width: Math.max(240, this.canvasWidthVp - 32),
+            placement: Placement.Top, targetSpace: 0, enableArrow: false,
+            radius: 28, mask: false, autoCancel: false,
+            systemMaterial: IMMERSIVE_REGULAR_MATERIAL,
+            onStateChange: (event: ReaderPopupState): void => {
+              if (!event.isVisible) { this.hudVisible = false; this.sliderDragging = false; this.controller.onHudTouch(false); }
+            },
+            onWillDismiss: (action: DismissPopupAction): void => {
+              if (action.reason === DismissReason.PRESS_BACK && this.panel !== 'none') {
+                this.panel = 'none';
+              } else {
+                this.panel = 'none'; this.hudVisible = false; action.dismiss();
+              }
+            }
+          })
         if (this.zoneEditorVisible) {
           ReaderZoneOverlay({
             options: this.$options,
@@ -436,7 +452,17 @@ export struct ReaderPage {
         }
       })
     }
-    .hideTitleBar(true)
+    .titleBar({ content: { title: { mainTitle: this.chapters[this.chapterIndex]?.title || this.albumTitle },
+      menu: { value: [
+        { content: { icon: this.bookmarks.some((item: ReadingProgress): boolean =>
+            item.chapterId === this.controller.currentChapterId() && item.page === this.currentPage)
+            ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
+          label: '书签', action: (): void => { this.controller.toggleBookmark(); } } },
+        { content: { icon: $r('sys.symbol.arrow_counterclockwise'), label: '复位缩放',
+          isEnabled: this.zoomScale > 1, action: (): void => { this.controller.resetZoom(true); } } }
+      ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: false })
+    .titleMode(HdsNavDestinationTitleMode.MINI)
+    .hideTitleBar(!this.hudVisible)
     .backgroundColor(this.bgPaper ? PAPER_BG : READER_BG)
     .onReady((ctx: NavDestinationContext) => {
       if (this.controller.paramReady) {
@@ -463,6 +489,9 @@ export struct ReaderPage {
       });
     })
     .onHidden(() => {
+      this.hudVisible = false;
+      this.panel = 'none';
+      this.sheetVisible = false;
       this.readerActive = false;
       this.controller.flushProgress();
       this.controller.activitySince = 0; this.controller.readerVisible = false; this.controller.chapterToken++;
@@ -472,6 +501,10 @@ export struct ReaderPage {
       this.controller.restoreSystemBarToTheme();
     })
     .onBackPressed(() => {
+      if (this.hudVisible) {
+        if (this.panel !== 'none') { this.panel = 'none'; } else { this.hudVisible = false; }
+        return true;
+      }
       this.controller.flushProgress();
       return false;
     })

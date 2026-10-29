@@ -17,18 +17,6 @@ export struct SuwayomiConnectSheet {
   build() {
     Scroll() {
       Column({ space: 16 }) {
-        Text(this.instance === '' ? '接入 Suwayomi 聚合服务' : '书源服务连接配置')
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .width('100%')
-
-        Text('支持接入自建 Suwayomi-Server，自动枚举服务端已安装的漫画扩展并纳入全源并发检索与无缝换源。')
-          .fontSize(12)
-          .fontColor(TEXT_SUB)
-          .lineHeight(18)
-          .width('100%')
-
         Column({ space: 8 }) {
           Text('服务别名')
             .fontSize(12)
@@ -106,16 +94,16 @@ export struct SuwayomiConnectSheet {
             .width('100%')
         }
 
-        Text(this.busy ? '正在连接并同步扩展列表…' : '测试连接并导入书源')
+        Button(this.busy ? '正在连接…' : '连接书库', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.EMPHASIZED })
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
           .fontColor(Color.White)
-          .textAlign(TextAlign.Center)
           .width('100%')
           .height(46)
           .borderRadius(23)
           .backgroundColor(PRIMARY)
           .opacity(this.busy ? 0.6 : 1.0)
+          .enabled(!this.busy)
           .onClick(() => {
             if (!this.busy) {
               this.connect();
@@ -126,6 +114,7 @@ export struct SuwayomiConnectSheet {
       .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
     }
     .width('100%')
+    .align(Alignment.TopStart)
   }
 
   @Builder

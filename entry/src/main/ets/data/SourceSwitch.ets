@@ -1,4 +1,5 @@
-import { Album, Chapter, MetadataTerm, ReadingProgress } from '../models/Models';
+import { Album, AlbumLite, Chapter, MetadataTerm, ReadingProgress } from '../models/Models';
+import { RequestAbortGroup } from '../util/RequestAbort';
 import { sourceApi } from './SourceApi';
 import { sourceId, sourceStore, SourceEntry } from './Sources';
 import { library, LibraryWork } from './Library';
@@ -19,16 +20,20 @@ export class SourceDiscovery {
 /** 信息不足的结果保留给人工选择，不因标题相似而自动关联。 */
 export async function discoverSources(current: Album, valid: () => boolean): Promise<SourceDiscovery> {
   const result: SourceDiscovery = new SourceDiscovery();
-  const sources: Array<SourceEntry> = (await sourceStore.list()).filter((s: SourceEntry) => s.enabled && s.id !== sourceId(current.id));
+  const origin: SourceEntry | null = sourceStore.peek(sourceId(current.id));
+  const sources: Array<SourceEntry> = (await sourceApi.searchEntries()).filter((s: SourceEntry): boolean =>
+    s.id !== sourceId(current.id) && !(s.kind === 'suwayomi' && s.instanceId === origin?.instanceId));
   let cursor: number = 0;
   const worker = async (): Promise<void> => {
     while (cursor < sources.length && valid()) {
       const source: SourceEntry = sources[cursor++];
       try {
-        const candidates = await sourceApi.searchSource(source, current.name, 1);
+        const candidates: Array<AlbumLite> = source.kind === 'suwayomi' && source.remoteId === ''
+          ? (await sourceApi.remoteLibrary(source, -1, current.name, 'added', '', new RequestAbortGroup())).albums
+          : (await sourceApi.searchSource(source, current.name, 1)).list;
         if (!valid()) { return; }
         const matches: Array<Album> = [];
-        for (const candidate of candidates.list.filter((a) => normalizedTitle(a.title) === normalizedTitle(current.name)).slice(0, 5)) {
+        for (const candidate of candidates.filter((a) => a.id !== current.id && normalizedTitle(a.title) === normalizedTitle(current.name)).slice(0, 5)) {
           const album: Album = await sourceApi.album(candidate.id);
           if (!valid()) { return; }
           if (highConfidence(current, album)) { matches.push(album); }

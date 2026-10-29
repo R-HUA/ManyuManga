@@ -222,26 +222,26 @@ export struct ProfilePage {
 
   @Builder
   private NavRow(icon: Resource, title: string, valueText: string, onTap: () => void) {
-    Row({ space: 12 }) {
+    Row({ space: 16 }) {
       SymbolGlyph(icon)
-        .fontSize(20)
+        .fontSize(24).fontWeight(FontWeight.Medium)
         .fontColor([PRIMARY])
       Text(title)
-        .fontSize(15)
+        .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
       if (valueText !== '') {
         Text(valueText)
-          .fontSize(13)
+          .fontSize(14)
           .fontColor(TEXT_SUB)
       }
       SymbolGlyph($r('sys.symbol.chevron_right'))
-        .fontSize(14)
+        .fontSize(16)
         .fontColor([TEXT_SUB])
     }
     .width('100%')
-    .constraintSize({ minHeight: 48 })
+    .constraintSize({ minHeight: 56 })
     .alignItems(VerticalAlign.Center)
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
     .onClick(() => {
@@ -251,12 +251,12 @@ export struct ProfilePage {
 
   @Builder
   private ToggleRow(options: ToggleRowOptions) {
-    Row({ space: 12 }) {
+    Row({ space: 16 }) {
       SymbolGlyph(options.icon)
-        .fontSize(20)
+        .fontSize(24).fontWeight(FontWeight.Medium)
         .fontColor([PRIMARY])
       Text(options.title)
-        .fontSize(15)
+        .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
@@ -269,38 +269,38 @@ export struct ProfilePage {
         })
     }
     .width('100%')
-    .constraintSize({ minHeight: 48 })
+    .constraintSize({ minHeight: 56 })
     .alignItems(VerticalAlign.Center)
   }
 
   build() {
     HdsNavigation() {
       Scroll(this.scroller) {
-        Column({ space: 16 }) {
+        Column({ space: 12 }) {
           // 2. 常用功能快捷入口
-          Column({ space: 6 }) {
+          Column() {
             this.NavRow($r('sys.symbol.clock'), '阅读统计', '', () => { this.stack.pushPathByName(ROUTE_STATS, {} as MangaRouteParams); })
-            Divider().color(DIVIDER).margin({ left: 32 })
+            Divider().strokeWidth('1px').color(DIVIDER).margin({ left: 40 })
             this.NavRow($r('sys.symbol.arrow_down_circle'), '离线下载与导出', '', () => {
               this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams);
             })
-            Divider().color(DIVIDER).margin({ left: 32 })
-            this.NavRow($r('sys.symbol.shield_checkered'), '全局屏蔽规则', '', () => {
+            Divider().strokeWidth('1px').color(DIVIDER).margin({ left: 40 })
+            this.NavRow($r('sys.symbol.checkmark_shield'), '全局屏蔽规则', '', () => {
               this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: '' } as MangaRouteParams);
             })
-            Divider().color(DIVIDER).margin({ left: 32 })
+            Divider().strokeWidth('1px').color(DIVIDER).margin({ left: 40 })
             this.NavRow($r('sys.symbol.square_grid_2x2'), '图源设置', '', () => {
               this.stack.pushPathByName(ROUTE_SOURCE_SETTINGS, {} as MangaRouteParams);
             })
           }
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+          .padding({ left: 12, right: 12, top: 4, bottom: 4 })
           .width('100%')
           .backgroundColor(CARD)
-          .borderRadius(20)
+          .borderRadius(16)
           .border({ width: 0.5, color: DIVIDER })
 
           // 3. 外观与阅读偏好
-          Column({ space: 4 }) {
+          Column() {
             SettingSelectRow({
               title: '全局色彩主题',
               subtitle: '',
@@ -310,7 +310,7 @@ export struct ProfilePage {
                 this.changeTheme(idx);
               }
             })
-            Divider().color(DIVIDER).margin({ left: 16 })
+            Divider().strokeWidth('1px').color(DIVIDER)
 
             SettingSelectRow({
               title: '默认阅读模式',
@@ -321,7 +321,7 @@ export struct ProfilePage {
                 this.saveOption('reader', idx);
               }
             })
-            Divider().color(DIVIDER).margin({ left: 16 })
+            Divider().strokeWidth('1px').color(DIVIDER)
 
             SettingSelectRow({
               title: '章节预加载页数',
@@ -333,11 +333,11 @@ export struct ProfilePage {
                 this.saveOption('preload', counts[idx] ?? 3);
               }
             })
-            Divider().color(DIVIDER).margin({ left: 16 })
+            Divider().strokeWidth('1px').color(DIVIDER)
 
             Row() {
               Text('阅读时自动缓存原图')
-                .fontSize(15)
+                .fontSize(16)
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('sys.color.font_primary'))
                 .layoutWeight(1)
@@ -352,11 +352,11 @@ export struct ProfilePage {
             .width('100%')
             .constraintSize({ minHeight: 48 })
 
-            Divider().color(DIVIDER).margin({ left: 16 })
+            Divider().strokeWidth('1px').color(DIVIDER)
 
             Row() {
               Text('记录阅读历史')
-                .fontSize(15)
+                .fontSize(16)
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('sys.color.font_primary'))
                 .layoutWeight(1)
@@ -371,34 +371,34 @@ export struct ProfilePage {
             .width('100%')
             .constraintSize({ minHeight: 48 })
           }
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+          .padding({ left: 12, right: 12, top: 4, bottom: 4 })
           .width('100%')
           .backgroundColor(CARD)
-          .borderRadius(20)
+          .borderRadius(16)
           .border({ width: 0.5, color: DIVIDER })
 
           // 4. 存储、隐私与数据备份
-          Column({ space: 4 }) {
+          Column() {
             SettingSelectRow({
               title: $r('app.string.export_quality'),
               options: [$r('app.string.export_quality_visual'), $r('app.string.export_quality_compact')],
               selectedIndex: this.archiveQuality,
               onChanged: (index: number): void => { this.saveOption('archiveQuality', index); }
             })
-            Divider().color(DIVIDER).margin({ left: 16 })
+            Divider().strokeWidth('1px').color(DIVIDER)
 
             this.ToggleRow({ icon: $r('sys.symbol.lock_fill'), title: '应用锁保护', isOn: this.securityLock, enabled: true,
               onChange: (on: boolean): void => { this.confirmLock(on); } })
-            Divider().color(DIVIDER).margin({ left: 32 })
+            Divider().strokeWidth('1px').color(DIVIDER).margin({ left: 40 })
 
             this.ToggleRow({ icon: $r('sys.symbol.eye_slash'), title: '隐私保护', isOn: this.previewOn,
               enabled: !this.privacyBusy, onChange: (on: boolean): void => { this.saveOption('preview', on); } })
-            Divider().color(DIVIDER).margin({ left: 32 })
+            Divider().strokeWidth('1px').color(DIVIDER).margin({ left: 40 })
 
             this.NavRow($r('sys.symbol.arrow_clockwise'), '全量备份与恢复', '', () => {
               this.openBackupMenu();
             })
-            Divider().color(DIVIDER).margin({ left: 32 })
+            Divider().strokeWidth('1px').color(DIVIDER).margin({ left: 40 })
 
             this.NavRow(
               $r('sys.symbol.trash'),
@@ -410,16 +410,16 @@ export struct ProfilePage {
                 promptAction.showToast({ message: '已释放图片缓存' });
               }
             )
-            Divider().color(DIVIDER).margin({ left: 32 })
+            Divider().strokeWidth('1px').color(DIVIDER).margin({ left: 40 })
 
             this.NavRow($r('sys.symbol.exclamationmark_circle'), '清理旧版遗留数据', '', () => {
               this.cleanLegacy();
             })
           }
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+          .padding({ left: 12, right: 12, top: 4, bottom: 4 })
           .width('100%')
           .backgroundColor(CARD)
-          .borderRadius(20)
+          .borderRadius(16)
           .border({ width: 0.5, color: DIVIDER })
 
           if (this.message !== '') {
@@ -446,14 +446,14 @@ export struct ProfilePage {
         }
         .padding({
           left: 16,
-          right: 16,
-          bottom: (this.breakpoint === 'lg' ? 28 : TAB_BAR_HEIGHT + 28) + this.bottomInset
+          right: 16
         })
         .width('100%')
       }
       .layoutWeight(1)
       .width('100%')
       .scrollBar(BarState.Off).align(Alignment.TopStart).clip(false)
+      .contentEndOffset((this.breakpoint === 'lg' ? 16 : TAB_BAR_HEIGHT + 16) + this.bottomInset)
     }
     .titleBar({ content: { title: { mainTitle: '我的', mainTitleSize: TitleSize.TITLE_ML } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
     .titleMode(HdsNavigationTitleMode.MINI)

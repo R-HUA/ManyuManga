@@ -1,12 +1,12 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
-import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
+import { EMPTY_MATERIAL, HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
 import { EmptyView } from '../common/Components';
-import { BG, BAR_LIGHT, SUB_CARD, PRIMARY, TEXT_SUB, COVER_R } from '../common/Theme';
+import { BG, BAR_LIGHT, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -25,6 +25,7 @@ export struct ChapterPreviewPage {
   @State sliderDragging: boolean = false;
   @State loading: boolean = true;
   @State error: string = '';
+  @State narrowBar: boolean = false;
   private scroller: Scroller = new Scroller();
   private loadToken: number = 0;
   private loadSignal: RequestAbortGroup = new RequestAbortGroup();
@@ -90,25 +91,19 @@ export struct ChapterPreviewPage {
   }
 
   @Builder
-  private JumpBar() {
-    Row({ space: 8 }) {
-      Button('从头阅读', {
-        type: ButtonType.Capsule,
-        buttonStyle: ButtonStyleMode.TEXTUAL,
-        controlSize: ControlSize.SMALL
-      })
-        .onClick(() => {
-          this.openReaderAt(0);
-        })
-
+  private ProgressSlider() {
       Slider({
         value: Math.min(this.currentPageIndex + 1, Math.max(this.allPages.length, 1)),
         min: 1,
         max: Math.max(this.allPages.length, 1),
         step: 1,
-        style: SliderStyle.OutSet
+        style: SliderStyle.InSet
       })
         .selectedColor(PRIMARY)
+        .trackColor(SUB_CARD)
+        .trackThickness(24)
+        .blockColor(Color.White)
+        .systemMaterial(EMPTY_MATERIAL)
         .layoutWeight(1)
         .enabled(this.allPages.length > 1)
         .onChange((value: number, mode: SliderChangeMode) => {
@@ -124,23 +119,39 @@ export struct ChapterPreviewPage {
             }
           }
         })
+  }
 
-      Button(`读 P.${Math.min(this.currentPageIndex + 1, Math.max(1, this.allPages.length))}/${this.allPages.length}`, {
-        type: ButtonType.Capsule,
-        buttonStyle: ButtonStyleMode.EMPHASIZED,
-        controlSize: ControlSize.SMALL
-      })
-        .onClick(() => {
-          this.openReaderAt(this.currentPageIndex);
-        })
+  @Builder
+  private JumpBar() {
+    Column({ space: 4 }) {
+      if (this.narrowBar) {
+        Row() { this.ProgressSlider() }.width('100%').height(32)
+      }
+      Row({ space: 8 }) {
+        Button('从头阅读', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+          .height(36).fontSize(14).fontWeight(FontWeight.Medium)
+          .backgroundColor(SUB_CARD).fontColor(TEXT_MAIN).padding({ left: 12, right: 12 })
+          .responseRegion({ x: 0, y: -4, width: '100%', height: 44 })
+          .onClick(() => this.openReaderAt(0))
+        if (this.narrowBar) { Blank().layoutWeight(1) } else { this.ProgressSlider() }
+        Button({ type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.EMPHASIZED }) {
+          Text(`读 P.${Math.min(this.currentPageIndex + 1, Math.max(1, this.allPages.length))}/${this.allPages.length}`)
+            .fontSize(14).fontWeight(FontWeight.Medium).fontFeature('"tnum" 1').fontColor(Color.White)
+        }
+        .height(36).padding({ left: 12, right: 12 })
+        .width((64 + `${this.allPages.length}`.length * 16) * this.getUIContext().fp2px(1) / this.getUIContext().vp2px(1))
+        .responseRegion({ x: 0, y: -4, width: '100%', height: 44 })
+        .onClick(() => this.openReaderAt(this.currentPageIndex))
+      }.width('100%').height(40)
     }
     .width('100%')
-    .height(52)
-    .padding({ left: 12, right: 12 })
-    .borderRadius(26)
+    .height(this.narrowBar ? 92 : 56)
+    .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+    .borderRadius(28)
     .backgroundColor(BAR_LIGHT)
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-    .alignItems(VerticalAlign.Center)
+    .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
+    .border({ width: '1px', color: DIVIDER })
+    .shadow(ShadowStyle.OUTER_FLOATING_SM)
   }
 
   build() {
@@ -185,8 +196,9 @@ export struct ChapterPreviewPage {
                         .height('100%')
 
                       Text(`P.${idx + 1}`)
-                        .fontSize(10)
-                        .fontWeight(FontWeight.Bold)
+                        .fontSize(11)
+                        .fontWeight(FontWeight.Medium)
+                        .fontFeature('"tnum" 1')
                         .fontColor(Color.White)
                         .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                         .borderRadius(6)
@@ -196,6 +208,7 @@ export struct ChapterPreviewPage {
                     .width('100%')
                     .aspectRatio(0.72)
                     .borderRadius(COVER_R)
+                    .border({ width: '1px', color: DIVIDER })
                     .clip(true)
                     .backgroundColor(SUB_CARD)
                   }
@@ -210,7 +223,8 @@ export struct ChapterPreviewPage {
             .columnsTemplate(this.columnsTemplateStr())
             .columnsGap(10)
             .rowsGap(12)
-            .padding({ left: 16, right: 16, top: 12, bottom: 84 + this.bottomInset })
+            .padding({ left: 16, right: 16, top: 12 })
+            .contentEndOffset((this.narrowBar ? 120 : 84) + this.bottomInset)
             .width('100%')
             .height('100%')
             .onScrollIndex((first: number) => {
@@ -229,6 +243,9 @@ export struct ChapterPreviewPage {
           }
           .width('100%')
           .layoutWeight(1)
+          .onAreaChange((_old: Area, area: Area) => {
+            this.narrowBar = Number(area.width) < 360 * this.getUIContext().fp2px(1) / this.getUIContext().vp2px(1);
+          })
         }
       }
       .width('100%')
@@ -241,7 +258,7 @@ export struct ChapterPreviewPage {
         menu: {
           value: [{
             content: {
-              icon: $r('sys.symbol.dot_grid_2x2'),
+              icon: $r('sys.symbol.square_grid_2x2'),
               label: `${this.columns}列`,
               isEnabled: this.allPages.length > 0,
               action: (): void => this.cycleColumns()

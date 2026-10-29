@@ -719,6 +719,7 @@ export class ReaderController {
     this.host.sheetKind = kind;
     if (kind === 'index') {
       this.host.panel = 'none';
+      this.host.hudVisible = false;
       this.host.sheetVisible = true;
     } else {
       this.host.sheetVisible = false;

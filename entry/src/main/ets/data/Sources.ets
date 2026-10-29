@@ -6,7 +6,7 @@ import { assertDatabaseGeneration, databaseGeneration } from './db/AppDatabase';
 export type SourceKind = 'jm' | 'suwayomi' | 'local' | 'eh';
 export type SourceAuth = 'none' | 'basic' | 'login';
 
-/** 每个服务端子书源独立参与检索，凭据由同一服务实例共享。 */
+/** 扩展身份仅供作品路由使用，凭据由同一服务实例共享。 */
 export class SourceEntry {
   id: string = '';
   instanceId: string = '';
@@ -239,6 +239,40 @@ class SourceStore {
     return entry;
   }
 
+  /** 服务端新增扩展首次出现在书库时补齐身份，已有作品键保持不变。 */
+  bindSuwayomiSources(gateway: SourceEntry, remoteIds: Array<string>): Promise<Array<SourceEntry>> {
+    const expected: number = databaseGeneration();
+    const next: Promise<Array<SourceEntry>> = this.queue.then(async (): Promise<Array<SourceEntry>> => {
+      assertDatabaseGeneration(expected);
+      const entries: Array<SourceEntry> = await this.list();
+      const current: SourceInstance | null = await this.connection();
+      if (current === null || current.id !== gateway.instanceId || current.endpoint !== gateway.endpoint) {
+        throw new Error('服务连接已改变，请刷新书库');
+      }
+      const result: Array<SourceEntry> = [];
+      let changed: boolean = false;
+      for (const remoteId of remoteIds) {
+        let entry: SourceEntry | undefined = entries.find((item: SourceEntry): boolean =>
+          item.kind === 'suwayomi' && item.instanceId === current.id && item.remoteId === remoteId);
+        if (entry === undefined) {
+          entry = new SourceEntry(`${current.id}_${remoteId}`, current.name, 'suwayomi');
+          entry.instanceId = current.id;
+          entry.endpoint = current.endpoint;
+          entry.remoteId = remoteId;
+          entry.auth = current.auth;
+          entries.push(entry);
+          changed = true;
+        }
+        result.push(copySource(entry));
+      }
+      assertDatabaseGeneration(expected);
+      if (changed) { await this.persist(this.copyConfiguration(entries), false); }
+      return result;
+    });
+    this.queue = next.then((): void => {}).catch((): void => {});
+    return next;
+  }
+
   /** 同一服务按 remoteId 保留身份；更换服务必须由连接页显式确认。 */
   syncSuwayomi(instance: SourceInstance, incoming: Array<SourceEntry>, replace: boolean = false): Promise<void> {
     const expected: number = databaseGeneration();
@@ -265,7 +299,6 @@ class SourceStore {
           entry.kind === 'suwayomi' && entry.instanceId === instance.id && entry.remoteId === item.remoteId);
         if (old !== undefined) {
           item.id = old.id;
-          item.enabled = old.enabled;
         }
         const index: number = configuration.entries.findIndex((entry: SourceEntry): boolean => entry.id === item.id);
         if (index >= 0) {
@@ -291,13 +324,13 @@ class SourceStore {
     return configuration;
   }
 
-  private async persist(configuration: SourceConfiguration): Promise<void> {
+  private async persist(configuration: SourceConfiguration, notify: boolean = true): Promise<void> {
     const ticket: number = this.generation;
     await saveSourceConfiguration(configuration);
     if (ticket === this.generation) {
       this.configuration = configuration;
       this.initialized = true;
-      AppStorage.setOrCreate('sourceVersion', Date.now());
+      if (notify) { AppStorage.setOrCreate('sourceVersion', Date.now()); }
     }
   }
 }

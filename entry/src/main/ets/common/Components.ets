@@ -1,5 +1,5 @@
+import { SymbolGlyphModifier } from '@ohos.arkui.modifier';
 import { PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, SUB_CARD, DIVIDER, COVER_R, COVER_ASPECT_RATIO } from './Theme';
-import { EMPTY_MATERIAL } from './ImmersiveMaterials';
 /**
  * 全局复用组件
  */
@@ -43,7 +43,7 @@ export struct IconCircleButton {
 }
 
 /**
- * 官方风格设置下拉行（对齐系统设置选项规范，不覆盖 Select 原生外观）
+ * 官方风格设置下拉行（对齐系统设置选项规范，带右侧勾选标记与无底色原生菜单）
  */
 @Component
 export struct SettingSelectRow {
@@ -53,36 +53,49 @@ export struct SettingSelectRow {
   @Prop selectedIndex: number = 0;
   onChanged: (index: number) => void = () => {};
 
-  private selectOptions(): Array<SelectOption> {
-    return this.options.map((item: ResourceStr): SelectOption => ({ value: item }));
+  @Builder
+  private DropdownMenu() {
+    Menu() {
+      ForEach(this.options, (item: ResourceStr, idx: number) => {
+        MenuItem({
+          content: item,
+          symbolEndIcon: this.selectedIndex === idx ? new SymbolGlyphModifier($r('sys.symbol.checkmark')) : undefined
+        })
+          .onClick(() => {
+            this.onChanged(idx);
+          })
+      })
+    }
   }
 
   build() {
     Row({ space: 12 }) {
       Column({ space: 2 }) {
         Text(this.title)
-          .fontSize(15)
+          .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('sys.color.font_primary'))
         if (this.subtitle !== '') {
           Text(this.subtitle)
-            .fontSize(11)
+            .fontSize(12)
             .fontColor($r('sys.color.font_secondary'))
         }
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      Select(this.selectOptions())
-        .selected(this.selectedIndex)
-        .value(this.options[this.selectedIndex] ?? '')
-        .backgroundColor(Color.Transparent)
-        .borderWidth(0)
-        .borderColor(Color.Transparent)
-        .systemMaterial(EMPTY_MATERIAL)
-        .onSelect((index: number) => {
-          this.onChanged(index);
-        })
+      Row({ space: 4 }) {
+        Text(this.options[this.selectedIndex] ?? '')
+          .fontSize(14)
+          .fontColor($r('sys.color.font_secondary'))
+        SymbolGlyph($r('sys.symbol.arrowtriangle_down_fill'))
+          .fontSize(10)
+          .fontColor([$r('sys.color.font_secondary')])
+      }
+      .constraintSize({ minHeight: 40 })
+      .padding({ left: 8, top: 4, bottom: 4 })
+      .alignItems(VerticalAlign.Center)
+      .bindMenu(this.DropdownMenu)
     }
     .width('100%')
     .constraintSize({ minHeight: 48 })
@@ -95,8 +108,9 @@ export struct SettingSelectRow {
  */
 @Component
 export struct EmptyView {
-  @Prop message: string = '暂无内容';
-  @Prop retryText: string = '重试';
+  @Prop quiet: boolean = false;
+  @Prop message: ResourceStr = '暂无内容';
+  @Prop retryText: ResourceStr = '重试';
   @Prop showRetry: boolean = true;
   onRetry: () => void = () => {};
 
@@ -104,17 +118,17 @@ export struct EmptyView {
     Column({ space: 14 }) {
       Stack({ alignContent: Alignment.Center }) {
         SymbolGlyph($r('sys.symbol.folder_fill'))
-          .fontSize(30)
-          .fontColor([TEXT_SUB])
+          .fontSize(this.quiet ? 60 : 30)
+          .fontColor([this.quiet ? $r('sys.color.icon_tertiary') : TEXT_SUB])
       }
       .width(64)
       .height(64)
       .borderRadius(32)
-      .backgroundColor(SUB_CARD)
+      .backgroundColor(this.quiet ? Color.Transparent : SUB_CARD)
 
       Text(this.message)
         .fontSize(14)
-        .fontColor(TEXT_SUB)
+        .fontColor(this.quiet ? $r('sys.color.font_tertiary') : TEXT_SUB)
         .textAlign(TextAlign.Center)
         .maxLines(3)
         .lineHeight(20)

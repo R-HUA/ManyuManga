@@ -10,6 +10,7 @@ export class SearchGroup {
   source: SourceEntry = new SourceEntry();
   items: Array<AlbumLite> = [];
   page: number = 0;
+  remoteCursor: string = '';
   more: boolean = false;
   loading: boolean = true;
   error: string = '';

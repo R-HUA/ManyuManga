@@ -1,5 +1,28 @@
 {
   "string": [
+    { "name": "remote_disconnected", "value": "尚未连接 Suwayomi 服务" },
+    { "name": "connection_settings", "value": "连接设置" },
+    { "name": "remote_query_prompt", "value": "输入书名搜索远程图源" },
+    { "name": "remote_sources_empty", "value": "服务端暂无可检索的图源" },
+    { "name": "remote_library_empty", "value": "书架中还没有漫画" },
+    { "name": "no_search_results", "value": "没有搜索结果" },
+    { "name": "remote_search_submit", "value": "点击搜索查看结果" },
+    { "name": "remote_search_hint", "value": "搜索远程图源" },
+    { "name": "library_search_hint", "value": "搜索书架中的漫画" },
+    { "name": "remote_library", "value": "远程书架" },
+    { "name": "remote_sources", "value": "远程图源" },
+    { "name": "hide_remote_saved", "value": "隐藏已收藏" },
+    { "name": "all_categories", "value": "全部" },
+    { "name": "sort_order", "value": "排序" },
+    { "name": "sort_added", "value": "最近加入" },
+    { "name": "sort_title", "value": "标题" },
+    { "name": "retry_action", "value": "重试" },
+    { "name": "load_more_action", "value": "加载更多" },
+    { "name": "suwayomi_library_title", "value": "Suwayomi 书库" },
+    { "name": "add_remote_title", "value": "加入远程书架" },
+    { "name": "remove_remote_title", "value": "移出远程书架" },
+    { "name": "remove_remote_message", "value": "确认从 Suwayomi 书架移出此漫画？本地收藏与阅读记录会保留。" },
+    { "name": "rule_list_title", "value": "规则列表" },
     {
       "name": "module_desc",
       "value": "漫屿漫画阅读器入口模块"

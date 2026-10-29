@@ -6,7 +6,7 @@
  */
 import { SourceEntry } from './Sources';
 import { suwayomi } from './Suwayomi';
-import { asArray, asNumber, asRecord, asString } from '../models/Models';
+import { AlbumLite, asArray, asNumber, asRecord, asString } from '../models/Models';
 import { RequestAbortGroup } from '../util/RequestAbort';
 
 export class RemoteCategory {
@@ -17,8 +17,11 @@ export class RemoteCategory {
 }
 
 export class RemoteManga {
+  key: string = '';
   id: number = 0;
   title: string = '';
+  author: string = '';
+  tags: Array<string> = [];
   coverUrl: string = '';
   unread: number = 0;
   downloaded: number = 0;
@@ -26,6 +29,15 @@ export class RemoteManga {
   /** 完整图源身份，跨页时按 sourceKey 组装。 */
   remoteSourceId: string = '';
   url: string = '';
+}
+
+/** 游标与服务端结束状态不能由过滤后的可见条数推断。 */
+export class RemoteMangaPage {
+  items: Array<RemoteManga> = [];
+  albums: Array<AlbumLite> = [];
+  endCursor: string = '';
+  hasNextPage: boolean = false;
+  totalCount: number = 0;
 }
 
 export class RemoteChapter {
@@ -57,9 +69,9 @@ export class ServerInfo {
 }
 
 /** 书架排序键，直接对应服务端 MangaOrderBy 枚举。 */
-export type LibrarySort = 'recent' | 'title' | 'added';
+export type LibrarySort = 'title' | 'added';
 
-export const LIBRARY_SORT_LABELS: Array<string> = ['最近阅读', '标题', '最近加入'];
+export const LIBRARY_SORT_LABELS: Array<string> = ['最近加入', '标题'];
 
 function vars(input: Object): Record<string, Object> {
   const result: Record<string, Object> = {};
@@ -71,7 +83,7 @@ function sortToEnum(sort: LibrarySort): string {
   if (sort === 'title') {
     return 'TITLE';
   }
-  return sort === 'added' ? 'IN_LIBRARY_AT' : 'LAST_FETCHED_AT';
+  return 'IN_LIBRARY_AT';
 }
 
 class LibraryApi {
@@ -79,26 +91,26 @@ class LibraryApi {
   async categories(source: SourceEntry, signal: RequestAbortGroup | null = null): Promise<Array<RemoteCategory>> {
     const data: Record<string, Object> = await suwayomi.query(source,
       'query { categories { nodes { id name order default } } }', {}, undefined, signal);
-    return asArray(record(data['categories'])['nodes'])!.map((value: Object): RemoteCategory => {
+    return requiredArray(record(data['categories'])['nodes']).map((value: Object): RemoteCategory => {
       const node: Record<string, Object> = record(value);
       const item: RemoteCategory = new RemoteCategory();
-      item.id = asNumber(node['id']);
-      item.name = asString(node['name']);
-      item.order = asNumber(node['order']);
-      item.isDefault = node['default'] === true;
+      item.id = requiredNumber(node['id']);
+      item.name = requiredString(node['name']);
+      item.order = requiredNumber(node['order'], -2147483648);
+      item.isDefault = requiredBoolean(node['default']);
       return item;
     }).sort((a: RemoteCategory, b: RemoteCategory): number => a.order - b.order);
   }
 
   async library(source: SourceEntry, categoryId: number, keyword: string, sort: LibrarySort,
-    after: string, signal: RequestAbortGroup | null = null): Promise<Array<RemoteManga>> {
+    after: string, signal: RequestAbortGroup | null = null): Promise<RemoteMangaPage> {
     const filter: Record<string, Object> = {};
     const inLibrary: Record<string, Object> = {};
     inLibrary['equalTo'] = true;
     filter['inLibrary'] = inLibrary;
-    if (categoryId > 0) {
+    if (categoryId >= 0) {
       const cat: Record<string, Object> = {};
-      cat['equalTo'] = categoryId;
+      if (categoryId === 0) { cat['isNull'] = true; } else { cat['equalTo'] = categoryId; }
       filter['categoryId'] = cat;
     }
     if (keyword !== '') {
@@ -120,38 +132,39 @@ class LibraryApi {
     const data: Record<string, Object> = await suwayomi.query(source,
       'query Library($filter: MangaFilter, $order: [MangaOrder!], $first: Int, $after: Cursor) {' +
       ' mangas(filter: $filter, order: $order, first: $first, after: $after) {' +
-      ' nodes { id sourceId url title thumbnailUrl user { inLibrary unreadCount downloadCount } }' +
+      ' nodes { id sourceId url title author artist genre thumbnailUrl user { inLibrary unreadCount downloadCount } }' +
       ' pageInfo { hasNextPage endCursor } totalCount } }', variables, undefined, signal);
     const page: Record<string, Object> = record(data['mangas']);
-    const nodes: Array<Object> | null = asArray(page['nodes']);
-    if (nodes === null) {
-      throw new Error('服务端缺少远程书架数据');
+    const result: RemoteMangaPage = new RemoteMangaPage();
+    result.items = requiredArray(page['nodes']).map((value: Object): RemoteManga => parseManga(source, value));
+    const info: Record<string, Object> = record(page['pageInfo']);
+    result.hasNextPage = requiredBoolean(info['hasNextPage']);
+    result.endCursor = info['endCursor'] === null ? '' : requiredString(info['endCursor']);
+    result.totalCount = requiredNumber(page['totalCount']);
+    if (result.hasNextPage && (result.endCursor === '' || result.endCursor === after)) {
+      throw new Error('服务端返回了无效的书架分页游标');
     }
-    return nodes.map((value: Object): RemoteManga => {
-      const node: Record<string, Object> = record(value);
-      const user: Record<string, Object> = asRecord(node['user']) ?? {};
-      const item: RemoteManga = new RemoteManga();
-      item.id = asNumber(node['id']);
-      item.title = asString(node['title']);
-      item.url = asString(node['url']);
-      item.remoteSourceId = asString(node['sourceId']);
-      item.coverUrl = absolute(source, asString(node['thumbnailUrl']));
-      item.unread = asNumber(user['unreadCount']);
-      item.downloaded = asNumber(user['downloadCount']);
-      item.inLibrary = user['inLibrary'] === true;
-      return item;
-    });
+    return result;
+  }
+
+  async inLibrary(source: SourceEntry, mangaId: number, signal: RequestAbortGroup | null = null): Promise<boolean> {
+    const variables: Record<string, Object> = {};
+    variables['id'] = mangaId;
+    const data: Record<string, Object> = await suwayomi.query(source,
+      'query Shelf($id: Int!) { manga(id: $id) { user { inLibrary } } }', variables, undefined, signal);
+    return requiredBoolean(record(record(data['manga'])['user'])['inLibrary']);
   }
 
   /** 加入/移出远程书架：服务端没有专用 add/remove 接口，靠 patch.inLibrary。 */
-  async setInLibrary(source: SourceEntry, mangaId: number, inLibrary: boolean): Promise<void> {
+  async setInLibrary(source: SourceEntry, mangaId: number, inLibrary: boolean): Promise<boolean> {
     const patch: Record<string, Object> = {};
     patch['inLibrary'] = inLibrary;
     const input: Record<string, Object> = {};
     input['id'] = mangaId;
     input['patch'] = patch;
-    await suwayomi.query(source,
-      'mutation Lib($input: UpdateMangaInput!) { updateManga(input: $input) { manga { id } } }', vars(input));
+    const data: Record<string, Object> = await suwayomi.query(source,
+      'mutation Lib($input: UpdateMangaInput!) { updateManga(input: $input) { manga { id user { inLibrary } } } }', vars(input));
+    return requiredBoolean(record(record(record(data['updateManga'])['manga'])['user'])['inLibrary']);
   }
 
   /** 分类是增量语义（加入/移出/清空），不是绝对集合。 */
@@ -220,24 +233,21 @@ class LibraryApi {
   async serverSources(source: SourceEntry, signal: RequestAbortGroup | null = null): Promise<Array<RemoteSource>> {
     const data: Record<string, Object> = await suwayomi.query(source,
       'query { sources { nodes { id displayName lang supportsLatest } } }', {}, undefined, signal);
-    const nodes: Array<Object> | null = asArray(record(data['sources'])['nodes']);
-    if (nodes === null) {
-      return [];
-    }
+    const nodes: Array<Object> = requiredArray(record(data['sources'])['nodes']);
     return nodes.map((value: Object): RemoteSource => {
       const node: Record<string, Object> = record(value);
       const item: RemoteSource = new RemoteSource();
-      item.id = asString(node['id']);
-      item.displayName = asString(node['displayName'], asString(node['name']));
-      item.language = asString(node['lang']);
-      item.supportsLatest = node['supportsLatest'] === true;
+      item.id = requiredString(node['id']);
+      item.displayName = requiredString(node['displayName']);
+      item.language = requiredString(node['lang']);
+      item.supportsLatest = requiredBoolean(node['supportsLatest']);
       return item;
     });
   }
 
   /** 聚合检索结果转成本机身份键，避免服务端编号跨实例串台。 */
   async browseSource(source: SourceEntry, remoteSourceId: string, keyword: string,
-    page: number): Promise<Array<RemoteManga>> {
+    page: number, signal: RequestAbortGroup | null = null): Promise<RemoteMangaPage> {
     const input: Record<string, Object> = {};
     input['source'] = remoteSourceId;
     input['type'] = keyword === '' ? 'POPULAR' : 'SEARCH';
@@ -245,22 +255,13 @@ class LibraryApi {
     input['query'] = keyword;
     const data: Record<string, Object> = await suwayomi.query(source,
       'mutation Browse($input: FetchSourceMangaInput!) { fetchSourceManga(input: $input) {' +
-      ' mangas { id title thumbnailUrl user { inLibrary } } hasNextPage } }', vars(input));
-    const nodes: Array<Object> | null = asArray(record(data['fetchSourceManga'])['mangas']);
-    if (nodes === null) {
-      return [];
-    }
-    return nodes.map((value: Object): RemoteManga => {
-      const node: Record<string, Object> = record(value);
-      const user: Record<string, Object> = asRecord(node['user']) ?? {};
-      const item: RemoteManga = new RemoteManga();
-      item.id = asNumber(node['id']);
-      item.title = asString(node['title']);
-      item.coverUrl = absolute(source, asString(node['thumbnailUrl']));
-      item.remoteSourceId = remoteSourceId;
-      item.inLibrary = user['inLibrary'] === true;
-      return item;
-    });
+      ' mangas { id sourceId url title author artist genre thumbnailUrl user { inLibrary unreadCount downloadCount } } hasNextPage } }',
+      vars(input), undefined, signal);
+    const payload: Record<string, Object> = record(data['fetchSourceManga']);
+    const result: RemoteMangaPage = new RemoteMangaPage();
+    result.items = requiredArray(payload['mangas']).map((value: Object): RemoteManga => parseManga(source, value));
+    result.hasNextPage = requiredBoolean(payload['hasNextPage']);
+    return result;
   }
 
   /** aboutServer 不需要鉴权，最适合做连通性与端口探测。 */
@@ -298,6 +299,48 @@ function record(value: Object | undefined): Record<string, Object> {
     throw new Error('服务端返回的数据格式不正确');
   }
   return result;
+}
+
+function requiredArray(value: Object | undefined): Array<Object> {
+  const result: Array<Object> | null = asArray(value);
+  if (result === null) { throw new Error('服务端缺少列表数据'); }
+  return result;
+}
+
+function requiredString(value: Object | undefined): string {
+  if (typeof value !== 'string') { throw new Error('服务端返回了无效的文本字段'); }
+  return value;
+}
+
+function requiredNumber(value: Object | undefined, minimum: number = 0): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < minimum) {
+    throw new Error('服务端返回了无效的数字字段');
+  }
+  return value;
+}
+
+function requiredBoolean(value: Object | undefined): boolean {
+  if (typeof value !== 'boolean') { throw new Error('服务端返回了无效的状态字段'); }
+  return value;
+}
+
+function parseManga(source: SourceEntry, value: Object): RemoteManga {
+  const node: Record<string, Object> = record(value);
+  const user: Record<string, Object> = record(node['user']);
+  const item: RemoteManga = new RemoteManga();
+  item.id = requiredNumber(node['id']);
+  item.title = requiredString(node['title']);
+  item.author = [node['author'] === null ? '' : requiredString(node['author']),
+    node['artist'] === null ? '' : requiredString(node['artist'])].filter((name: string): boolean => name !== '').join(' / ');
+  item.tags = requiredArray(node['genre']).map((tag: Object): string => requiredString(tag));
+  item.remoteSourceId = requiredString(node['sourceId']);
+  if (item.remoteSourceId === '') { throw new Error('服务端缺少作品来源标识'); }
+  item.url = requiredString(node['url']);
+  item.coverUrl = node['thumbnailUrl'] === null ? '' : absolute(source, requiredString(node['thumbnailUrl']));
+  item.unread = requiredNumber(user['unreadCount']);
+  item.downloaded = requiredNumber(user['downloadCount']);
+  item.inLibrary = requiredBoolean(user['inLibrary']);
+  return item;
 }
 
 function absolute(source: SourceEntry, path: string): string {

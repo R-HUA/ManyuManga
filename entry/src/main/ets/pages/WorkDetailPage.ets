@@ -7,7 +7,8 @@ import promptAction from '@ohos.promptAction';
 import { MangaRouteParams, ROUTE_READER, ROUTE_PREVIEW } from '../common/Route';
 import { Album, Chapter, ReadingProgress, CommentItem, CommentsResult, asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
-import { sourceId, sourceStore } from '../data/Sources';
+import { sourceId, nativeId, SourceEntry, sourceStore } from '../data/Sources';
+import { suwayomiLibrary } from '../data/SuwayomiLibrary';
 import { library, LibraryWork } from '../data/Library';
 import { readProgressStore, albumCacheStore } from '../data/Stores';
 import { downloadManager } from '../data/DownloadManager';
@@ -40,6 +41,12 @@ export struct WorkDetailPage {
   @State commentsDone: boolean = false;
   @State loadingComments: boolean = false;
   @State busy: boolean = false;
+  @State remoteAvailable: boolean = false;
+  @State remoteSaved: boolean = false;
+  @State remoteReady: boolean = false;
+  @State remoteBusy: boolean = false;
+  @State remoteError: string = '';
+  private remoteGeneration: number = 0;
 
   private aid: string = '';
   private generation: number = 0;
@@ -49,6 +56,8 @@ export struct WorkDetailPage {
   private chaptersScroller: Scroller = new Scroller();
 
   private cancelRequests(): void {
+    this.remoteGeneration++;
+    this.remoteBusy = false;
     this.detailRequests.abortAll();
     this.commentRequests.abortAll();
     this.loadingComments = false;
@@ -75,7 +84,7 @@ export struct WorkDetailPage {
       if (ticket !== this.generation) {
         return;
       }
-      const name: string = (await sourceStore.get(sourceId(key), false)).name;
+      const source: SourceEntry = await sourceStore.get(sourceId(key), false);
       const work: LibraryWork | null = await library.workFor(key);
       const progress: ReadingProgress | null = await readProgressStore.get(key);
       if (ticket !== this.generation || this.detailRequests.aborted()) {
@@ -83,9 +92,14 @@ export struct WorkDetailPage {
       }
       this.album = album;
       this.aid = album.id;
-      this.sourceName = name;
+      this.sourceName = source.name;
       this.work = work;
       this.progress = progress;
+      this.remoteAvailable = source.kind === 'suwayomi';
+      this.remoteReady = false;
+      this.remoteBusy = false;
+      this.remoteError = '';
+      if (this.remoteAvailable) { this.loadRemoteShelf(); }
       await albumCacheStore.put(album);
     } catch (e) {
       if (ticket === this.generation && !isRequestCancelled(e as Error)) {
@@ -105,6 +119,7 @@ export struct WorkDetailPage {
     try {
       this.work = await library.workFor(this.aid);
       this.progress = await readProgressStore.get(this.aid);
+      if (this.remoteAvailable && !this.remoteBusy) { this.loadRemoteShelf(); }
     } catch (e) {
       this.error = errorMessage(e as Error);
     }
@@ -132,6 +147,56 @@ export struct WorkDetailPage {
           }
         }
       });
+    }
+  }
+
+  /** 远程收藏独立加载，不改变本地书架按钮及其持久化语义。 */
+  private async loadRemoteShelf(): Promise<void> {
+    const ticket: number = ++this.remoteGeneration;
+    const key: string = this.aid;
+    const requests: RequestAbortGroup = this.detailRequests;
+    this.remoteBusy = true;
+    this.remoteError = '';
+    try {
+      const source: SourceEntry = await sourceStore.get(sourceId(key));
+      if (ticket !== this.remoteGeneration) { return; }
+      const saved: boolean = await suwayomiLibrary.inLibrary(source, Number(nativeId(key)), requests);
+      if (ticket !== this.remoteGeneration || key !== this.aid) { return; }
+      this.remoteSaved = saved;
+      this.remoteReady = true;
+    } catch (e) {
+      if (ticket === this.remoteGeneration && !isRequestCancelled(e as Error)) { this.remoteError = errorMessage(e as Error); }
+    } finally {
+      if (ticket === this.remoteGeneration) { this.remoteBusy = false; }
+    }
+  }
+
+  private toggleRemoteShelf(): void {
+    if (this.remoteBusy || !this.remoteReady) { return; }
+    if (!this.remoteSaved) { this.saveRemoteShelf(true); return; }
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.remove_remote_title'), message: $r('app.string.remove_remote_message'),
+      primaryButton: { value: '取消', action: (): void => {} },
+      secondaryButton: { value: '移出', fontColor: DANGER, action: (): void => { this.saveRemoteShelf(false); } }
+    });
+  }
+
+  private async saveRemoteShelf(saved: boolean): Promise<void> {
+    if (this.remoteBusy) { return; }
+    const ticket: number = ++this.remoteGeneration;
+    const key: string = this.aid;
+    this.remoteBusy = true;
+    this.remoteError = '';
+    try {
+      const source: SourceEntry = await sourceStore.get(sourceId(key));
+      if (ticket !== this.remoteGeneration) { return; }
+      const actual: boolean = await suwayomiLibrary.setInLibrary(source, Number(nativeId(key)), saved);
+      if (ticket !== this.remoteGeneration || key !== this.aid) { return; }
+      this.remoteSaved = actual;
+    } catch (e) {
+      if (ticket === this.remoteGeneration) { this.remoteError = errorMessage(e as Error); }
+    } finally {
+      if (ticket === this.remoteGeneration) { this.remoteBusy = false; }
     }
   }
 
@@ -275,7 +340,8 @@ export struct WorkDetailPage {
 
   @Builder
   private Info() {
-    WorkHeroInfo({
+    Column({ space: 8 }) {
+      WorkHeroInfo({
       album: this.$album,
       sourceName: this.$sourceName,
       aid: this.aid,
@@ -289,7 +355,22 @@ export struct WorkDetailPage {
       toggleShelf: (): Promise<void> => this.toggleShelf(),
       download: (): Promise<void> => this.download(),
       descExpanded: this.$descExpanded
-    })
+      })
+      if (this.remoteAvailable) {
+        Column({ space: 8 }) {
+          Button(this.remoteSaved ? $r('app.string.remove_remote_title') : $r('app.string.add_remote_title'),
+            { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+            .fontSize(14).height(40).enabled(this.remoteReady && !this.remoteBusy)
+            .onClick(() => this.toggleRemoteShelf())
+          if (this.remoteBusy) { LoadingProgress().width(24).height(24) }
+          if (this.remoteError !== '') {
+            Text(this.remoteError).fontSize(12).fontColor(DANGER)
+            Button($r('app.string.retry_action'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+              .onClick(() => { this.loadRemoteShelf(); })
+          }
+        }.width('100%').padding({ left: 16, right: 16, bottom: 12 })
+      }
+    }.width('100%')
   }
 
   @Builder

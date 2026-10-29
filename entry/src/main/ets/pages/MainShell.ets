@@ -16,7 +16,7 @@ import { JmSourceSettingsPage } from './JmSourceSettingsPage';
 import { EhBrowsePage } from './eh/EhBrowsePage';
 import { BlockRulesPage } from './settings/BlockRulesPage';
 import { SourceManagementPage } from './sources/SourceManagementPage';
-import { SuwayomiSourcesPage } from './sources/SuwayomiSourcesPage';
+import { SuwayomiLibraryPage } from './SuwayomiLibraryPage';
 import { HDS_NATIVE_MATERIAL } from '../common/ImmersiveMaterials';
 import { ROUTE_SEARCH, ROUTE_ALBUM, ROUTE_READER, ROUTE_DOWNLOADS, ROUTE_PREVIEW, ROUTE_JM_SETTINGS, ROUTE_JM_BROWSE, ROUTE_EH_BROWSE, ROUTE_BLOCK_RULES, ROUTE_STATS, ROUTE_SOURCE_BROWSE, ROUTE_SOURCE_SETTINGS, ROUTE_SUWAYOMI_LIBRARY, NAV_STACK_DEPTH_KEY } from '../common/Route';
 import { BG, CARD, DIVIDER, TEXT_SUB, PRIMARY } from '../common/Theme';
@@ -72,7 +72,7 @@ export struct MainShell {
     } else if (name === ROUTE_SOURCE_SETTINGS) {
       SourceManagementPage()
     } else if (name === ROUTE_SUWAYOMI_LIBRARY) {
-      SuwayomiSourcesPage()
+      SuwayomiLibraryPage()
     } else if (name === ROUTE_BLOCK_RULES) {
       BlockRulesPage()
     }

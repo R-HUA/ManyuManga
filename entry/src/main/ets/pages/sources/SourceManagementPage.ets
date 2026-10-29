@@ -7,7 +7,7 @@ import { SourceEntry, SourceAuth, SourceInstance, copySource, sourceStore } from
 import { localSource } from '../../data/LocalSource';
 import { suwayomi } from '../../data/Suwayomi';
 import { library } from '../../data/Library';
-import { Album, errorMessage } from '../../models/Models';
+import { Album, asRecord, asString, errorMessage } from '../../models/Models';
 import { SourcePresentation, presentationFor, registrablePresentation } from '../../data/source/SourceCatalog';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_BLOCK_RULES, ROUTE_JM_SETTINGS } from '../../common/Route';
 import { BG, CARD, DIVIDER, DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
@@ -58,8 +58,7 @@ export struct SourceManagementPage {
       const all: Array<SourceEntry> = await sourceStore.list();
       const hiddenIds: Array<string> = await sourceStore.hiddenIds();
       const connection: SourceInstance | null = await sourceStore.connection();
-      this.sources = all.filter((entry: SourceEntry): boolean => entry.kind !== 'suwayomi' ||
-        (connection !== null && entry.instanceId === connection.id));
+      this.sources = all.filter((entry: SourceEntry): boolean => entry.kind !== 'suwayomi');
       this.hidden = hiddenIds;
       this.connectionLabel = connection === null ? '未连接' : `${connection.name} (${connection.endpoint})`;
       this.error = '';
@@ -70,10 +69,6 @@ export struct SourceManagementPage {
 
   private entryFor(kind: string): SourceEntry | undefined {
     return this.sources.find((entry: SourceEntry): boolean => entry.kind === kind);
-  }
-
-  private remoteEntries(): Array<SourceEntry> {
-    return this.sources.filter((entry: SourceEntry): boolean => entry.kind === 'suwayomi');
   }
 
   isHidden(id: string): boolean {
@@ -161,7 +156,7 @@ export struct SourceManagementPage {
     try {
       const modes: Array<SourceAuth> = ['none', 'basic', 'login'];
       const pres: SourcePresentation | null = registrablePresentation();
-      const entries: Array<SourceEntry> = await suwayomi.connect(
+      await suwayomi.connect(
         this.endpoint,
         this.name.trim() || (pres === null ? 'Suwayomi' : pres.defaultName),
         modes[this.authIndex],
@@ -173,7 +168,7 @@ export struct SourceManagementPage {
       this.password = '';
       this.form = false;
       await this.load();
-      promptAction.showToast({ message: `已同步 ${entries.length} 个服务端扩展书源` });
+      promptAction.showToast({ message: '已连接 Suwayomi 书库' });
     } catch (e) {
       this.error = errorMessage(e as Error);
     } finally {
@@ -201,44 +196,24 @@ export struct SourceManagementPage {
     }
   }
 
-  private confirmRemove(source: SourceEntry): void {
-    this.getUIContext().showAlertDialog({
-      title: '移除书源',
-      message: `确定移除「${source.name}」吗？书架中的漫画、阅读记录与离线文件均会保留。`,
-      primaryButton: { value: '取消', action: (): void => {} },
-      secondaryButton: {
-        value: '移除',
-        fontColor: DANGER,
-        action: (): void => {
-          sourceStore.remove(source.id).then((): void => {
-            this.load();
-          }).catch((e: Error) => {
-            this.reportError(errorMessage(e));
-            this.load();
-          });
-        }
-      }
-    });
-  }
-
   @Builder
   private GroupTitle(title: string) {
     Text(title)
-      .fontSize(12)
+      .fontSize(14)
       .fontWeight(FontWeight.Medium)
       .fontColor(TEXT_SUB)
       .width('100%')
-      .padding({ left: 16, top: 14, bottom: 6 })
+      .padding({ left: 12, top: 16, bottom: 8 })
   }
 
   @Builder
-  private NavRow(title: string, subtitle: string, onTap: () => void, isDanger: boolean = false) {
+  private NavRow(title: string, subtitle: string, onTap: () => void) {
     Row({ space: 12 }) {
-      Column({ space: 3 }) {
+      Column({ space: 2 }) {
         Text(title)
-          .fontSize(15)
+          .fontSize(16)
           .fontWeight(FontWeight.Medium)
-          .fontColor(isDanger ? DANGER : TEXT_MAIN)
+          .fontColor(TEXT_MAIN)
         if (subtitle !== '') {
           Text(subtitle)
             .fontSize(12)
@@ -255,8 +230,8 @@ export struct SourceManagementPage {
         .fontColor([TEXT_SUB])
     }
     .width('100%')
-    .constraintSize({ minHeight: 52 })
-    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .constraintSize({ minHeight: 64 })
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
     .onClick(() => {
       onTap();
     })
@@ -265,9 +240,9 @@ export struct SourceManagementPage {
   @Builder
   private VisibilityRow(source: SourceEntry, subtitle: string) {
     Row({ space: 12 }) {
-      Column({ space: 3 }) {
+      Column({ space: 2 }) {
         Text('在图源页显示')
-          .fontSize(15)
+          .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_MAIN)
         Text(subtitle)
@@ -285,8 +260,8 @@ export struct SourceManagementPage {
         })
     }
     .width('100%')
-    .constraintSize({ minHeight: 52 })
-    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+    .constraintSize({ minHeight: 64 })
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
   }
 
   @Builder
@@ -333,8 +308,9 @@ export struct SourceManagementPage {
           .backgroundColor(CARD)
         }
 
-        List({ scroller: this.scroller, space: 12 }) {
-          ListItemGroup({ header: this.GroupTitle('远程媒体库 (Suwayomi)'), style: ListItemGroupStyle.CARD }) {
+        List({ scroller: this.scroller }) {
+          ListItem() { this.GroupTitle('Suwayomi') }
+          ListItemGroup() {
             ListItem() {
               this.NavRow('服务端连接配置', this.connectionLabel, (): void => {
                 this.openConnect();
@@ -342,9 +318,12 @@ export struct SourceManagementPage {
             }
           }
           .backgroundColor(CARD)
+          .borderRadius(16)
+          .padding({ top: 4, bottom: 4 })
 
           if (this.entryFor('jm') !== undefined) {
-            ListItemGroup({ header: this.GroupTitle('禁漫天堂'), style: ListItemGroupStyle.CARD }) {
+            ListItem() { this.GroupTitle('禁漫天堂') }
+            ListItemGroup() {
               ListItem() {
                 this.VisibilityRow(this.entryFor('jm')!, '控制是否在图源列表中展示禁漫入口')
               }
@@ -355,11 +334,13 @@ export struct SourceManagementPage {
               }
             }
             .backgroundColor(CARD)
-            .divider({ strokeWidth: 0.5, color: DIVIDER, startMargin: 16, endMargin: 16 })
+            .borderRadius(16).padding({ top: 4, bottom: 4 })
+            .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 12, endMargin: 12 })
           }
 
           if (this.entryFor('eh') !== undefined) {
-            ListItemGroup({ header: this.GroupTitle('E-Hentai / ExHentai'), style: ListItemGroupStyle.CARD }) {
+            ListItem() { this.GroupTitle('E-Hentai / ExHentai') }
+            ListItemGroup() {
               ListItem() {
                 this.VisibilityRow(this.entryFor('eh')!, '控制是否在图源列表中展示画廊入口')
               }
@@ -371,11 +352,13 @@ export struct SourceManagementPage {
               }
             }
             .backgroundColor(CARD)
-            .divider({ strokeWidth: 0.5, color: DIVIDER, startMargin: 16, endMargin: 16 })
+            .borderRadius(16).padding({ top: 4, bottom: 4 })
+            .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 12, endMargin: 12 })
           }
 
           if (this.entryFor('local') !== undefined) {
-            ListItemGroup({ header: this.GroupTitle('本地漫画'), style: ListItemGroupStyle.CARD }) {
+            ListItem() { this.GroupTitle('本地漫画') }
+            ListItemGroup() {
               ListItem() {
                 this.VisibilityRow(this.entryFor('local')!, '控制是否在图源列表中展示本地漫画')
               }
@@ -391,32 +374,14 @@ export struct SourceManagementPage {
               }
             }
             .backgroundColor(CARD)
-            .divider({ strokeWidth: 0.5, color: DIVIDER, startMargin: 16, endMargin: 16 })
+            .borderRadius(16).padding({ top: 4, bottom: 4 })
+            .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 12, endMargin: 12 })
           }
-
-          ForEach(this.remoteEntries(), (remote: SourceEntry) => {
-            ListItemGroup({ header: this.GroupTitle(remote.name), style: ListItemGroupStyle.CARD }) {
-              ListItem() {
-                this.VisibilityRow(remote, '在 Suwayomi 扩展列表中显示该书源')
-              }
-              ListItem() {
-                this.NavRow('本源屏蔽规则', '管理仅对该扩展源生效的过滤词', (): void => {
-                  this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: remote.id } as MangaRouteParams);
-                })
-              }
-              ListItem() {
-                this.NavRow('移除该扩展书源', '保留书架中的作品与阅读进度', (): void => {
-                  this.confirmRemove(remote);
-                }, true)
-              }
-            }
-            .backgroundColor(CARD)
-            .divider({ strokeWidth: 0.5, color: DIVIDER, startMargin: 16, endMargin: 16 })
-          }, (remote: SourceEntry): string => remote.id)
         }
         .layoutWeight(1)
         .width('100%')
-        .padding({ left: 12, right: 12, bottom: 28 + this.bottomInset })
+        .padding({ left: 16, right: 16 })
+        .contentEndOffset(28 + this.bottomInset)
         .scrollBar(BarState.Off)
         .clip(false)
       }
@@ -425,7 +390,8 @@ export struct SourceManagementPage {
       .bindSheet($$this.form, this.ConnectionSheet(), {
         height: SheetSize.FIT_CONTENT,
         dragBar: true,
-        showClose: false,
+        showClose: true,
+        title: { title: 'Suwayomi' },
         systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
       .bindSheet($$this.settingsForm, this.SettingsSheet(), {
@@ -440,5 +406,9 @@ export struct SourceManagementPage {
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])
     .backgroundColor(BG)
+    .onReady((context: NavDestinationContext) => {
+      const params: Record<string, Object> | null = asRecord(context.pathInfo.param as Object);
+      if (params !== null && asString(params['sourceId']) === 'suwayomi') { this.openConnect(); }
+    })
   }
 }
