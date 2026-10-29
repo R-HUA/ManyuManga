@@ -1,4 +1,4 @@
-import { SegmentButton, SegmentButtonOptions, SegmentButtonItemTuple } from '@kit.ArkUI';
+import { SegmentButton, SegmentButtonOptions, SegmentButtonTextItem, ItemRestriction } from '@kit.ArkUI';
 import { Album, Chapter, ReadingProgress, CommentItem } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
@@ -35,12 +35,12 @@ export struct WorkChapterList {
   @State @Watch('sortChanged') sortIndexes: number[] = [0];
   @State @Watch('scopeChanged') scopeIndexes: number[] = [0];
   @State sortOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
-    buttons: [{ text: '正序' }, { text: '倒序' }] as SegmentButtonItemTuple,
+    buttons: [{ text: '正序' }, { text: '倒序' }] as ItemRestriction<SegmentButtonTextItem>,
     fontSize: 12, selectedFontSize: 12,
     buttonPadding: { top: 4, bottom: 4, left: 8, right: 8 }
   });
   @State scopeOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
-    buttons: [{ text: '全部' }, { text: '未读' }] as SegmentButtonItemTuple,
+    buttons: [{ text: '全部' }, { text: '未读' }] as ItemRestriction<SegmentButtonTextItem>,
     fontSize: 12, selectedFontSize: 12,
     buttonPadding: { top: 4, bottom: 4, left: 8, right: 8 }
   });

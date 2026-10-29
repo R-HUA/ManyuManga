@@ -49,10 +49,14 @@ export struct ChapterPreviewPage {
   }
 
   columnsIcon(): Resource {
+    // 只使用已确认存在的系统图标，按列数切换，图标随状态变化。
     if (this.columns === 2) {
+      return $r('sys.symbol.rectangle_split_2x1');
+    }
+    if (this.columns === 3) {
       return $r('sys.symbol.square_grid_2x2');
     }
-    return $r('sys.symbol.square_grid_3x3');
+    return $r('sys.symbol.square_fill_grid_2x2');
   }
 
   private columnsTemplateStr(): string {

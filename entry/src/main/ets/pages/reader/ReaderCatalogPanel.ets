@@ -23,7 +23,7 @@ export struct ReaderCatalogPanel {
   jumpToPage: (page: number) => void = (_page: number): void => {};
   flushProgress: () => void = (): void => {};
   close: () => void = (): void => {};
-  @State private tabIndex: number = 0;
+  @State private catalogTab: number = 0;
   private chapterScroller: Scroller = new Scroller();
   private thumbScroller: Scroller = new Scroller();
 
@@ -48,7 +48,7 @@ export struct ReaderCatalogPanel {
   }
 
   build() {
-    Tabs({ barPosition: BarPosition.Start, index: this.tabIndex }) {
+    Tabs({ barPosition: BarPosition.Start, index: this.catalogTab }) {
       TabContent() {
         this.ChapterList()
       }
@@ -67,7 +67,7 @@ export struct ReaderCatalogPanel {
     .width('100%')
     .height('100%')
     .onChange((index: number): void => {
-      this.tabIndex = index;
+      this.catalogTab = index;
       if (index === 1) {
         this.locateThumb();
       } else {
