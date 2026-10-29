@@ -1,10 +1,9 @@
 import { ReaderController } from './reader/ReaderController';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { ReaderHud, ReaderPanelKind } from './reader/ReaderHud';
-import { ReaderChapterSheet } from './reader/ReaderChapterSheet';
 import { ReaderZoneOverlay } from './reader/ReaderZoneOverlay';
 import { ReaderImageItem } from './reader/ReaderImageItem';
-import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
+import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { EmptyView } from '../common/Components';
 import { READER_BG, PRIMARY, ACCENT, CHIP_R, eyeComfortTint, readerHudPalette } from '../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode, asNumber, asRecord, asString } from '../models/Models';
@@ -254,7 +253,12 @@ export struct ReaderPage {
       toggleBackground: (paper: boolean): void => this.controller.toggleBackground(paper),
       setPreload: (n: number): void => this.controller.setPreload(n),
       openZoneEditor: (): void => this.controller.openZoneEditor(),
-      onHudTouch: (down: boolean): void => this.controller.onHudTouch(down)
+      onHudTouch: (down: boolean): void => this.controller.onHudTouch(down),
+      bookmarks: this.$bookmarks,
+      chapterSource: this.controller.chapterSource,
+      loadChapter: (chapterIdx: number, targetPage: number): Promise<void> =>
+        this.controller.loadChapter(chapterIdx, targetPage),
+      flushProgress: (): void => this.controller.flushProgress()
     })
   }
 
@@ -288,26 +292,6 @@ export struct ReaderPage {
     .alignItems(HorizontalAlign.End)
     .padding({ right: 12, bottom: this.bottomSafeVp + 10 })
     .hitTestBehavior(HitTestMode.None)
-  }
-
-  /** 二级抽屉内容：仅目录与缩略图使用半模态，其余面板均作为底栏上方浮卡就地展开 */
-  @Builder
-  private SheetContent() {
-    ReaderChapterSheet({
-      bookmarks: this.$bookmarks,
-      sheetVisible: this.$sheetVisible,
-      chapters: this.$chapters,
-      loadChapter: (chapterIdx: number, targetPage: number, preserveAttempts: boolean = false): Promise<void> =>
-        this.controller.loadChapter(chapterIdx, targetPage, preserveAttempts),
-      chapterSource: this.controller.chapterSource,
-      chapterIndex: this.$chapterIndex,
-      pages: this.$pages,
-      currentPage: this.$currentPage,
-      scrambleId: this.$scrambleId,
-      photoId: this.controller.currentChapterId(),
-      jumpToPage: (page: number): void => this.controller.jumpToPage(page),
-      flushProgress: (): void => this.controller.flushProgress()
-    })
   }
 
   build() {
@@ -395,7 +379,10 @@ export struct ReaderPage {
         }
         if (this.hudVisible) {
           Column().width('100%').height('100%').hitTestBehavior(HitTestMode.Block)
-            .onClick(() => { this.panel = 'none'; this.hudVisible = false; })
+            .onClick(() => {
+              // 目录/缩略图浮层打开时，点击面板外只收起浮层，保留 HUD。
+              if (this.panel === 'index') { this.panel = 'none'; } else { this.panel = 'none'; this.hudVisible = false; }
+            })
         }
         // HUD 锚点：Stack 默认居中对齐，align/margin 无法把它移到底部，必须用 position 绝对定位到底部中线。
         Row().width(1).height(1)
@@ -442,25 +429,21 @@ export struct ReaderPage {
           this.canvasHeightVp = h;
         }
       })
-      .bindSheet($$this.sheetVisible, this.SheetContent(), {
-        detents: [SheetSize.MEDIUM, SheetSize.LARGE],
-        dragBar: true,
-        showClose: true,
-        title: { title: '目录与预览' },
-        systemMaterial: IMMERSIVE_SHEET_MATERIAL,
-        onDisappear: (): void => {
-          this.sheetVisible = false;
-        }
-      })
     }
     .titleBar({ content: { title: { mainTitle: this.chapters[this.chapterIndex]?.title || this.albumTitle },
-      menu: { value: [
+      // 未放大时隐藏复位缩放，整组菜单按三元数组切换。
+      menu: { value: this.zoomScale > 1 ? [
         { content: { icon: this.bookmarks.some((item: ReadingProgress): boolean =>
             item.chapterId === this.controller.currentChapterId() && item.page === this.currentPage)
             ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
           label: '书签', action: (): void => { this.controller.toggleBookmark(); } } },
         { content: { icon: $r('sys.symbol.arrow_counterclockwise'), label: '复位缩放',
-          isEnabled: this.zoomScale > 1, action: (): void => { this.controller.resetZoom(true); } } }
+          action: (): void => { this.controller.resetZoom(true); } } }
+      ] : [
+        { content: { icon: this.bookmarks.some((item: ReadingProgress): boolean =>
+            item.chapterId === this.controller.currentChapterId() && item.page === this.currentPage)
+            ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
+          label: '书签', action: (): void => { this.controller.toggleBookmark(); } } }
       ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: false })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .hideTitleBar(!this.hudVisible)

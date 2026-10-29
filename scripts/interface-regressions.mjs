@@ -701,4 +701,28 @@ export async function interfaceTests(test) {
     const card = read('pages/downloads/DownloadTaskCard.ets');
     assert.match(card, /NEUTRAL_PROGRESS/);
   });
+  await test('阅读器目录改为 HUD 上方浮层：不再弹半模态，进度卡用图标切话与中性滑杆，未放大隐藏复位缩放', async env => {
+    const { host, controller } = reader(env);
+    controller.openSheet('index');
+    assert.equal(host.panel, 'index'); assert.equal(host.hudVisible, true); assert.equal(host.sheetVisible, false);
+    controller.openSheet('picture');
+    assert.equal(host.panel, 'picture');
+    const fs = await import('node:fs');
+    const nodePath = await import('node:path');
+    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const read = file => fs.readFileSync(nodePath.join(root, file), 'utf8');
+    const page = read('pages/ReaderPage.ets');
+    assert.doesNotMatch(page, /bindSheet|ReaderChapterSheet/);
+    assert.doesNotMatch(page, /isEnabled: this\.zoomScale/);
+    assert.match(page, /menu: \{ value: this\.zoomScale > 1 \? \[/);
+    const hud = read('pages/reader/ReaderHud.ets');
+    assert.match(hud, /ReaderCatalogPanel\(/);
+    assert.match(hud, /sys\.symbol\.chevron_left/); assert.match(hud, /sys\.symbol\.chevron_right/);
+    assert.doesNotMatch(hud, /Button\('上一话'|Button\('下一话'/);
+    assert.match(hud, /selectedColor\(NEUTRAL_PROGRESS\)/);
+    const panel = read('pages/reader/ReaderCatalogPanel.ets');
+    assert.match(panel, /Tabs\(/); assert.match(panel, /'目录'/); assert.match(panel, /'缩略图'/);
+    assert.match(panel, /listDirection\(Axis\.Horizontal\)/);
+    assert.match(panel, /initialIndex: Math\.max\(0, this\.chapterIndex/);
+  });
 }

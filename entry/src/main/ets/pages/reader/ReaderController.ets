@@ -714,17 +714,12 @@ export class ReaderController {
     else { this.goChapter(action === 3 ? -1 : 1); }
   }
 
-  /** 目录入口拉起半模态抽屉；画面与设置改为切换底栏上方的同材质浮卡。 */
+  /** 目录与缩略图、画面与设置均作为底栏上方的同材质浮层就地展开。 */
   openSheet(kind: ReaderSheetKind): void {
     this.host.sheetKind = kind;
-    if (kind === 'index') {
-      this.host.panel = 'none';
-      this.host.hudVisible = false;
-      this.host.sheetVisible = true;
-    } else {
-      this.host.sheetVisible = false;
-      this.host.panel = kind;
-    }
+    this.host.sheetVisible = false;
+    this.host.hudVisible = true;
+    this.host.panel = kind;
   }
 
   /** 热区校准是三级全屏交互：先收起浮卡或抽屉，再压上蒙层。 */

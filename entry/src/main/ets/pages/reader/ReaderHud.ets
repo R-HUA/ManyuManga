@@ -5,11 +5,13 @@ import { ReaderPictureSheet } from './ReaderPictureSheet';
 import { ReaderPrefsSheet } from './ReaderPrefsSheet';
 import { HudButton } from './ReaderControls';
 import { PageThumbItem } from './ReaderImageItem';
-import { PRIMARY } from '../../common/Theme';
+import { NEUTRAL_PROGRESS } from '../../common/Theme';
+import { ReaderCatalogPanel } from './ReaderCatalogPanel';
+import { BasicDataSource } from '../../common/DataSource';
 import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
-import { Chapter, ReaderMode } from '../../models/Models';
+import { Chapter, ReaderMode, ReadingProgress } from '../../models/Models';
 
-export type ReaderPanelKind = 'none' | 'progress' | 'mode' | 'picture' | 'prefs';
+export type ReaderPanelKind = 'none' | 'progress' | 'index' | 'mode' | 'picture' | 'prefs';
 
 /**
  * 原生气泡只在宿主设置材质，内部工具与面板不再叠加模糊背板。
@@ -30,6 +32,11 @@ export struct ReaderHud {
   @Link brightnessValue: number;
   @Link bgPaper: boolean;
   @Link preloadCount: number;
+  @Link bookmarks: Array<ReadingProgress>;
+  chapterSource: BasicDataSource<Chapter> = new BasicDataSource<Chapter>();
+  loadChapter: (chapterIdx: number, targetPage: number) => Promise<void> =
+    async (_chapterIdx: number, _targetPage: number): Promise<void> => {};
+  flushProgress: () => void = (): void => {};
   goChapter: (delta: number) => void = (delta: number): void => {};
   jumpToPage: (page: number) => void = (page: number): void => {};
   switchMode: (m: ReaderMode) => void = (m: ReaderMode): void => {};
@@ -59,7 +66,27 @@ export struct ReaderHud {
   @Builder
   private BottomHud() {
     Column() {
-      if (this.panel !== 'none') {
+      if (this.panel === 'index') {
+        ReaderCatalogPanel({
+          bookmarks: this.$bookmarks,
+          chapters: this.$chapters,
+          chapterIndex: this.$chapterIndex,
+          pages: this.$pages,
+          currentPage: this.$currentPage,
+          scrambleId: this.$scrambleId,
+          chapterSource: this.chapterSource,
+          photoId: this.currentChapterId(),
+          loadChapter: (chapterIdx: number, targetPage: number): Promise<void> => this.loadChapter(chapterIdx, targetPage),
+          jumpToPage: (page: number): void => this.jumpToPage(page),
+          flushProgress: (): void => this.flushProgress(),
+          close: (): void => {
+            this.panel = 'none';
+          }
+        })
+          .width('100%')
+          .height(Math.min(this.maxPanelHeight, 420))
+          .padding({ left: 12, right: 12, top: 8 })
+      } else if (this.panel !== 'none') {
         Scroll() {
           Column({ space: 10 }) {
           if (this.sliderDragging && this.pages.length > 0) { this.DragPreview() }
@@ -100,11 +127,10 @@ export struct ReaderHud {
         HudButton({
           symbol: $r('sys.symbol.list_bullet'),
           accessibilityLabel: '目录',
-          active: false,
+          active: this.panel === 'index',
           textColor: $r('sys.color.font_primary'),
           onTap: (): void => {
-            this.panel = 'none';
-            this.openSheet('index');
+            this.panel = this.panel === 'index' ? 'none' : 'index';
           }
         })
         HudButton({
@@ -175,16 +201,11 @@ export struct ReaderHud {
     .alignItems(HorizontalAlign.Center)
   }
 
-  /** 进度浮卡：上一话 / 拖拽跳页 / 下一话，不挂内部 systemMaterial，避免在深色胶囊内出现浅灰材质块 */
+  /** 进度浮卡：上一话图标 / 拖拽跳页 / 下一话图标，不挂内部 systemMaterial，避免在深色胶囊内出现浅灰材质块 */
   @Builder
   private ProgressCard() {
     Row({ space: 8 }) {
-      Button('上一话', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
-        .fontColor(this.chapterIndex > 0 ? $r('sys.color.font_primary') : $r('sys.color.font_secondary'))
-        .enabled(this.chapterIndex > 0)
-        .onClick(() => {
-          this.goChapter(-1);
-        })
+      this.ChapterStep($r('sys.symbol.chevron_left'), '上一话', this.chapterIndex > 0, -1)
 
       Slider({
         value: this.sliderDragging ? this.sliderValue
@@ -195,7 +216,7 @@ export struct ReaderHud {
         style: SliderStyle.InSet,
         reverse: this.mode === 'rtl'
       })
-        .selectedColor(PRIMARY)
+        .selectedColor(NEUTRAL_PROGRESS)
         .trackThickness(20)
         .showTips(false)
         .systemMaterial(EMPTY_MATERIAL)
@@ -220,16 +241,28 @@ export struct ReaderHud {
         .constraintSize({ minWidth: 38 })
         .textAlign(TextAlign.Center)
 
-      Button('下一话', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
-        .fontColor(this.chapterIndex < this.chapters.length - 1
-          ? $r('sys.color.font_primary') : $r('sys.color.font_secondary'))
-        .enabled(this.chapterIndex < this.chapters.length - 1)
-        .onClick(() => {
-          this.goChapter(1);
-        })
+      this.ChapterStep($r('sys.symbol.chevron_right'), '下一话', this.chapterIndex < this.chapters.length - 1, 1)
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
+  }
+
+  /** 进度浮卡两侧的上一话/下一话图标按钮 */
+  @Builder
+  private ChapterStep(symbol: Resource, label: string, enabled: boolean, delta: number) {
+    Button({ type: ButtonType.Circle, stateEffect: true }) {
+      SymbolGlyph(symbol)
+        .fontSize(20)
+        .fontColor([enabled ? $r('sys.color.font_primary') : $r('sys.color.font_tertiary')])
+    }
+    .width(36)
+    .height(36)
+    .backgroundColor(Color.Transparent)
+    .enabled(enabled)
+    .accessibilityText(label)
+    .onClick(() => {
+      this.goChapter(delta);
+    })
   }
 
   private currentChapterId(): string {
