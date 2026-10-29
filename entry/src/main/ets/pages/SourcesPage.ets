@@ -4,7 +4,7 @@ import { SourceEntry, SourceInstance, sourceStore } from '../data/Sources';
 import { errorMessage } from '../models/Models';
 import { SourceEntryCard } from './sources/SourceEntryCard';
 import { SOURCE_SECTIONS, presentationFor } from '../data/source/SourceCatalog';
-import { MangaRouteParams, ROUTE_SEARCH, ROUTE_SOURCE_SETTINGS, ROUTE_SUWAYOMI_LIBRARY } from '../common/Route';
+import { MangaRouteParams, ROUTE_SEARCH, ROUTE_SUWAYOMI_LIBRARY } from '../common/Route';
 import { BG, CARD, DIVIDER, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT } from '../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
@@ -135,15 +135,6 @@ export struct SourcesPage {
                 label: '搜索全部图源',
                 action: (): void => {
                   this.stack.pushPathByName(ROUTE_SEARCH, { scope: 'all' } as MangaRouteParams);
-                }
-              }
-            },
-            {
-              content: {
-                icon: $r('sys.symbol.gearshape'),
-                label: '图源设置',
-                action: (): void => {
-                  this.stack.pushPathByName(ROUTE_SOURCE_SETTINGS, {} as MangaRouteParams);
                 }
               }
             }

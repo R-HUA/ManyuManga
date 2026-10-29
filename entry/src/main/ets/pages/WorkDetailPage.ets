@@ -1,3 +1,4 @@
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { HDS_TITLE_STYLE, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { WorkSourceSheet } from './detail/WorkSourceSheet';
@@ -103,7 +104,11 @@ export struct WorkDetailPage {
       await albumCacheStore.put(album);
     } catch (e) {
       if (ticket === this.generation && !isRequestCancelled(e as Error)) {
-        this.error = errorMessage(e as Error);
+        if (this.album === null) {
+          this.error = errorMessage(e as Error);
+        } else {
+          this.notifyError('刷新详情失败', e as Error);
+        }
       }
     } finally {
       if (ticket === this.generation) {
@@ -121,7 +126,7 @@ export struct WorkDetailPage {
       this.progress = await readProgressStore.get(this.aid);
       if (this.remoteAvailable && !this.remoteBusy) { this.loadRemoteShelf(); }
     } catch (e) {
-      this.error = errorMessage(e as Error);
+      this.notifyError('刷新书架状态失败', e as Error);
     }
   }
 
@@ -142,7 +147,7 @@ export struct WorkDetailPage {
               await this.refresh();
               promptAction.showToast({ message: '已移出书架' });
             }).catch((e: Error) => {
-              this.error = errorMessage(e);
+              this.notifyError('移出书架失败', e);
             });
           }
         }
@@ -217,11 +222,12 @@ export struct WorkDetailPage {
       if (ticket === this.generation) {
         await this.refresh();
         if (discovered.failures.length > 0) {
-          this.error = discovered.failures.join('；');
+          // 多源匹配失败不影响收藏本身，只记日志，不打断用户。
+          hilog.warn(0x0000, 'WorkDetail', 'discoverSources failures: %{public}s', discovered.failures.join('；'));
         }
       }
     } catch (e) {
-      this.error = errorMessage(e as Error);
+      this.notifyError('加入书架失败', e as Error);
     }
   }
 
@@ -230,7 +236,7 @@ export struct WorkDetailPage {
       await downloadManager.enqueue(this.album!);
       promptAction.showToast({ message: '已加入离线下载队列' });
     } catch (e) {
-      this.error = errorMessage(e as Error);
+      this.notifyError('加入下载队列失败', e as Error);
     }
   }
 
@@ -255,7 +261,7 @@ export struct WorkDetailPage {
             this.progress = await readProgressStore.get(album.id);
             this.sourceName = (await sourceStore.get(sourceId(album.id), false)).name;
             this.sourceSheet = false;
-            this.error = '目标源章节命名不同，请手动点选对应章节继续阅读';
+            promptAction.showToast({ message: '目标源章节命名不同，请手动点选对应章节继续阅读' });
             return;
           }
           const result: SourceSwitchResult = await prepareSourceSwitch(album, chapter, this.progress.page, this.progress.totalPages);
@@ -277,13 +283,19 @@ export struct WorkDetailPage {
       promptAction.showToast({ message: `已切换至 ${this.sourceName}` });
     } catch (e) {
       if (ticket === this.generation) {
-        this.error = errorMessage(e as Error);
+        this.notifyError('切换图源失败', e as Error);
       }
     } finally {
       if (ticket === this.generation) {
         this.busy = false;
       }
     }
+  }
+
+  /** 操作类错误统一用 Toast 提示，详细原因写入日志，不再插入挤压布局的页内横幅。 */
+  private notifyError(action: string, e: Error): void {
+    hilog.error(0x0000, 'WorkDetail', '%{public}s: %{public}s', action, errorMessage(e));
+    promptAction.showToast({ message: `${action}：${errorMessage(e)}` });
   }
 
   private readFromStart(): void {
@@ -329,7 +341,7 @@ export struct WorkDetailPage {
       this.commentsDone = !result.hasNext;
     } catch (e) {
       if (ticket === this.generation && !isRequestCancelled(e as Error)) {
-        this.error = errorMessage(e as Error);
+        this.notifyError('评论加载失败', e as Error);
       }
     } finally {
       if (ticket === this.generation && requests === this.commentRequests) {
@@ -407,35 +419,31 @@ export struct WorkDetailPage {
   build() {
     HdsNavDestination() {
       Column() {
-        if (this.error !== '') {
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
-              .fontSize(16)
-              .fontColor([DANGER])
-            Text(this.error)
-              .fontColor(TEXT_SUB)
-              .fontSize(12)
-              .layoutWeight(1)
-            Text('重试')
-              .fontColor(PRIMARY)
-              .fontSize(12)
-              .fontWeight(FontWeight.Bold)
-              .onClick(() => {
-                this.load(this.aid);
-              })
-          }
-          .padding(12)
-          .margin({ left: 16, right: 16, top: 6, bottom: 6 })
-          .borderRadius(14)
-          .backgroundColor(CARD)
-        }
-
         if (this.busy && this.album === null) {
           Column({ space: 12 }) {
             LoadingProgress().width(40).height(40).color(PRIMARY)
             Text('正在解析作品详情与章节列表…')
               .fontSize(13)
               .fontColor(TEXT_SUB)
+          }
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+          .width('100%')
+        } else if (this.album === null && this.error !== '') {
+          // 只有详情本身加载失败才占满内容区显示错误与重试。
+          Column({ space: 12 }) {
+            SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
+              .fontSize(40)
+              .fontColor([DANGER])
+            Text(this.error)
+              .fontSize(13)
+              .fontColor(TEXT_SUB)
+              .textAlign(TextAlign.Center)
+              .padding({ left: 32, right: 32 })
+            Button('重试')
+              .onClick(() => {
+                this.load(this.aid);
+              })
           }
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)

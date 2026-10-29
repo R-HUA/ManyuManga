@@ -39,6 +39,8 @@ export struct SearchAllPage {
   @State private searchKind: SourceKind | null = null;
   @State private searchOptions: SourceSearchOptions = new SourceSearchOptions();
   @State private filterSheet: boolean = false;
+  /** 单源搜索里由“应用筛选”发起的空关键词检索。 */
+  @State private filterSearch: boolean = false;
 
   @State private submitted: string = '';
   private ticket: number = 0;
@@ -82,6 +84,7 @@ export struct SearchAllPage {
   private editQuery(): void {
     this.remoteRequests.abortAll();
     this.submitted = '';
+    this.filterSearch = false;
     this.resumeSearch = false;
     this.matching = false;
     this.selection = null;
@@ -95,7 +98,7 @@ export struct SearchAllPage {
 
   private sourcesChanged(): void {
     this.ticket++;
-    if (this.submitted === '') { return; }
+    if (!this.hasSubmission()) { return; }
     if (this.active) {
       this.search();
     } else {
@@ -103,13 +106,26 @@ export struct SearchAllPage {
     }
   }
 
-  private async search(): Promise<void> {
-    if (this.query.trim() === '') { this.editQuery(); return; }
+  private hasSubmission(): boolean {
+    return this.submitted !== '' || this.filterSearch;
+  }
+
+  private filterAvailable(): boolean {
+    return this.scope === 'source' && (this.searchKind === 'jm' || this.searchKind === 'eh');
+  }
+
+  /** allowEmpty：单源筛选面板点“应用筛选”时，即使关键词为空也按筛选条件发起一次检索。 */
+  private async search(allowEmpty: boolean = false): Promise<void> {
+    const emptyAllowed: boolean = allowEmpty && this.scope === 'source';
+    if (this.query.trim() === '' && !emptyAllowed && !(this.filterSearch && this.scope === 'source')) {
+      this.editQuery(); return;
+    }
     const ticket: number = ++this.ticket;
     this.remoteRequests.abortAll();
     this.remoteRequests = new RequestAbortGroup();
     const query: string = this.query.trim();
     this.submitted = query;
+    this.filterSearch = query === '';
     const selection: SearchSelection | null = this.selection;
     this.pending = true;
     try {
@@ -287,12 +303,13 @@ export struct SearchAllPage {
       }.width(40).height(40).backgroundColor(Color.Transparent).systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
       .accessibilityText('返回').onClick((): void => { this.stack.pop(); })
       SearchSuggestField({ text: this.$query, sourceId: this.onlySource, selection: this.selection,
+        showSearchButton: !this.filterAvailable(),
         placeholder: this.scope === 'library' ? '搜索书架' : this.scope === 'source' ? `搜索${this.sourceName}` : '搜索全部图源',
         onEdit: (): void => this.editQuery(),
         onSubmit: (text: string, selection: SearchSelection | null): void => {
           this.query = text; this.selection = selection; this.search();
         } }).layoutWeight(1)
-      if (this.scope === 'source' && (this.searchKind === 'jm' || this.searchKind === 'eh')) {
+      if (this.filterAvailable()) {
         Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
           SymbolGlyph($r('sys.symbol.slider_horizontal_2'))
             .fontSize(20)
@@ -317,9 +334,9 @@ export struct SearchAllPage {
       options: this.searchOptions,
       onApply: (options: SourceSearchOptions): void => {
         this.searchOptions = options;
-        if (this.submitted !== '') {
-          this.search();
-        }
+        this.filterSheet = false;
+        // 应用筛选即发起一次检索，关键词为空时按纯筛选条件检索该图源。
+        this.search(true);
       },
       onClose: (): void => {
         this.filterSheet = false;
@@ -333,12 +350,12 @@ export struct SearchAllPage {
         Column() {
           Scroll() {
             Column({ space: 20 }) {
-              if (this.query.trim() === '') {
+              if (this.query.trim() === '' && !this.filterSearch) {
                 SearchHistory({ onSubmit: (text: string): void => { this.query = text; this.selection = null; this.search(); } })
               }
               if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(13).width('100%') }
               if (this.matching) { Text('正在核对关联作品').fontColor(TEXT_SUB).fontSize(13).width('100%') }
-              if (this.submitted !== '') {
+              if (this.hasSubmission()) {
                 if (this.groups.length > 1) {
                   Row({ space: 8 }) {
                     Toggle({ type: ToggleType.Checkbox, isOn: this.onlyHits })

@@ -18,6 +18,8 @@ export struct SearchSuggestField {
   @Link text: string;
   @Prop @Watch('reset') sourceId: string = '';
   @Prop placeholder: string = '';
+  /** 带右侧筛选入口时隐藏“搜索”按钮，回车仍可提交。 */
+  @Prop showSearchButton: boolean = true;
   @Prop selection: SearchSelection | null = null;
   onEdit: (text: string) => void = (_text: string): void => {};
   onSubmit: (text: string, selection: SearchSelection | null) => void =
@@ -135,7 +137,7 @@ export struct SearchSuggestField {
       .backgroundColor(CARD)
       .border({ width: 0.5, color: DIVIDER })
       .systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
-      .searchButton('搜索', { autoDisable: true })
+      .searchButton(this.showSearchButton ? '搜索' : '', { autoDisable: true })
       .cancelButton({ style: CancelButtonStyle.INPUT })
       .onChange((value: string) => {
         this.text = value;

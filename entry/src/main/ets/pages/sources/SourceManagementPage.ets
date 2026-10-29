@@ -384,6 +384,17 @@ export struct SourceManagementPage {
         .contentEndOffset(28 + this.bottomInset)
         .scrollBar(BarState.Off)
         .clip(false)
+
+        // 每个节点只能可靠地绑定一个 bindSheet；EH 站点设置单独挂在零尺寸锚点上，避免与 Suwayomi 连接表单串台。
+        Column()
+          .width(0)
+          .height(0)
+          .bindSheet($$this.settingsForm, this.SettingsSheet(), {
+            height: SheetSize.FIT_CONTENT,
+            dragBar: true,
+            showClose: false,
+            systemMaterial: IMMERSIVE_SHEET_MATERIAL
+          })
       }
       .width('100%')
       .height('100%')
@@ -392,12 +403,6 @@ export struct SourceManagementPage {
         dragBar: true,
         showClose: true,
         title: { title: 'Suwayomi' },
-        systemMaterial: IMMERSIVE_SHEET_MATERIAL
-      })
-      .bindSheet($$this.settingsForm, this.SettingsSheet(), {
-        height: SheetSize.FIT_CONTENT,
-        dragBar: true,
-        showClose: false,
         systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }

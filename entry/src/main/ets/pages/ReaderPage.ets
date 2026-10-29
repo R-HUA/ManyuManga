@@ -397,8 +397,9 @@ export struct ReaderPage {
           Column().width('100%').height('100%').hitTestBehavior(HitTestMode.Block)
             .onClick(() => { this.panel = 'none'; this.hudVisible = false; })
         }
-        Row().width(1).height(1).align(Alignment.Bottom)
-          .margin({ bottom: this.bottomSafeVp + 12 })
+        // HUD 锚点：Stack 默认居中对齐，align/margin 无法把它移到底部，必须用 position 绝对定位到底部中线。
+        Row().width(1).height(1)
+          .position({ left: '50%', bottom: this.bottomSafeVp + 12 })
           .bindPopup(this.hudVisible, {
             builder: this.HudLayer,
             width: Math.max(240, this.canvasWidthVp - 32),

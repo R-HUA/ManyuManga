@@ -31,9 +31,10 @@ export class JmStrategy implements SourceStrategy {
   }
 
   async search(ctx: SourceRequestContext, query: string, page: number): Promise<SearchResult> {
-    if (query === '') {
+    if (query === '' && ctx.searchOptions === null) {
       return new SearchResult(0, this.qualifyAlbums(await jmApi.latest(page), ctx.source.id));
     }
+    // 关键词为空但带筛选条件（来自“应用筛选”）时，按筛选条件做空关键词检索。
     const filter: SearchOptions = ctx.searchOptions === null ? new SearchOptions() : ctx.searchOptions.jm;
     const raw: SearchResult = await jmApi.search(query, page, filter.order, filter.time, filter.year, filter.month);
     return new SearchResult(raw.total, this.qualifyAlbums(raw.list, ctx.source.id));

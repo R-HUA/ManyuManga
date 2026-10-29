@@ -22,14 +22,30 @@ export async function loadLibraryWorkForAlbum(albumId: string): Promise<LibraryW
   return items.length > 0 ? items[0] : null;
 }
 
-/** SQL 先筛作品候选，匹配判断只解码候选本子。 */
+/**
+ * 找出与 album 可能是同一作品的书架作品。
+ * 之前用 json_extract 加三十多层嵌套 REPLACE 在 SQL 里归一化标题，替换表里含有 '?'、'？' 和制表、换行等控制字符，
+ * RDB 绑定参数时会把字面量里的 '?' 误算成占位符，或因 JSON1 不可用而报 SQLITE_ERROR（Generic error），导致收藏失败。
+ * 现在只读出 work_id 和 payload，在 TS 里用 normalizedTitle 做同样的归一化比较。
+ */
 export async function loadLibraryCandidates(album: Album): Promise<Array<LibraryWork>> {
-  let name: string = "LOWER(json_extract(a.payload, '$.name'))";
-  const ignored: string = ' []【】()（）「」『』《》·:：,，.。!！?？_-\t\r\n';
-  for (let i: number = 0; i < ignored.length; i++) { name = `REPLACE(${name}, '${ignored[i]}', '')`; }
-  return loadWorks('SELECT DISTINCT w.* FROM library_work w JOIN library_album a ON a.work_id = w.id WHERE ' +
-    name + " = ? OR (? <> '' AND json_extract(a.payload, '$.originalUrl') = ?) ORDER BY w.position ASC, w.id ASC",
-    [normalizedTitle(album.name), album.originalUrl, album.originalUrl]);
+  const target: string = normalizedTitle(album.name);
+  const url: string = album.originalUrl;
+  const ids: Array<string> = [];
+  await readRows(await dbQuery('SELECT work_id, payload FROM library_album', []),
+    (row: relationalStore.ResultSet): void => {
+      const workId: string = cellString(row, 'work_id');
+      if (ids.indexOf(workId) >= 0) { return; }
+      const stored: Album = albumFromJson(cellString(row, 'payload'));
+      if ((target !== '' && normalizedTitle(stored.name) === target) || (url !== '' && stored.originalUrl === url)) {
+        ids.push(workId);
+      }
+    });
+  if (ids.length === 0) { return []; }
+  const marks: Array<string> = [];
+  const args: Array<relationalStore.ValueType> = [];
+  for (const id of ids) { marks.push('?'); args.push(id); }
+  return loadWorks(`SELECT * FROM library_work WHERE id IN (${marks.join(', ')}) ORDER BY position ASC, id ASC`, args);
 }
 
 async function loadWorks(sql: string, args: Array<relationalStore.ValueType>): Promise<Array<LibraryWork>> {
