@@ -1,7 +1,7 @@
 /**
  * entry/src/main/ets/data/SuwayomiLibrary.ets
- * Suwayomi 远程书架数据层。字段名按 Suwayomi-Server master（6b481e8, 2026-10-21）核实：
- * 所有 Long 在 JSON 中是字符串标量；`inLibrary/unreadCount/downloadCount` 已迁到 `user { … }`；
+ * Suwayomi 远程书架数据层。所有 Long 在 JSON 中是字符串标量；
+ * 收藏状态读取作品根字段，以兼容正式版和较新的多用户版本；
  * 排序使用 `order: [{ by, byType }]`（`orderBy/orderByType` 已废弃）。
  */
 import { SourceEntry } from './Sources';
@@ -115,7 +115,7 @@ class LibraryApi {
     }
     if (keyword !== '') {
       const title: Record<string, Object> = {};
-      title['contains'] = keyword;
+      title['includesInsensitive'] = keyword;
       filter['title'] = title;
     }
     const orderEntry: Record<string, Object> = {};
@@ -130,9 +130,9 @@ class LibraryApi {
       variables['after'] = after;
     }
     const data: Record<string, Object> = await suwayomi.query(source,
-      'query Library($filter: MangaFilter, $order: [MangaOrder!], $first: Int, $after: Cursor) {' +
+      'query Library($filter: MangaFilterInput, $order: [MangaOrderInput!], $first: Int, $after: Cursor) {' +
       ' mangas(filter: $filter, order: $order, first: $first, after: $after) {' +
-      ' nodes { id sourceId url title author artist genre thumbnailUrl user { inLibrary unreadCount downloadCount } }' +
+      ' nodes { id sourceId url title author artist genre thumbnailUrl inLibrary unreadCount downloadCount }' +
       ' pageInfo { hasNextPage endCursor } totalCount } }', variables, undefined, signal);
     const page: Record<string, Object> = record(data['mangas']);
     const result: RemoteMangaPage = new RemoteMangaPage();
@@ -151,8 +151,8 @@ class LibraryApi {
     const variables: Record<string, Object> = {};
     variables['id'] = mangaId;
     const data: Record<string, Object> = await suwayomi.query(source,
-      'query Shelf($id: Int!) { manga(id: $id) { user { inLibrary } } }', variables, undefined, signal);
-    return requiredBoolean(record(record(data['manga'])['user'])['inLibrary']);
+      'query Shelf($id: Int!) { manga(id: $id) { inLibrary } }', variables, undefined, signal);
+    return requiredBoolean(record(data['manga'])['inLibrary']);
   }
 
   /** 加入/移出远程书架：服务端没有专用 add/remove 接口，靠 patch.inLibrary。 */
@@ -163,8 +163,8 @@ class LibraryApi {
     input['id'] = mangaId;
     input['patch'] = patch;
     const data: Record<string, Object> = await suwayomi.query(source,
-      'mutation Lib($input: UpdateMangaInput!) { updateManga(input: $input) { manga { id user { inLibrary } } } }', vars(input));
-    return requiredBoolean(record(record(record(data['updateManga'])['manga'])['user'])['inLibrary']);
+      'mutation Lib($input: UpdateMangaInput!) { updateManga(input: $input) { manga { id inLibrary } } }', vars(input));
+    return requiredBoolean(record(record(data['updateManga'])['manga'])['inLibrary']);
   }
 
   /** 分类是增量语义（加入/移出/清空），不是绝对集合。 */
@@ -255,7 +255,7 @@ class LibraryApi {
     input['query'] = keyword;
     const data: Record<string, Object> = await suwayomi.query(source,
       'mutation Browse($input: FetchSourceMangaInput!) { fetchSourceManga(input: $input) {' +
-      ' mangas { id sourceId url title author artist genre thumbnailUrl user { inLibrary unreadCount downloadCount } } hasNextPage } }',
+      ' mangas { id sourceId url title author artist genre thumbnailUrl inLibrary unreadCount downloadCount } hasNextPage } }',
       vars(input), undefined, signal);
     const payload: Record<string, Object> = record(data['fetchSourceManga']);
     const result: RemoteMangaPage = new RemoteMangaPage();
@@ -326,7 +326,6 @@ function requiredBoolean(value: Object | undefined): boolean {
 
 function parseManga(source: SourceEntry, value: Object): RemoteManga {
   const node: Record<string, Object> = record(value);
-  const user: Record<string, Object> = record(node['user']);
   const item: RemoteManga = new RemoteManga();
   item.id = requiredNumber(node['id']);
   item.title = requiredString(node['title']);
@@ -337,9 +336,9 @@ function parseManga(source: SourceEntry, value: Object): RemoteManga {
   if (item.remoteSourceId === '') { throw new Error('服务端缺少作品来源标识'); }
   item.url = requiredString(node['url']);
   item.coverUrl = node['thumbnailUrl'] === null ? '' : absolute(source, requiredString(node['thumbnailUrl']));
-  item.unread = requiredNumber(user['unreadCount']);
-  item.downloaded = requiredNumber(user['downloadCount']);
-  item.inLibrary = requiredBoolean(user['inLibrary']);
+  item.unread = requiredNumber(node['unreadCount']);
+  item.downloaded = requiredNumber(node['downloadCount']);
+  item.inLibrary = requiredBoolean(node['inLibrary']);
   return item;
 }
 

@@ -126,15 +126,23 @@ export class SuwayomiClient {
     }
     try {
       const headers: Record<string, string> = authorization === undefined ? await this.headers(source) : { 'Content-Type': 'application/json', 'Authorization': authorization };
-      const response: http.HttpResponse = await request.request(`${base}/api/graphql`, {
-        method: http.RequestMethod.POST,
-        header: headers,
-        extraData: JSON.stringify({ query: query, variables: variables }),
-        expectDataType: http.HttpDataType.STRING,
-        connectTimeout: 6000,
-        readTimeout: 20000,
-        usingCache: false
-      });
+      let response: http.HttpResponse;
+      try {
+        response = await request.request(`${base}/api/graphql`, {
+          method: http.RequestMethod.POST,
+          header: headers,
+          extraData: JSON.stringify({ query: query, variables: variables }),
+          expectDataType: http.HttpDataType.STRING,
+          connectTimeout: 6000,
+          readTimeout: 20000,
+          usingCache: false
+        });
+      } catch (e) {
+        if (signal !== null && (signal.aborted() || isRequestCancelled(e as Error))) {
+          throw new RequestCancelled();
+        }
+        throw new Error('无法连接服务，请检查服务地址和网络');
+      }
       if (signal !== null && signal.aborted()) {
         throw new RequestCancelled();
       }
@@ -144,10 +152,23 @@ export class SuwayomiClient {
       if (response.responseCode !== 200) {
         throw new Error(`书源请求失败（${response.responseCode}）`);
       }
-      const body: Record<string, Object> = record(JSON.parse(response.result as string) as Object);
+      let parsed: Object;
+      try {
+        parsed = JSON.parse(response.result as string) as Object;
+      } catch (e) {
+        throw new Error('服务端返回的数据格式不正确');
+      }
+      const body: Record<string, Object> = record(parsed);
       const errors: Array<Object> | null = asArray(body['errors']);
       if (errors !== null && errors.length > 0) {
-        throw new Error(asString(record(errors[0])['message'], '书源请求失败'));
+        const message: string = asString(record(errors[0])['message']).toLowerCase();
+        if (message.includes('validation error') || message.includes('unknown type') || message.includes('cannot query field')) {
+          throw new Error('书源请求失败（接口不兼容），请检查服务端版本');
+        }
+        if (message.includes('unauthorized') || message.includes('unauthenticated')) {
+          throw new Error('书源登录失效，请在书源设置中重新登录');
+        }
+        throw new Error('书源请求失败（服务端处理异常）');
       }
       return record(body['data']);
     } catch (e) {

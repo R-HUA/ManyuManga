@@ -17,7 +17,7 @@ async function remoteFixture(env) {
   const gateway = await sourceStore.gateway();
   const manga = (id, saved = true, remoteId = source.remoteId) => ({ id, sourceId: remoteId,
     url: `/manga/${id}`, title: `作品${id}`, author: '作者', artist: null, genre: ['冒险'], thumbnailUrl: `/cover/${id}.jpg`,
-    user: { inLibrary: saved, unreadCount: 2, downloadCount: 1 } });
+    inLibrary: saved, unreadCount: 2, downloadCount: 1 });
   return { sourceStore, source, gateway, manga };
 }
 
@@ -66,7 +66,7 @@ export async function interfaceTests(test) {
     let malformed = false;
     env.state.handler = async request => {
       if (request.body.query.includes('categories')) return { categories: { nodes: [{ id: 0, name: '默认', order: -1, default: true }] } };
-      return { mangas: { nodes: malformed ? [{ ...manga(1), user: {} }] : [manga(1)],
+      return { mangas: { nodes: malformed ? [{ ...manga(1), inLibrary: null }] : [manga(1)],
         totalCount: 2, pageInfo: { hasNextPage: true, endCursor: 'next' } } };
     };
     assert.equal((await suwayomiLibrary.categories(gateway))[0].order, -1);
@@ -75,13 +75,28 @@ export async function interfaceTests(test) {
     assert.equal(page.items[0].coverUrl, 'https://example.invalid/cover/1.jpg');
     assert.equal(page.endCursor, 'next'); assert.equal(page.totalCount, 2); assert.equal(page.hasNextPage, true);
     const variables = env.state.calls.at(-1).body.variables;
+    const query = env.state.calls.at(-1).body.query;
+    assert.match(query, /\$filter: MangaFilterInput/);
+    assert.match(query, /\$order: \[MangaOrderInput!\]/);
+    assert.match(query, /inLibrary unreadCount downloadCount/);
     assert.deepEqual(variables.filter.categoryId, { isNull: true });
+    assert.deepEqual(variables.filter.title, { includesInsensitive: '作品' });
     assert.deepEqual(variables.order, [{ by: 'IN_LIBRARY_AT', byType: 'DESC' }]);
+    env.state.handler = async () => ({ fetchSourceManga: { mangas: [manga(2, false)], hasNextPage: false } });
+    const browse = await suwayomiLibrary.browseSource(gateway, manga(2).sourceId, '作品', 1);
+    assert.equal(browse.items[0].unread, 2); assert.equal(browse.items[0].downloaded, 1);
+    assert.match(env.state.calls.at(-1).body.query, /inLibrary unreadCount downloadCount/);
+    env.state.handler = async () => ({ mangas: { nodes: malformed ? [{ ...manga(1), inLibrary: null }] : [manga(1)], totalCount: 2,
+      pageInfo: { hasNextPage: true, endCursor: 'next' } } });
     await assert.rejects(suwayomiLibrary.library(gateway, -1, '', 'title', 'next'), /游标/);
     malformed = true;
     await assert.rejects(suwayomiLibrary.library(gateway, -1, '', 'title', ''), /状态|数字/);
     env.state.handler = async () => ({ mangas: { nodes: [] } });
     await assert.rejects(suwayomiLibrary.library(gateway, -1, '', 'title', ''), /格式/);
+    env.state.handler = async request => request.body.query.includes('query Shelf') ?
+      { manga: { inLibrary: true } } : { updateManga: { manga: { id: 1, inLibrary: false } } };
+    assert.equal(await suwayomiLibrary.inLibrary(gateway, 1), true);
+    assert.equal(await suwayomiLibrary.setInLibrary(gateway, 1, false), false);
   });
 
   await test('网关搜索单独成组，隐藏扩展不丢旧作品身份，新身份保存失败不发布', async env => {
@@ -94,11 +109,13 @@ export async function interfaceTests(test) {
     assert.deepEqual(entries.filter(item => item.kind === 'suwayomi').map(item => item.id), [gateway.id]);
     const settings = new SourceManagementPage(); await settings.load();
     assert.equal(settings.sources.some(item => item.kind === 'suwayomi'), false);
+    source.enabled = false; await sourceStore.save(source);
     let items = [manga(1)];
     env.state.handler = async () => ({ mangas: { nodes: items, totalCount: items.length,
       pageInfo: { hasNextPage: false, endCursor: null } } });
     const result = await sourceApi.remoteLibrary(gateway, -1, '', 'added', '', new RequestAbortGroup());
     assert.equal(result.albums[0].id, 'existing_extension~1');
+    assert.equal((await sourceStore.get(source.id)).enabled, true);
     assert.equal(result.items[0].key, result.albums[0].id);
     const rules = env.load('data/stores/FilterStores').blockTagsStore;
     await rules.addRule('', 'tag', '冒险');
@@ -111,6 +128,26 @@ export async function interfaceTests(test) {
       sourceStore.bindSuwayomiSources(gateway, ['new_remote']), sourceStore.bindSuwayomiSources(gateway, ['new_remote'])]);
     assert.equal(a[0].id, b[0].id);
     assert.equal((await sourceStore.list()).filter(item => item.remoteId === 'new_remote').length, 1);
+  });
+
+  await test('远程接口错误展示中文提示，服务端异常不会切换备用地址', async env => {
+    const { gateway } = await remoteFixture(env);
+    const { suwayomi } = env.load('data/Suwayomi');
+    gateway.lanEndpoint = 'https://backup.invalid';
+    env.state.httpResponse = { responseCode: 200, result: JSON.stringify({ errors: [
+      { message: "Validation error (UnknownType): Unknown type 'MangaFilter'" }
+    ] }) };
+    await assert.rejects(suwayomi.query(gateway, 'query { mangas { totalCount } }', {}), /接口不兼容/);
+    assert.equal(env.state.calls.length, 1);
+    env.state.httpResponse.result = JSON.stringify({ errors: [{ message: 'Unauthorized' }] });
+    await assert.rejects(suwayomi.query(gateway, 'query { mangas { totalCount } }', {}), /登录失效/);
+    env.state.httpResponse.result = JSON.stringify({ errors: [{ message: 'Exception with sensitive details' }] });
+    await assert.rejects(suwayomi.query(gateway, 'query { mangas { totalCount } }', {}), error =>
+      /服务端处理异常/.test(error.message) && !error.message.includes('sensitive'));
+    env.state.httpResponse = null;
+    env.state.handler = async () => { throw new Error('socket failed'); };
+    await assert.rejects(suwayomi.query(gateway, 'query { mangas { totalCount } }', {}), /无法连接服务/);
+    assert.equal(env.state.calls.length, 5);
   });
 
   await test('远程分类切换取消旧请求，空的可见页仍能按服务端游标继续，离页拒收结果', async env => {
@@ -139,6 +176,10 @@ export async function interfaceTests(test) {
     const hidden = deferred(); api.remoteLibrary = async () => hidden.promise;
     const late = page.reload(); page.hide(); hidden.resolve(oldResult); await late;
     assert.equal(page.albums.length, 0); assert.equal(page.loading, false);
+    page.active = true;
+    const editing = deferred(); api.remoteLibrary = async () => editing.promise;
+    const beforeEdit = page.reload(); page.editQuery('新关键词'); editing.resolve(oldResult); await beforeEdit;
+    assert.equal(page.editing, true); assert.equal(page.albums.length, 0); assert.equal(page.more, false);
   });
 
   await test('远程扩展检索隐藏已收藏不提前结束分页，单源失败独立重试', async env => {

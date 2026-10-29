@@ -96,10 +96,13 @@ export struct JmBrowsePage {
     HdsNavDestination() {
       HdsTabs({ index: this.tab }) {
         TabContent() { ExplorePage({ embeddedInShell: true, sourceIdValue: 'jm', scroller: this.exploreScroller }) }
+          .clip(false)
           .tabBar(BottomTabBarStyle.of({ normal: new SymbolGlyphModifier($r('sys.symbol.star_fill')), selected: new SymbolGlyphModifier($r('sys.symbol.star_fill')) }, '精选'))
         TabContent() { CategoryPage({ embeddedInShell: true, sourceIdValue: 'jm', scroller: this.categoryScroller, query: this.categoryQuery }) }
+          .clip(false)
           .tabBar(BottomTabBarStyle.of({ normal: new SymbolGlyphModifier($r('sys.symbol.square_fill_grid_2x2')), selected: new SymbolGlyphModifier($r('sys.symbol.square_fill_grid_2x2')) }, '分类'))
       }.barPosition(BarPosition.End).barOverlap(true).barMode(BarMode.Fixed).scrollable(false)
+      .clip(false)
       .barFloatingStyle({ barWidth: { smallWidth: 144, mediumWidth: 152, largeWidth: 160 },
         barBottomMargin: this.bottomInset, systemMaterialEffect: HDS_NATIVE_MATERIAL })
       .onChange((index: number): void => { this.tab = index; }).width('100%').height('100%')

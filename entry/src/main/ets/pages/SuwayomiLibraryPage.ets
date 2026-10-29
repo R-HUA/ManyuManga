@@ -1,8 +1,9 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
-import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
+import { SegmentButton, SegmentButtonOptions, SegmentButtonItemTuple } from '@kit.ArkUI';
+import { EMPTY_MATERIAL, HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { ComicGrid } from '../common/ComicGrid';
-import { EmptyView, SettingSelectRow } from '../common/Components';
-import { BG, DANGER, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
+import { EmptyView, SkeletonGrid } from '../common/Components';
+import { BG, CARD, DIVIDER, PRIMARY, PRIMARY_SOFT, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SOURCE_SETTINGS } from '../common/Route';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { sourceStore, SourceEntry, copySource } from '../data/Sources';
@@ -27,6 +28,14 @@ export struct SuwayomiLibraryPage {
   @State categoryId: number = -1;
   @State sort: LibrarySort = 'added';
   @State explore: boolean = false;
+  @State @Watch('scopeChanged') scopeIndexes: number[] = [0];
+  @State scopeOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
+    multiply: false,
+    buttons: [{ text: $r('app.string.remote_library') }, { text: $r('app.string.remote_sources') }] as SegmentButtonItemTuple,
+    fontColor: TEXT_SUB, selectedFontColor: TEXT_MAIN, fontSize: 14, selectedFontSize: 14,
+    backgroundColor: SUB_CARD, selectedBackgroundColor: CARD,
+    buttonPadding: { top: 6, bottom: 6, left: 12, right: 12 }
+  });
   @State hideSaved: boolean = false;
   @State connected: boolean = false;
   @State loading: boolean = false;
@@ -187,6 +196,10 @@ export struct SuwayomiLibraryPage {
   }
 
   private submit(): void { this.editing = false; this.submitted = this.query.trim(); this.reload(); }
+  private scopeChanged(): void {
+    const explore: boolean = this.scopeIndexes[0] === 1;
+    if (this.explore !== explore) { this.explore = explore; this.submit(); }
+  }
   private openSettings(): void {
     this.stack.pushPathByName(ROUTE_SOURCE_SETTINGS, { sourceId: 'suwayomi' } as MangaRouteParams);
   }
@@ -195,60 +208,67 @@ export struct SuwayomiLibraryPage {
   }
 
   @Builder
-  private ScopePill(label: ResourceStr, explore: boolean) {
-    Button(label, { type: ButtonType.Capsule, buttonStyle: this.explore === explore ? ButtonStyleMode.EMPHASIZED : ButtonStyleMode.NORMAL })
-      .height(36).fontSize(14)
-      .fontColor(this.explore === explore ? Color.White : TEXT_SUB)
-      .backgroundColor(this.explore === explore ? PRIMARY : SUB_CARD)
-      .onClick(() => { if (this.explore !== explore) { this.explore = explore; this.submit(); } })
+  private CategoryChip(label: ResourceStr, id: number) {
+    Button(label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
+      .height(32).fontSize(13).fontWeight(this.categoryId === id ? FontWeight.Medium : FontWeight.Regular)
+      .fontColor(this.categoryId === id ? PRIMARY : TEXT_SUB)
+      .backgroundColor(this.categoryId === id ? PRIMARY_SOFT : SUB_CARD)
+      .padding({ left: 12, right: 12 })
+      .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
+      .onClick(() => { if (this.categoryId !== id) { this.categoryId = id; this.reload(); } })
   }
 
   build() {
     HdsNavDestination() {
-      Column({ space: 12 }) {
-        if (this.connected) {
-          Search({ value: this.query, placeholder: this.explore ? $r('app.string.remote_search_hint') : $r('app.string.library_search_hint') })
-            .onChange((value: string) => this.editQuery(value))
-            .onSubmit(() => this.submit())
-            .margin({ left: 16, right: 16 })
-          Row({ space: 8 }) {
-            this.ScopePill($r('app.string.remote_library'), false)
-            this.ScopePill($r('app.string.remote_sources'), true)
-          }.width('100%').padding({ left: 16, right: 16 })
-          if (this.explore) {
+      Scroll(this.scroller) {
+        Column({ space: 12 }) {
+          if (this.connected) {
+            Search({ value: this.query, placeholder: this.explore ? $r('app.string.remote_search_hint') : $r('app.string.library_search_hint') })
+              .defaultFocus(false)
+              .onChange((value: string) => this.editQuery(value))
+              .onSubmit(() => this.submit())
+              .margin({ left: 16, right: 16 })
             Row() {
-              Text($r('app.string.hide_remote_saved')).fontSize(14).fontColor(TEXT_MAIN).layoutWeight(1)
-              Toggle({ type: ToggleType.Switch, isOn: this.hideSaved })
-                .onChange((on: boolean) => { this.hideSaved = on; this.reload(); })
-            }.padding({ left: 16, right: 16 }).width('100%')
-          } else {
-            Scroll() {
+              SegmentButton({ options: this.scopeOptions, selectedIndexes: $scopeIndexes })
+            }.width('100%').padding({ left: 16, right: 16 })
+            if (this.explore) {
+              Row() {
+                Text($r('app.string.hide_remote_saved')).fontSize(14).fontColor(TEXT_MAIN).layoutWeight(1)
+                Toggle({ type: ToggleType.Switch, isOn: this.hideSaved })
+                  .onChange((on: boolean) => { this.hideSaved = on; this.reload(); })
+              }.padding({ left: 16, right: 16 }).width('100%')
+            } else {
               Row({ space: 8 }) {
-                Button($r('app.string.all_categories'), { type: ButtonType.Capsule, buttonStyle: this.categoryId === -1 ? ButtonStyleMode.EMPHASIZED : ButtonStyleMode.NORMAL })
-                  .height(36).fontSize(14).onClick(() => { this.categoryId = -1; this.reload(); })
-                ForEach(this.categories, (category: RemoteCategory) => {
-                  Button(category.name, { type: ButtonType.Capsule, buttonStyle: this.categoryId === category.id ? ButtonStyleMode.EMPHASIZED : ButtonStyleMode.NORMAL })
-                    .height(36).fontSize(14).onClick(() => { this.categoryId = category.id; this.reload(); })
-                }, (category: RemoteCategory): string => `${category.id}`)
-              }.padding({ left: 16, right: 16 })
-            }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
-            Row() {
-              SettingSelectRow({ title: $r('app.string.sort_order'), options: [$r('app.string.sort_added'), $r('app.string.sort_title')],
-                selectedIndex: this.sort === 'added' ? 0 : 1,
-                onChanged: (index: number): void => { this.sort = index === 0 ? 'added' : 'title'; this.reload(); } })
-            }.padding({ left: 16, right: 16 }).width('100%')
+                Scroll() {
+                  Row({ space: 8 }) {
+                    this.CategoryChip($r('app.string.all_categories'), -1)
+                    ForEach(this.categories, (category: RemoteCategory) => {
+                      this.CategoryChip(category.id === 0 && category.name === 'Default' ?
+                        $r('app.string.default_category') : category.name, category.id)
+                    }, (category: RemoteCategory): string => `${category.id}`)
+                  }.height(40)
+                }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
+                Divider().vertical(true).height(18).strokeWidth('1px').color(DIVIDER)
+                Select([{ value: $r('app.string.sort_added') }, { value: $r('app.string.sort_title') }])
+                  .selected(this.sort === 'added' ? 0 : 1)
+                  .value(this.sort === 'added' ? $r('app.string.sort_added') : $r('app.string.sort_title'))
+                  .font({ size: 14, weight: FontWeight.Regular }).fontColor(TEXT_SUB)
+                  .systemMaterial(EMPTY_MATERIAL).menuSystemMaterial(EMPTY_MATERIAL)
+                  .backgroundColor(Color.Transparent)
+                  .onSelect((index: number) => { this.sort = index === 0 ? 'added' : 'title'; this.reload(); })
+              }.height(40).padding({ left: 16, right: 16 }).width('100%')
+            }
           }
-        }
-        Scroll(this.scroller) {
           Column({ space: 16 }) {
             if (this.error !== '') {
-              Text(this.error).fontSize(14).fontColor(DANGER)
-              Button($r('app.string.retry_action')).onClick(() => {
+              EmptyView({ message: this.error, retryText: $r('app.string.retry_action'), quiet: true, onRetry: (): void => {
                 if (this.gateway === null || this.categories.length === 0) { this.initialize(); }
                 else if (this.explore) { this.reload(); } else { this.loadLibrary(); }
-              })
+              } })
             }
-            if (!this.connected && !this.loading && this.error === '') {
+            if (this.loading && this.albums.length === 0 && this.groups.length === 0) {
+              SkeletonGrid({ columns: 3, rows: 3 })
+            } else if (!this.connected && !this.loading && this.error === '') {
               EmptyView({ message: $r('app.string.remote_disconnected'), retryText: $r('app.string.connection_settings'),
                 onRetry: (): void => this.openSettings(), quiet: true })
             } else if (this.editing) {
@@ -280,11 +300,12 @@ export struct SuwayomiLibraryPage {
                 Button($r('app.string.load_more_action'), { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => { this.loadLibrary(); })
               }
             }
-            if (this.loading) { LoadingProgress().width(32).height(32) }
+            if (this.loading && (this.albums.length > 0 || this.groups.length > 0)) { LoadingProgress().width(32).height(32) }
           }.width('100%').padding({ left: 16, right: 16, bottom: 24 + this.bottomInset })
-        }.width('100%').layoutWeight(1).align(Alignment.TopStart).scrollBar(BarState.Off)
-        .onReachEnd(() => { if (!this.explore && this.more && !this.loading && this.error === '') { this.loadLibrary(); } })
-      }.width('100%').height('100%')
+        }.width('100%')
+      }
+      .width('100%').height('100%').align(Alignment.TopStart).scrollBar(BarState.Off).clip(false)
+      .onReachEnd(() => { if (!this.explore && this.more && !this.loading && this.error === '') { this.loadLibrary(); } })
     }
     .titleBar({ content: { title: { mainTitle: $r('app.string.suwayomi_library_title') },
       menu: { value: [{ content: { icon: $r('sys.symbol.gearshape'), label: $r('app.string.connection_settings'), action: (): void => this.openSettings() } }] } },

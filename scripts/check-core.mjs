@@ -65,6 +65,7 @@ function environment() {
   const http = { RequestMethod: { POST: 'POST' }, HttpDataType: { STRING: 'string' }, createHttp: () => ({
     request: async (url, options) => {
       const request = { url, ...options, body: JSON.parse(options.extraData) }; state.calls.push(request);
+      if (state.httpResponse) return state.httpResponse;
       return { responseCode: 200, result: JSON.stringify({ data: await state.handler(request) }) };
     }, destroy: () => {} }) };
   const modules = new Map();
@@ -112,7 +113,8 @@ function environment() {
       '@ohos.app.ability.common': {}, '@ohos.multimedia.image': {},
       '@ohos.arkui.uiMaterial': { Material: { empty: {} }, ImmersiveMaterial: class { constructor() {} }, ImmersiveStyle: { ULTRA_THIN: 0, THIN: 1, REGULAR: 2, ULTRA_THICK: 3 } },
       '@ohos.arkui.modifier': { SymbolGlyphModifier: class {} },
-      '@ohos.display': { getDefaultDisplaySync: () => ({ width: 1080 }) }, '@kit.ArkUI': { window: {} },
+      '@ohos.display': { getDefaultDisplaySync: () => ({ width: 1080 }) }, '@kit.ArkUI': { window: {},
+        SegmentButtonOptions: { capsule: options => options } },
       '@ohos.app.ability.ConfigurationConstant': {}, '@ohos.promptAction': { showToast: () => {} },
       '@ohos.window': { findWindow: name => {
         state.privacyWindows ??= []; state.privacyWindows.push(name);

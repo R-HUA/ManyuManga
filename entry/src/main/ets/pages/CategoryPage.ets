@@ -287,7 +287,7 @@ export struct CategoryPage {
       .columnsGap(SPACE_M)
       .rowsGap(14)
       .padding({ left: SPACE_L, right: SPACE_L, top: 8, bottom: SPACE_S })
-      .cachedCount(4)
+      .cachedCount(Math.max(4, this.gridColumns()), true)
       .clip(false)
       .width('100%')
       .height('100%')

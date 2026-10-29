@@ -262,6 +262,9 @@ class SourceStore {
           entry.auth = current.auth;
           entries.push(entry);
           changed = true;
+        } else if (!entry.enabled) {
+          entry.enabled = true;
+          changed = true;
         }
         result.push(copySource(entry));
       }

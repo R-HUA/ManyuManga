@@ -13,6 +13,7 @@
     { "name": "remote_sources", "value": "远程图源" },
     { "name": "hide_remote_saved", "value": "隐藏已收藏" },
     { "name": "all_categories", "value": "全部" },
+    { "name": "default_category", "value": "默认" },
     { "name": "sort_order", "value": "排序" },
     { "name": "sort_added", "value": "最近加入" },
     { "name": "sort_title", "value": "标题" },
