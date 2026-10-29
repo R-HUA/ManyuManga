@@ -4,13 +4,17 @@
  */
 import { PRIMARY, SUB_CARD, TEXT_SUB } from '../../common/Theme';
 import { LengthMetrics } from '@kit.ArkUI';
-import { DEFAULT_TAPS, PRELOAD_LEVELS, ReaderOptions } from '../../data/ReaderOptions';
+import { PRELOAD_LEVELS, ReaderOptions } from '../../data/ReaderOptions';
+import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
 
 @Component
 export struct ReaderPrefsSheet {
   @Link options: ReaderOptions;
   @Link preloadCount: number;
   setPreload: (n: number) => void = (n: number): void => {};
+  @Link tapTurn: boolean;
+  setTapTurn: (on: boolean) => void = (_on: boolean): void => {};
+  /** 热区自定义入口暂不开放，保留回调供后续恢复。 */
   openZoneEditor: () => void = (): void => {};
 
   build() {
@@ -48,34 +52,28 @@ export struct ReaderPrefsSheet {
 
       Row({ space: 12 }) {
         Column({ space: 3 }) {
-          Text('触控热区分配')
+          Text('点击左右两侧翻页')
             .fontSize(14)
             .fontColor($r('sys.color.font_primary'))
-          Text(this.zonePresetLabel())
+          Text(this.tapTurn ? '左右各四分之一翻页，中间呼出菜单' : '点按任意位置只呼出菜单')
             .fontSize(12)
             .fontColor($r('sys.color.font_secondary'))
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
 
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(18)
-          .fontColor([$r('sys.color.font_secondary')])
+        Toggle({ type: ToggleType.Switch, isOn: this.tapTurn })
+          .systemMaterial(EMPTY_MATERIAL)
+          .selectedColor(PRIMARY)
+          .onChange((value: boolean) => {
+            this.setTapTurn(value);
+          })
       }
       .width('100%')
       .constraintSize({ minHeight: 48 })
       .alignItems(VerticalAlign.Center)
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
-      .onClick(() => {
-        this.openZoneEditor();
-      })
     }
     .width('100%')
   }
 
-  private zonePresetLabel(): string {
-    const isClassic: boolean = this.options.taps.every((value: number, index: number): boolean =>
-      value === DEFAULT_TAPS[index]);
-    return isClassic ? '经典左右翻页' : '已自定义';
-  }
 }

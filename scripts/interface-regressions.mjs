@@ -29,13 +29,19 @@ function reader(env) {
     chapterIndex: 0, pages: ['1.jpg', '2.jpg'], loadState: 'ready', currentPage: 0,
     inBackground: false, mode: 'horizontal', panel: 'none', sheetVisible: false, sliderDragging: false,
     hudVisible: false, canvasWidthVp: 360, canvasHeightVp: 720, zoomScale: 1, zoomOffsetX: 0, zoomOffsetY: 0,
-    options: { taps: [1, 0, 2, 1, 0, 2, 3, 0, 4] }, getUIContext: () => ({ animateTo: (_options, run) => run(),
+    options: { taps: [1, 0, 2, 1, 0, 2, 3, 0, 4] }, tapTurn: true, getUIContext: () => ({ animateTo: (_options, run) => run(),
       getPromptAction: () => ({ showToast: () => {} }) }) };
   env.load('data/SourceApi').sourceApi.albumThumbUrl = () => '';
   const { ReaderController } = env.load('pages/reader/ReaderController');
   const controller = new ReaderController(host);
   controller.currentAlbum = album;
   return { host, controller, album };
+}
+
+function tap(controller, x, y) {
+  const now = Date.now();
+  controller.tapGuard.down(x, y, 1, now - 80); controller.tapGuard.up(x, y, now - 20);
+  controller.handleCanvasClick(x, y);
 }
 
 export async function interfaceTests(test) {
@@ -541,8 +547,8 @@ export async function interfaceTests(test) {
   await test('缩放和平移后中央点按仍可唤出菜单，双击按原画布坐标定位并可复位', async env => {
     const { host, controller } = reader(env);
     host.zoomScale = 4; host.zoomOffsetX = 300; host.zoomOffsetY = -200;
-    controller.handleCanvasClick(180, 360); assert.equal(host.hudVisible, true); assert.equal(host.panel, 'progress');
-    host.panel = 'prefs'; controller.handleCanvasClick(180, 100);
+    tap(controller, 180, 360); assert.equal(host.hudVisible, true); assert.equal(host.panel, 'progress');
+    host.panel = 'prefs'; tap(controller, 180, 100);
     assert.equal(host.hudVisible, false); assert.equal(host.panel, 'none');
     controller.resetZoom(false); controller.onDoubleTap(90, 180);
     assert.equal(host.zoomScale, 2); assert.equal(host.zoomOffsetX, 90); assert.equal(host.zoomOffsetY, 180);
@@ -724,5 +730,48 @@ export async function interfaceTests(test) {
     assert.match(panel, /Tabs\(/); assert.match(panel, /'目录'/); assert.match(panel, /'缩略图'/);
     assert.match(panel, /listDirection\(Axis\.Horizontal\)/);
     assert.match(panel, /initialIndex: Math\.max\(0, this\.chapterIndex/);
+  });
+  await test('点按判定：滑动、多指、长按、滚动/翻页动画及其余波都不触发热区，左右 25% 翻页不跨话', async env => {
+    const { ReaderTapGuard, tapZoneAction, TAP_SETTLE_MS } = env.load('data/ReaderTapGuard');
+    const g = new ReaderTapGuard();
+    assert.equal(g.accept(1000), false, '无触摸记录不算点按');
+    g.down(100, 100, 1, 1000); g.up(104, 103, 1100); assert.equal(g.accept(1100), true);
+    g.down(100, 100, 1, 2000); g.move(130, 100, 1); g.up(100, 100, 2100); assert.equal(g.accept(2100), false, '来回滑动');
+    g.down(100, 100, 1, 3000); g.up(100, 100, 3400); assert.equal(g.accept(3400), false, '长按');
+    g.down(100, 100, 1, 4000); g.down(200, 200, 2, 4010); g.up(100, 100, 4080); assert.equal(g.accept(4080), false, '捏合');
+    assert.equal(g.acceptDouble(), false);
+    g.down(100, 100, 1, 5000); g.cancel(); g.up(100, 100, 5050); assert.equal(g.accept(5050), false, '被系统取消');
+    g.motion(true, 6000); g.down(1, 1, 1, 6010); g.up(1, 1, 6050); assert.equal(g.accept(6050), false, '滚动中');
+    g.motion(false, 6100); assert.equal(g.accept(6100 + TAP_SETTLE_MS - 1), false, '动画余波');
+    assert.equal(g.accept(6100 + TAP_SETTLE_MS + 1), true);
+    g.motionTick(7000); g.down(1, 1, 1, 7010); g.up(1, 1, 7050); assert.equal(g.accept(7060), false, '甩动后惯性滚动帧');
+    assert.deepEqual([0, 89, 90, 180, 270, 271, 359].map(x => tapZoneAction(x, 360, true)), [1, 1, 0, 0, 0, 2, 2]);
+    assert.deepEqual([0, 180, 359].map(x => tapZoneAction(x, 360, false)), [0, 0, 0]);
+
+    const { host, controller } = reader(env);
+    host.options.taps = [3, 3, 4, 3, 3, 4, 3, 3, 4];
+    host.chapters = [host.chapters[0], { id: 'jm~2', title: '第二话' }];
+    let chapterJumps = 0; controller.goChapter = () => { chapterJumps++; };
+    let jumped = []; controller.jumpToPage = p => { jumped.push(p); };
+    host.currentPage = 1; tap(controller, 350, 100);
+    assert.deepEqual(jumped, [], '末页右侧点按不跨话'); assert.equal(chapterJumps, 0, '忽略已保存的自定义九宫格');
+    tap(controller, 10, 700); assert.deepEqual(jumped, [0]);
+    host.mode = 'rtl'; host.currentPage = 0; jumped = []; tap(controller, 10, 100); assert.deepEqual(jumped, [1], '右翻漫画左侧为下一页');
+    const now = Date.now(); controller.tapGuard.down(350, 100, 1, now - 80); controller.tapGuard.move(300, 100, 1);
+    controller.tapGuard.up(300, 100, now - 10); controller.handleCanvasClick(300, 100);
+    assert.deepEqual(jumped, [1]); assert.equal(host.hudVisible, false, '滑动不触发任何热区');
+    host.tapTurn = false; tap(controller, 10, 100); assert.deepEqual(jumped, [1]); assert.equal(host.hudVisible, true, '关闭后只呼出菜单');
+    controller.aboutToDisappear();
+
+    const fs = await import('node:fs');
+    const nodePath = await import('node:path');
+    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const read = file => fs.readFileSync(nodePath.join(root, file), 'utf8');
+    const sheet = read('pages/reader/ReaderPrefsSheet.ets');
+    assert.doesNotMatch(sheet, /触控热区分配|this\.openZoneEditor\(\)/);
+    assert.match(sheet, /点击左右两侧翻页/);
+    assert.match(read('pages/settings/ReaderSettingsPage.ets'), /点击左右两侧翻页/);
+    const page = read('pages/ReaderPage.ets');
+    for (const hook of ['onTouch(', 'onScrollStart(', 'onScrollStop(', 'onAnimationStart(', 'onAnimationEnd(', 'onGestureSwipe(']) assert.ok(page.includes(hook), hook);
   });
 }

@@ -24,6 +24,8 @@ export class PrefKeys {
   static readonly THEME_MODE: string = 'theme_mode';
   static readonly READER_MODE: string = 'reader_mode';
   static readonly READER_BG: string = 'reader_bg_paper';
+  /** 点击左右两侧翻页（默认开）。 */
+  static readonly READER_TAP_TURN: string = 'reader_tap_turn';
   static readonly PRELOAD_PAGES: string = 'preload_pages';
   static readonly BRIGHTNESS: string = 'reader_brightness';
   static readonly SECURITY_LOCK: string = 'security_lock';
@@ -188,6 +190,15 @@ export class Prefs {
   /** 阅读器背景纸色偏好（false=深邃黑 / true=米黄纸；评审 Step4 持久化） */
   async readerBgPaper(): Promise<boolean> {
     return this.getBool(PrefKeys.READER_BG, false);
+  }
+
+  /** 点击左右两侧翻页（默认开）；关闭后点按任意位置只呼出菜单。 */
+  async readerTapTurn(): Promise<boolean> {
+    return this.getBool(PrefKeys.READER_TAP_TURN, true);
+  }
+
+  async setReaderTapTurn(v: boolean): Promise<void> {
+    return this.putBool(PrefKeys.READER_TAP_TURN, v);
   }
 
   /** 阅读器预加载页数（默认 3） */

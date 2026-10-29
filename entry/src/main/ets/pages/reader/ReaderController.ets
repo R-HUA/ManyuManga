@@ -17,6 +17,7 @@ import { Prefs, getAppContext } from '../../util/Prefs';
 import { IS_DARK_MODE_KEY } from '../../entryability/EntryAbility';
 import { ROUTE_PREVIEW, MangaRouteParams } from '../../common/Route';
 import { ReaderPanelKind } from './ReaderHud';
+import { ReaderTapGuard, tapZoneAction } from '../../data/ReaderTapGuard';
 
 /** 默认乱序参数 */
 const SCRAMBLE_DEFAULT: number = 220980;
@@ -48,6 +49,7 @@ interface ReaderHost {
   sheetKind: ReaderSheetKind;
   sheetVisible: boolean;
   zoneEditorVisible: boolean;
+  tapTurn: boolean;
   brightnessValue: number;
   bgPaper: boolean;
   preloadCount: number;
@@ -128,6 +130,8 @@ export class ReaderController {
   readingResolved: boolean = false;
   private autoCacheOn: boolean = true;
   private destroyed: boolean = false;
+  /** 区分点按与滑动/捏合/长按/翻页动画余波。 */
+  readonly tapGuard: ReaderTapGuard = new ReaderTapGuard();
 
   aboutToAppear(): void {
     try {
@@ -240,8 +244,10 @@ export class ReaderController {
       const bookmarks: Array<ReadingProgress> = await readerPreferences.bookmarks(aid);
       const brightness: number = await prefs.brightness();
       const autoCache: boolean = await prefs.autoCache();
+      const tapTurn: boolean = await prefs.readerTapTurn();
       if (this.destroyed || aid !== this.host.aid) { return; }
       this.host.options = options;
+      this.host.tapTurn = tapTurn;
       this.activityBookKey = key;
       this.host.bookmarks = bookmarks;
       const m: string = this.host.options.mode;
@@ -696,22 +702,29 @@ export class ReaderController {
     }, delay);
   }
 
-  handleCanvasClick(x: number, y: number): void {
-    if (this.host.zoneEditorVisible) {
+  /**
+   * 单击热区：固定为左右 25% 翻页（按阅读方向）、中间 50% 呼出菜单，不再读取自定义九宫格，也不跨话。
+   * 仅当触摸被判定为干净点按时生效；关闭「点击左右两侧翻页」后任意位置只呼出菜单。
+   */
+  handleCanvasClick(x: number, _y: number): void {
+    if (this.host.zoneEditorVisible || !this.tapGuard.accept(Date.now())) {
       return;
     }
-    const w: number = this.host.canvasWidthVp;
-    if (w <= 0 || this.host.canvasHeightVp <= 0) {
-      this.toggleHud();
-      return;
-    }
-    const col: number = Math.max(0, Math.min(2, Math.floor(x / (w / 3))));
-    const row: number = Math.max(0, Math.min(2, Math.floor(y / (this.host.canvasHeightVp / 3))));
-    const action: number = this.host.options.taps[row * 3 + col];
-    if (action === 0) { this.toggleHud(); }
-    else if (action === 1) { this.turnPage(this.host.mode === 'rtl'); }
+    const action: number = tapZoneAction(x, this.host.canvasWidthVp, this.host.tapTurn);
+    if (action === 1) { this.turnPage(this.host.mode === 'rtl'); }
     else if (action === 2) { this.turnPage(this.host.mode !== 'rtl'); }
-    else { this.goChapter(action === 3 ? -1 : 1); }
+    else { this.toggleHud(); }
+  }
+
+  /** 阅读器内切换「点击左右两侧翻页」，与设置页共用同一偏好。 */
+  async setTapTurn(on: boolean): Promise<void> {
+    this.host.tapTurn = on;
+    try {
+      await (await Prefs.getInstance()).setReaderTapTurn(on);
+    } catch (e) {
+      this.host.tapTurn = !on;
+      this.toastMsg('设置未保存');
+    }
   }
 
   /** 目录与缩略图、画面与设置均作为底栏上方的同材质浮层就地展开。 */
@@ -772,6 +785,9 @@ export class ReaderController {
   }
 
   onDoubleTap(x: number, y: number): void {
+    if (!this.tapGuard.acceptDouble()) {
+      return;
+    }
     if (this.host.zoomScale > 1.05) {
       this.resetZoom(true);
       return;

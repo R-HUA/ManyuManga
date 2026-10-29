@@ -40,6 +40,7 @@ export struct ReaderPage {
   @State sheetKind: ReaderSheetKind = 'index';
   @State @Watch('onHudIdle') sheetVisible: boolean = false;
   @State zoneEditorVisible: boolean = false;
+  @State tapTurn: boolean = true;
   @State brightnessValue: number = 100;
   @State bgPaper: boolean = false;
   @State preloadCount: number = 3;
@@ -121,6 +122,9 @@ export struct ReaderPage {
     .height('100%')
     .scrollBar(BarState.Off)
     .cachedCount(this.preloadCount)
+    .onScrollStart(() => { this.controller.tapGuard.motion(true, Date.now()); })
+    .onScrollStop(() => { this.controller.tapGuard.motion(false, Date.now()); })
+    .onDidScroll(() => { this.controller.tapGuard.motionTick(Date.now()); })
     .onScrollIndex((first: number) => {
       if (first !== this.currentPage) {
         this.currentPage = first;
@@ -170,6 +174,9 @@ export struct ReaderPage {
       const targetIdx: number = Math.max(0, this.controller.pageToSpreadIndex(this.currentPage));
       this.controller.swiperController.changeIndex(targetIdx, false);
     })
+    .onGestureSwipe(() => { this.controller.tapGuard.motionTick(Date.now()); })
+    .onAnimationStart(() => { this.controller.tapGuard.motion(true, Date.now()); })
+    .onAnimationEnd(() => { this.controller.tapGuard.motion(false, Date.now()); })
     .onChange((index: number) => {
       const page: number = this.controller.spreadIndexToPage(index);
       if (page !== this.currentPage) {
@@ -255,6 +262,8 @@ export struct ReaderPage {
       openZoneEditor: (): void => this.controller.openZoneEditor(),
       onHudTouch: (down: boolean): void => this.controller.onHudTouch(down),
       bookmarks: this.$bookmarks,
+      tapTurn: this.$tapTurn,
+      setTapTurn: (on: boolean): void => { this.controller.setTapTurn(on); },
       chapterSource: this.controller.chapterSource,
       loadChapter: (chapterIdx: number, targetPage: number): Promise<void> =>
         this.controller.loadChapter(chapterIdx, targetPage),
@@ -264,6 +273,24 @@ export struct ReaderPage {
 
   private onHudIdle(): void {
     this.controller.syncHudTimer();
+  }
+
+  /** 记录每段触摸的位移、指数与时长，供点按判定排除滑动、捏合与长按。 */
+  private trackTouch(event: TouchEvent): void {
+    const touch: TouchObject | undefined = event.changedTouches.length > 0 ? event.changedTouches[0] : event.touches[0];
+    if (touch === undefined) {
+      return;
+    }
+    const now: number = Date.now();
+    if (event.type === TouchType.Down) {
+      this.controller.tapGuard.down(touch.x, touch.y, event.touches.length, now);
+    } else if (event.type === TouchType.Move) {
+      this.controller.tapGuard.move(touch.x, touch.y, event.touches.length);
+    } else if (event.type === TouchType.Up) {
+      this.controller.tapGuard.up(touch.x, touch.y, now);
+    } else if (event.type === TouchType.Cancel) {
+      this.controller.tapGuard.cancel();
+    }
   }
 
   private tapPoint(event: GestureEvent): Array<number> {
@@ -318,6 +345,7 @@ export struct ReaderPage {
         }
         .width('100%')
         .height('100%')
+        .onTouch((event: TouchEvent): void => { this.trackTouch(event); })
         .gesture(
           GestureGroup(GestureMode.Parallel,
             GestureGroup(GestureMode.Exclusive,

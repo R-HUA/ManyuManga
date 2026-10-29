@@ -25,6 +25,7 @@ export class SettingsSnapshot {
   archiveQuality: number = 0;
   autoCache: boolean = true;
   history: boolean = true;
+  tapTurn: boolean = true;
   securityLock: boolean = false;
   previewOn: boolean = true;
 }
@@ -47,6 +48,7 @@ export async function loadSettings(): Promise<SettingsSnapshot> {
   snapshot.archiveQuality = await prefs.archiveImgQuality() === 'compact' ? 1 : 0;
   snapshot.autoCache = await prefs.autoCache();
   snapshot.history = await prefs.historyEnabled();
+  snapshot.tapTurn = await prefs.readerTapTurn();
   snapshot.securityLock = await prefs.securityLock();
   snapshot.previewOn = await prefs.previewProtection();
   return snapshot;
@@ -86,6 +88,11 @@ export async function savePreload(count: number): Promise<void> {
 
 export async function saveArchiveQuality(index: number): Promise<void> {
   await (await Prefs.getInstance()).setArchiveImgQuality(index === 1 ? 'compact' : 'visual');
+  bumpSettingsVersion();
+}
+
+export async function saveTapTurn(on: boolean): Promise<void> {
+  await (await Prefs.getInstance()).setReaderTapTurn(on);
   bumpSettingsVersion();
 }
 

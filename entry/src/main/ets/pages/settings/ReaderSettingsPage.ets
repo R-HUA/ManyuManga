@@ -5,7 +5,7 @@ import { BG, CARD, DIVIDER, TEXT_SUB } from '../../common/Theme';
 import { errorMessage } from '../../models/Models';
 import {
   PRELOAD_COUNTS, PRELOAD_LABELS, READER_MODE_LABELS, SettingsSnapshot, loadSettings, preloadIndex,
-  saveAutoCache, saveHistory, savePreload, saveReaderMode
+  saveAutoCache, saveHistory, savePreload, saveReaderMode, saveTapTurn
 } from '../../data/SettingsService';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 import { SettingsToggleRow, settingsRowRadius } from './SettingsRows';
@@ -18,6 +18,7 @@ export struct ReaderSettingsPage {
   @State preload: number = 3;
   @State autoCache: boolean = true;
   @State history: boolean = true;
+  @State tapTurn: boolean = true;
   @State message: string = '';
   private scroller: Scroller = new Scroller();
 
@@ -32,6 +33,7 @@ export struct ReaderSettingsPage {
       this.preload = snapshot.preload;
       this.autoCache = snapshot.autoCache;
       this.history = snapshot.history;
+      this.tapTurn = snapshot.tapTurn;
     } catch (e) {
       this.report(errorMessage(e as Error));
     }
@@ -48,6 +50,9 @@ export struct ReaderSettingsPage {
       } else if (key === 'cache') {
         this.autoCache = value as boolean;
         await saveAutoCache(value as boolean);
+      } else if (key === 'tapTurn') {
+        this.tapTurn = value as boolean;
+        await saveTapTurn(value as boolean);
       } else if (key === 'history') {
         this.history = value as boolean;
         await saveHistory(value as boolean);
@@ -56,6 +61,7 @@ export struct ReaderSettingsPage {
       // 开关先乐观更新，失败时回写原值，使原生控件同步复位。
       if (key === 'cache') { this.autoCache = !(value as boolean); }
       if (key === 'history') { this.history = !(value as boolean); }
+      if (key === 'tapTurn') { this.tapTurn = !(value as boolean); }
       this.report(errorMessage(e as Error));
     }
   }
@@ -104,6 +110,14 @@ export struct ReaderSettingsPage {
           .backgroundColor(CARD).borderRadius(settingsRowRadius(1, 2))
         }
         .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 12, endMargin: 12 })
+
+        ListItemGroup({ header: this.GroupHeader('点按'), footer: this.GroupFooter('关闭后点按画面任意位置只呼出菜单，仍可滑动翻页。') }) {
+          ListItem() {
+            SettingsToggleRow({ title: '点击左右两侧翻页', isOn: this.tapTurn,
+              onToggle: (on: boolean): void => { this.saveOption('tapTurn', on); } })
+          }
+          .backgroundColor(CARD).borderRadius(settingsRowRadius(0, 1))
+        }
 
         ListItemGroup({ header: this.GroupHeader('缓存与记录'), footer: this.GroupFooter('关闭阅读历史后，书架不再更新续读进度。') }) {
           ListItem() {

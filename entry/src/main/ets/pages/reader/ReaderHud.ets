@@ -32,6 +32,8 @@ export struct ReaderHud {
   @Link brightnessValue: number;
   @Link bgPaper: boolean;
   @Link preloadCount: number;
+  @Link tapTurn: boolean;
+  setTapTurn: (on: boolean) => void = (_on: boolean): void => {};
   @Link bookmarks: Array<ReadingProgress>;
   chapterSource: BasicDataSource<Chapter> = new BasicDataSource<Chapter>();
   loadChapter: (chapterIdx: number, targetPage: number) => Promise<void> =
@@ -113,6 +115,8 @@ export struct ReaderHud {
               options: this.$options,
               preloadCount: this.$preloadCount,
               setPreload: (n: number): void => this.setPreload(n),
+              tapTurn: this.$tapTurn,
+              setTapTurn: (on: boolean): void => this.setTapTurn(on),
               openZoneEditor: (): void => this.openZoneEditor()
             })
           }
