@@ -1,6 +1,7 @@
 # AGENTS.md — ManyuManga UI 开发规则
 
 本仓库是 HarmonyOS ArkTS 应用（HDS：HdsNavigation / HdsNavDestination / HdsTabs）。写 UI 前请先读完本文件。
+通用 ArkTS 工程规范（API 版本保护、类型校验、状态管理 V2、安全区、列表、生命周期等）见 [`harmonyos-arkts-engineering.md`](harmonyos-arkts-engineering.md)；本文件只写本项目的落地规则。
 官方文档位于 `https://developer.huawei.com/consumer/cn/doc/doccenter-ux-design/<页面>`（下文记作 `UX/`）。旧的 `/doc/design-guides/` 已经失效。这些页面依赖 JS 渲染，WebFetch 常常抓不到正文，请用浏览器阅读。
 
 ## 0. 规则的来源、范围和优先级
@@ -82,3 +83,11 @@ cd /workspace/mmrepo && npx -y node@22 --experimental-sqlite scripts/check-core.
 - 内容卡片、搜索框、普通按钮上加材质。
 - 硬编码 `Color.White`、rgba，或随手写字号、圆角（如 10/11/13/15/19/21）。
 - 空状态只放一行 Text，"暂无内容"和"没有更多了"用同一种样式。
+
+## 7. 业务规则（Suwayomi 多来源）
+- **来源身份**：漫画、章节的键必须带来源命名空间，用 `data/Sources.ets` 的 `sourceKey(sourceId, nativeId)` / `sourceId()` / `nativeId()` 组合和拆分，不手拼字符串，不只用裸 id 比较。来源设置（`SourceConfigDao`、各 `*SourceSettingsPage`）与全局设置（`SettingsService`）分清作用域，不互相覆盖。
+- **原值与展示分离**：原始 id、筛选／查询值单独保存；翻译、格式化后的文字只用于显示，不参与匹配、索引或请求。来源协议差异放在 `data/source/*Strategy.ets` 适配层，页面不写某一来源的规则。
+- **查询与分页**：区分"正在编辑的筛选条件"和"已提交的查询 + 分页游标"。切换查询、取消或离页时让旧结果失效：用代次令牌（参考 `common/SourceCover.ets` 的 `generation` ticket），迟到的结果直接丢弃；重试、刷新、加载更多都用同一份已提交的查询快照。
+- **浏览与多选**：浏览模式和多选模式（`selecting`，见 MainShell / LibraryPage / WorkChapterList）共用同一个数据源和选中状态；快捷入口不能改变动作含义。
+- **阅读事件**：已读、进度、历史、阅读统计（`ReadingActivity`、`ReadingStores`）分别定义触发时机。"已请求或已加载"不等于"用户已看到"；清除历史是否连带进度要按产品约定处理。
+- **错误粒度**：单个条目（封面、章节、单个来源结果）失败就在原位显示并可重试；整页都不可用时才用整页错误态（`EmptyView` showRetry）。失败不能显示成空结果。
