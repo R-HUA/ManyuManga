@@ -3,7 +3,7 @@ import { Album, errorMessage } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
 import { library, LibraryWork } from '../../data/Library';
 import { IconCircleButton } from '../../common/Components';
-import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, CHIP_BG } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, CHIP_BG, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -45,10 +45,10 @@ export struct WorkSourceSheet {
                   Text(sourceId(item.id).toUpperCase())
                     .fontSize(10)
                     .fontWeight(FontWeight.Bold)
-                    .fontColor(item.id === this.aid ? Color.White : PRIMARY)
+                    .fontColor(PRIMARY)
                     .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                     .borderRadius(6)
-                    .backgroundColor(item.id === this.aid ? PRIMARY : PRIMARY_SOFT)
+                    .backgroundColor(PRIMARY_SOFT)
                   Text(item.name)
                     .fontColor(TEXT_MAIN)
                     .fontSize(14)
@@ -66,18 +66,18 @@ export struct WorkSourceSheet {
               .layoutWeight(1)
               .alignItems(HorizontalAlign.Start)
 
-              Text(item.id === this.aid ? '当前源' : '切换')
-                .fontSize(12)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(item.id === this.aid ? TEXT_SUB : Color.White)
-                .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-                .borderRadius(16)
-                .backgroundColor(item.id === this.aid ? CHIP_BG : PRIMARY)
-                .onClick(() => {
+              if (item.id === this.aid) {
+                SymbolGlyph($r('sys.symbol.checkmark')).fontSize(18).fontColor([PRIMARY])
+                  .accessibilityText('当前源')
+              } else {
+                Button('切换', { buttonStyle: ButtonStyleMode.NORMAL, controlSize: ControlSize.SMALL })
+                  .enabled(!this.busy)
+                  .onClick(() => {
                   if (item.id !== this.aid && !this.busy) {
                     this.chooseSource(item);
                   }
                 })
+              }
 
               if (this.work!.albums.length > 1 && item.id !== this.aid) {
                 IconCircleButton({
@@ -100,15 +100,8 @@ export struct WorkSourceSheet {
             .width('100%')
           }, (item: Album) => item.id)
 
-          Text('跨源搜索并关联新图源')
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .textAlign(TextAlign.Center)
+          Button('跨源搜索并关联新图源', { buttonStyle: ButtonStyleMode.EMPHASIZED })
             .width('100%')
-            .height(44)
-            .borderRadius(22)
-            .backgroundColor(PRIMARY)
             .onClick(() => {
               this.sourceSheet = false;
               this.stack.pushPathByName(ROUTE_SEARCH, { matchAid: this.aid } as MangaRouteParams);
@@ -119,31 +112,17 @@ export struct WorkSourceSheet {
               .fontSize(13)
               .fontColor(TEXT_SUB)
               .lineHeight(19)
-            Row({ space: 10 }) {
-              Text('加入书架并自动发现')
-                .fontSize(14)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(Color.White)
-                .textAlign(TextAlign.Center)
+            Row({ space: 12 }) {
+              Button('手动跨源搜索', { buttonStyle: ButtonStyleMode.NORMAL })
                 .layoutWeight(1)
-                .height(44)
-                .borderRadius(22)
-                .backgroundColor(PRIMARY)
-                .onClick(() => {
-                  this.add();
-                })
-              Text('手动跨源搜索')
-                .fontSize(14)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(TEXT_MAIN)
-                .textAlign(TextAlign.Center)
-                .layoutWeight(1)
-                .height(44)
-                .borderRadius(22)
-                .backgroundColor(SUB_CARD)
                 .onClick(() => {
                   this.sourceSheet = false;
                   this.stack.pushPathByName(ROUTE_SEARCH, { matchAid: this.aid } as MangaRouteParams);
+                })
+              Button('加入书架并自动发现', { buttonStyle: ButtonStyleMode.EMPHASIZED })
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.add();
                 })
             }
             .width('100%')
@@ -161,7 +140,7 @@ export struct WorkSourceSheet {
             .width('100%')
         }
       }
-      .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
+      .padding({ left: 16, right: 16, top: 16, bottom: 28 + this.bottomInset })
       .width('100%')
     }
     .width('100%')

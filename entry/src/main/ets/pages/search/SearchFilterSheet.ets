@@ -3,7 +3,7 @@ import { SourceSearchOptions } from '../../data/source/SourceContracts';
 import { EhSearchFilter } from '../../data/eh/EhSearchFilter';
 import { EhFilterSheet } from '../eh/EhFilterSheet';
 import { IconCircleButton } from '../../common/Components';
-import { SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, CARD } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, CARD, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 class FilterOption {
@@ -140,7 +140,7 @@ export struct SearchFilterSheet {
         Button('应用筛选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
+          .fontColor(ON_PRIMARY)
           .backgroundColor(PRIMARY)
           .layoutWeight(2)
           .height(40)

@@ -5,7 +5,7 @@
 import web_webview from '@ohos.web.webview';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { GallerySite } from '../../data/eh/EhNative';
-import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../../common/Route';
 
@@ -104,7 +104,7 @@ export struct EhSiteSheet {
     Text(label)
       .fontSize(13)
       .fontWeight(this.siteMode === mode ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.siteMode === mode ? Color.White : TEXT_MAIN)
+      .fontColor(this.siteMode === mode ? ON_PRIMARY : TEXT_MAIN)
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 9, bottom: 9 })
@@ -210,7 +210,7 @@ export struct EhSiteSheet {
             Text('完成')
               .fontSize(13)
               .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
+              .fontColor(ON_PRIMARY)
               .textAlign(TextAlign.Center)
               .width('100%')
               .height(40)
@@ -246,7 +246,7 @@ export struct EhSiteSheet {
             Text(this.busy ? '保存中…' : '保存 Cookie')
               .fontSize(13)
               .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
+              .fontColor(ON_PRIMARY)
               .textAlign(TextAlign.Center)
               .layoutWeight(1)
               .height(38)

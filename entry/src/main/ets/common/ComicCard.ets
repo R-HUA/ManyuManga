@@ -1,4 +1,4 @@
-import { TEXT_MAIN, TEXT_SUB, DIVIDER, CHIP_BG, COVER_R, COVER_ASPECT_RATIO } from './Theme';
+import { TEXT_MAIN, TEXT_SUB, DIVIDER, CHIP_BG, COVER_R, COVER_ASPECT_RATIO, ON_OVERLAY, OVERLAY_SCRIM } from './Theme';
 import { SourceCover } from './SourceCover';
 import { sourceApi } from '../data/SourceApi';
 import { sourceId } from '../data/Sources';
@@ -66,11 +66,11 @@ export struct ComicCard {
     Text(this.badge)
       .fontSize(10)
       .fontWeight(FontWeight.Medium)
-      .fontColor(Color.White)
+      .fontColor(ON_OVERLAY)
       .maxLines(1)
       .constraintSize({ maxWidth: '80%' })
       .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-      .backgroundColor('rgba(14,17,26,0.78)')
+      .backgroundColor(OVERLAY_SCRIM)
       .borderRadius(8)
       .margin(6)
   }
@@ -103,8 +103,8 @@ export struct ComicCard {
         if (this.progressLabel !== '') {
           Column() {
             Blank()
-            Text(this.progressLabel).fontSize(10).fontColor(Color.White).maxLines(1)
-              .width('100%').padding(6).backgroundColor('rgba(0,0,0,0.6)')
+            Text(this.progressLabel).fontSize(10).fontColor(ON_OVERLAY).maxLines(1)
+              .width('100%').padding(6).backgroundColor(OVERLAY_SCRIM)
           }.width('100%').height('100%').hitTestBehavior(HitTestMode.None)
         }
       }

@@ -1,7 +1,7 @@
 import { sourceStore, SourceEntry, SourceKind } from '../data/Sources';
 import { capabilitiesFor, SourceSearchOptions } from '../data/source/SourceContracts';
 import { HdsNavDestination } from '@kit.UIDesignKit';
-import { IMMERSIVE_CONTROL_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
+import { IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { SearchGroup, SearchGroupResults } from './search/SearchGroupResults';
 import { SearchFilterSheet } from './search/SearchFilterSheet';
 import { SearchHistory } from './search/SearchHistory';
@@ -316,7 +316,7 @@ export struct SearchAllPage {
     Row({ space: 8 }) {
       Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
         SymbolGlyph($r('sys.symbol.chevron_left')).fontSize(22).fontColor([$r('sys.color.font_primary')])
-      }.width(40).height(40).backgroundColor(Color.Transparent).systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
+      }.width(40).height(40).backgroundColor(Color.Transparent)
       .accessibilityText('返回').onClick((): void => { this.stack.pop(); })
       SearchSuggestField({ text: this.$query, sourceId: this.onlySource, selection: this.selection,
         showSearchButton: !this.filterAvailable(),
@@ -334,7 +334,6 @@ export struct SearchAllPage {
         .width(40)
         .height(40)
         .backgroundColor(this.hasActiveFilter() ? PRIMARY_SOFT : Color.Transparent)
-        .systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
         .accessibilityText('筛选')
         .onClick((): void => {
           this.filterSheet = true;

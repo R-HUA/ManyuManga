@@ -1,4 +1,4 @@
-import { CARD, CHIP_BG, CHIP_R, FONT_BODY, PRIMARY, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { CARD, CHIP_BG, CHIP_R, FONT_BODY, PRIMARY, TEXT_MAIN, TEXT_SUB, ON_PRIMARY } from '../../common/Theme';
 import { customCatStore } from '../../data/Stores';
 
 @CustomDialog
@@ -63,7 +63,7 @@ export struct AddCatDialog {
           })
         Text('添加')
           .fontSize(FONT_BODY)
-          .fontColor(Color.White)
+          .fontColor(ON_PRIMARY)
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
           .padding({ top: 9, bottom: 9 })

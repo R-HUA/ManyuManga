@@ -2,7 +2,7 @@ import { MangaRouteParams, ROUTE_ALBUM } from '../../common/Route';
 import { LibraryWork } from '../../data/Library';
 import { Album, ReadingProgress } from '../../models/Models';
 import { ComicCard } from '../../common/ComicCard';
-import { PRIMARY } from '../../common/Theme';
+import { PRIMARY, ON_PRIMARY, OVERLAY_SCRIM } from '../../common/Theme';
 
 @Component
 export struct LibraryCoverCard {
@@ -29,9 +29,9 @@ export struct LibraryCoverCard {
         } })
       if (this.selected.length > 0) {
         Stack() {
-          if (this.selected.includes(this.work.id)) { SymbolGlyph($r('sys.symbol.checkmark')).fontSize(13).fontColor([Color.White]) }
+          if (this.selected.includes(this.work.id)) { SymbolGlyph($r('sys.symbol.checkmark')).fontSize(13).fontColor([ON_PRIMARY]) }
         }.width(24).height(24).borderRadius(12).margin(7)
-        .backgroundColor(this.selected.includes(this.work.id) ? PRIMARY : 'rgba(0,0,0,0.6)')
+        .backgroundColor(this.selected.includes(this.work.id) ? PRIMARY : OVERLAY_SCRIM)
         .hitTestBehavior(HitTestMode.None)
       }
     }.width('100%').gesture(LongPressGesture().onAction(() => this.toggle(this.work)))

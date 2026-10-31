@@ -1,11 +1,13 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
+import { SegmentButton, SegmentButtonOptions, SegmentButtonTextItem, ItemRestriction, ToolBarOptions } from '@kit.ArkUI';
+import { SelectionToolBar, ToolAction, buildToolBar } from '../common/SelectionToolBar';
 import { saveDownload } from './downloads/DownloadFileExporter';
 import { DownloadedPane } from './downloads/DownloadedPane';
 import { BasicDataSource } from '../common/DataSource';
 import { DownloadTaskCard, chapterStatusText } from './downloads/DownloadTaskCard';
 import { DownloadSummary } from './downloads/DownloadSummary';
-import { PRIMARY, PRIMARY_SOFT, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK, NEUTRAL_PROGRESS } from '../common/Theme';
+import { ON_PRIMARY, PRIMARY, PRIMARY_SOFT, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK, NEUTRAL_PROGRESS } from '../common/Theme';
 import { IconCircleButton } from '../common/Components';
 import { EmptyView } from '../common/Components';
 import { errorMessage } from '../models/Models';
@@ -53,8 +55,18 @@ export struct DownloadsPage {
   /* ===== 数据与选择态 ===== */
   @State tasks: Array<DownloadTask> = [];
   @State section: string = 'offline';
-  @State selectMode: boolean = false;
-  @State selectedIds: Array<number> = [];
+  @State @Watch('syncTaskToolbar') selectMode: boolean = false;
+  @State @Watch('syncTaskToolbar') selectedIds: Array<number> = [];
+  @State taskToolbar: ToolBarOptions = new ToolBarOptions();
+  /* 已下载子页的多选态（标题栏统一控制） */
+  @State offlineManaging: boolean = false;
+  @State offlineSelected: number = 0;
+  @State offlineTotal: number = 0;
+  @State @Watch('sectionChanged') sectionIndexes: number[] = [0];
+  @State sectionOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
+    buttons: [{ text: '已下载' }, { text: '下载任务' }] as ItemRestriction<SegmentButtonTextItem>
+  });
+  private taskScroller: Scroller = new Scroller();
   @State pendingDeleteIds: Array<number> = [];
   @State deleteFileToo: boolean = false;
 
@@ -131,6 +143,46 @@ export struct DownloadsPage {
   private enterSelect(id: number): void {
     this.selectMode = true;
     this.selectedIds = [id];
+  }
+
+  private sectionChanged(): void {
+    const next: string = (this.sectionIndexes[0] ?? 0) === 1 ? 'tasks' : 'offline';
+    if (next === this.section) { return; }
+    this.exitSelect();
+    this.offlineManaging = false;
+    this.section = next;
+  }
+
+  private syncTaskToolbar(): void {
+    const some: boolean = this.selectedIds.length > 0;
+    this.taskToolbar = buildToolBar([
+      new ToolAction('删除', $r('sys.symbol.trash'), some, true, (): void => { this.onDeleteSelected(); }),
+      new ToolAction(this.allSelected() ? '取消全选' : '全选', $r('sys.symbol.checkmark_square_on_square'), this.tasks.length > 0, false,
+        (): void => { this.toggleSelectAll(); })
+    ]);
+  }
+
+  private selecting(): boolean {
+    return this.section === 'offline' ? this.offlineManaging : this.selectMode;
+  }
+
+  private pageTitle(): string {
+    if (this.section === 'offline' && this.offlineManaging) { return `已选 ${this.offlineSelected} 项`; }
+    if (this.section === 'tasks' && this.selectMode) { return `已选 ${this.selectedIds.length} 项`; }
+    return '离线下载';
+  }
+
+  private canSelect(): boolean {
+    return this.section === 'offline' ? this.offlineTotal > 0 : this.tasks.length > 0;
+  }
+
+  private quitSelect(): void {
+    this.exitSelect();
+    this.offlineManaging = false;
+  }
+
+  private enterSelect(): void {
+    if (this.section === 'offline') { this.offlineManaging = true; } else { this.selectMode = true; this.selectedIds = []; }
   }
 
   private exitSelect(): void {
@@ -258,10 +310,12 @@ export struct DownloadsPage {
     HdsNavDestination() {
       Stack() {
         Column() {
-          this.SectionBar()
+          if (!this.selecting()) {
+            this.SectionBar()
+          }
 
           if (this.section === 'offline') {
-            DownloadedPane()
+            DownloadedPane({ managing: $offlineManaging, selectedCount: $offlineSelected, totalCount: $offlineTotal })
               .layoutWeight(1)
               .width('100%')
           } else if (this.loading) {
@@ -287,13 +341,11 @@ export struct DownloadsPage {
             .layoutWeight(1)
             .justifyContent(FlexAlign.Center)
           } else {
-            if (this.selectMode) {
-              this.SelectBar()
-            } else {
+            if (!this.selectMode) {
               this.SummaryHeader()
             }
 
-            List({ space: 12 }) {
+            List({ space: 12, scroller: this.taskScroller }) {
               LazyForEach(this.taskDS, (item: DownloadTask) => {
                 ListItemGroup({ header: this.TaskRow(item) }) {
                   ForEach(this.visibleChapters(item), (c: DownloadChapter) => {
@@ -316,7 +368,7 @@ export struct DownloadsPage {
             .padding({ left: 16, right: 16, top: 8, bottom: (this.selectMode ? 12 : 28 + this.bottomInset) })
 
             if (this.selectMode) {
-              this.SelectBottomBar()
+              SelectionToolBar({ items: this.taskToolbar, bottomInset: this.bottomInset })
             }
           }
         }
@@ -331,35 +383,23 @@ export struct DownloadsPage {
       .width('100%')
       .height('100%')
     }
-    .titleBar({ content: { title: { mainTitle: '离线下载' }, menu: { value: this.section === 'tasks' && this.tasks.length > 0 ? [{ content: {
-      icon: this.selectMode ? $r('sys.symbol.checkmark') : $r('sys.symbol.checkmark_square_on_square'),
-      label: this.selectMode ? '完成' : '批量管理', action: (): void => {
-        if (this.selectMode) { this.exitSelect(); } else { this.selectMode = true; this.selectedIds = []; }
-      } } }] : [] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleBar({ content: { title: { mainTitle: this.pageTitle() }, menu: { value: this.selecting()
+      ? [{ content: { icon: $r('sys.symbol.xmark'), label: '退出选择', action: (): void => { this.quitSelect(); } } }]
+      : (this.canSelect() ? [{ content: { icon: $r('sys.symbol.checkmark_square_on_square'), label: '选择', action: (): void => { this.enterSelect(); } } }] : []) } },
+      style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
     .titleMode(HdsNavDestinationTitleMode.MINI)
+    .bindToScrollable([this.taskScroller])
     .backgroundColor(BG)
   }
 
+  /** 一级互斥视图：标题栏下方的分段按钮（SegmentButton tab 样式） */
   @Builder
   private SectionBar() {
-    Row({ space: 8 }) {
-      Button('已下载', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .height(36).padding({ left: 16, right: 16 }).fontSize(14)
-        .responseRegion({ x: 0, y: -4, width: '100%', height: 44 })
-        .fontWeight(this.section === 'offline' ? FontWeight.Medium : FontWeight.Regular)
-        .fontColor(this.section === 'offline' ? Color.White : TEXT_SUB)
-        .backgroundColor(this.section === 'offline' ? PRIMARY : SUB_CARD)
-        .onClick(() => { this.exitSelect(); this.section = 'offline'; })
-      Button('下载任务', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .height(36).padding({ left: 16, right: 16 }).fontSize(14)
-        .responseRegion({ x: 0, y: -4, width: '100%', height: 44 })
-        .fontWeight(this.section === 'tasks' ? FontWeight.Medium : FontWeight.Regular)
-        .fontColor(this.section === 'tasks' ? Color.White : TEXT_SUB)
-        .backgroundColor(this.section === 'tasks' ? PRIMARY : SUB_CARD)
-        .onClick(() => { this.section = 'tasks'; })
+    Row() {
+      SegmentButton({ options: this.sectionOptions, selectedIndexes: $sectionIndexes })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+    .padding({ left: 16, right: 16, top: 4, bottom: 8 })
   }
 
   /** 首载骨架（脉冲呼吸占位行） */
@@ -419,68 +459,6 @@ export struct DownloadsPage {
     })
   }
 
-  /** 多选态顶栏 */
-  @Builder
-  private SelectBar() {
-    Row({ space: 10 }) {
-      Text(`已选 ${this.selectedIds.length} 个任务`)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(TEXT_MAIN)
-        .layoutWeight(1)
-      Text(this.allSelected() ? '取消全选' : '全选')
-        .fontSize(12)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(PRIMARY)
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .borderRadius(14)
-        .backgroundColor(PRIMARY_SOFT)
-        .onClick(() => {
-          this.toggleSelectAll();
-        })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 6, bottom: 6 })
-  }
-
-  /** 多选态底栏（删除所选 / 完成） */
-  @Builder
-  private SelectBottomBar() {
-    Row({ space: 10 }) {
-      Text('删除所选任务')
-        .fontSize(14)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(DANGER)
-        .textAlign(TextAlign.Center)
-        .layoutWeight(1)
-        .padding({ top: 11, bottom: 11 })
-        .backgroundColor(DANGER_SOFT)
-        .borderRadius(20)
-        .opacity(this.selectedIds.length > 0 ? 1.0 : 0.45)
-        .onClick(() => {
-          if (this.selectedIds.length > 0) {
-            this.onDeleteSelected();
-          }
-        })
-      Text('退出管理')
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(TEXT_MAIN)
-        .textAlign(TextAlign.Center)
-        .layoutWeight(1)
-        .padding({ top: 11, bottom: 11 })
-        .backgroundColor(SUB_CARD)
-        .borderRadius(20)
-        .onClick(() => {
-          this.exitSelect();
-        })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 12, bottom: 12 + this.bottomInset })
-    .backgroundColor(CARD)
-    .border({ width: { top: 0.5 }, color: DIVIDER })
-  }
-
   /** 任务列表项 */
   @Builder
   private TaskRow(item: DownloadTask) {
@@ -502,7 +480,7 @@ export struct DownloadsPage {
   @Builder
   private CancelAction(t: DownloadTask, c: DownloadChapter) {
     Row() {
-      Text('取消').fontSize(14).fontColor(Color.White)
+      Text('取消').fontSize(14).fontColor(ON_PRIMARY)
     }
     .width(72)
     .height('100%')
@@ -605,7 +583,7 @@ export struct DownloadsPage {
           Text('确认删除')
             .fontSize(14)
             .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
+            .fontColor(ON_PRIMARY)
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
             .padding({ top: 11, bottom: 11 })

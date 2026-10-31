@@ -4,8 +4,7 @@ import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { IconCircleButton } from '../../common/Components';
 import {
-  CARD, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, PRIMARY_SOFT, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY
-} from '../../common/Theme';
+  CARD, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, PRIMARY_SOFT, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY, ON_OVERLAY } from '../../common/Theme';
 import { settingsRowRadius } from '../settings/SettingsRows';
 import {
   ChapterDataSource, ChapterDownloadInfo, ChapterRow, buildChapterRows, chapterLabel
@@ -103,12 +102,12 @@ export struct WorkChapterList {
   @Builder
   private PreviewAction(chapter: Chapter) {
     Row() {
-      SymbolGlyph($r('sys.symbol.eye')).fontSize(20).fontColor([Color.White])
+      SymbolGlyph($r('sys.symbol.eye')).fontSize(20).fontColor([TEXT_MAIN])
     }
     .width(72)
     .height('100%')
     .justifyContent(FlexAlign.Center)
-    .backgroundColor(PRIMARY)
+    .backgroundColor(SUB_CARD)
     .accessibilityText('预览本章页面')
     .onClick(() => {
       this.preview(chapter);
@@ -256,13 +255,8 @@ export struct WorkChapterList {
       } else if (this.commentsDone) {
         Text('已全部加载').fontSize(12).fontColor(TEXT_SUB)
       } else {
-        Text(this.comments.length === 0 ? '加载漫评' : '加载更多')
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(PRIMARY)
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .borderRadius(14)
-          .backgroundColor(PRIMARY_SOFT)
+        Button(this.comments.length === 0 ? '加载漫评' : '加载更多',
+          { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
           .onClick(() => {
             this.loadComments();
           })

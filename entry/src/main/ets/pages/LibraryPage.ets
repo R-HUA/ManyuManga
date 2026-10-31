@@ -14,6 +14,8 @@ import { readProgressStore } from '../data/Stores';
 import { Album, ReadingProgress, errorMessage } from '../models/Models';
 import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT, comicColumns } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
+import { ToolBarOptions } from '@kit.ArkUI';
+import { SelectionToolBar, ToolAction, buildToolBar, TOOLBAR_HEIGHT } from '../common/SelectionToolBar';
 
 @Component
 export struct LibraryPage {
@@ -29,7 +31,8 @@ export struct LibraryPage {
   @State query: string = '';
   @State category: string = '';
   @State categories: Array<string> = [];
-  @State selected: Array<string> = [];
+  @State @Watch('syncToolbar') selected: Array<string> = [];
+  @State toolbar: ToolBarOptions = new ToolBarOptions();
   @State downloaded: Array<string> = [];
   @State private contentWidth: number = 328;
   private scroller: Scroller = new Scroller();
@@ -161,6 +164,48 @@ export struct LibraryPage {
     })
   }
 
+  /** 多选工具栏：分类 / 下载 / 移除（红色警告色）+ 更多（标已读、换源），符合 4+1 上限。 */
+  private syncToolbar(): void {
+    this.toolbar = buildToolBar([
+      new ToolAction('分类', $r('sys.symbol.label'), true, false, (): void => { this.categorySheet = true; }),
+      new ToolAction('下载', $r('sys.symbol.arrow_down_circle'), true, false, (): void => { this.action('download'); }),
+      new ToolAction('移除', $r('sys.symbol.trash'), true, true, (): void => { this.confirmRemove(); }),
+      new ToolAction('更多', $r('sys.symbol.ellipsis_circle'), true, false, (): void => { this.showMore(); })
+    ]);
+  }
+
+  private confirmRemove(): void {
+    this.getUIContext().showAlertDialog({
+      title: '移出书架',
+      message: `确认将所选的 ${this.selected.length} 部漫画移出书架吗？阅读记录与已下载文件会保留。`,
+      primaryButton: { value: '取消', action: () => {} },
+      secondaryButton: {
+        value: '移除',
+        fontColor: DANGER,
+        action: () => {
+          this.action('remove');
+        }
+      }
+    });
+  }
+
+  private showMore(): void {
+    const single: boolean = this.selected.length === 1;
+    this.getUIContext().getPromptAction().showActionMenu({
+      title: '更多',
+      buttons: [{ text: '标为已读', color: TEXT_MAIN }, { text: single ? '换源' : '换源（仅限单选）', color: single ? TEXT_MAIN : TEXT_SUB }]
+    }).then((picked: promptAction.ActionMenuSuccessResponse): void => {
+      if (picked.index === 0) {
+        this.action('read');
+      } else if (picked.index === 1 && this.selected.length === 1) {
+        const work: LibraryWork | undefined = this.works.find((w: LibraryWork) => w.id === this.selected[0]);
+        if (work !== undefined) {
+          this.stack.pushPathByName(ROUTE_ALBUM, { aid: work.activeKey, match: true, fromLibrary: true } as MangaRouteParams);
+        }
+      }
+    }).catch((): void => {});
+  }
+
   private headerMenus(): Array<HdsNavigationMenuItemOptions> {
     if (this.selected.length > 0) {
       return [
@@ -175,29 +220,9 @@ export struct LibraryPage {
   }
 
   private bottomPadding(): number {
-    if (this.selected.length > 0) { return 84 + this.bottomInset; }
+    if (this.selected.length > 0) { return TOOLBAR_HEIGHT + 12 + this.bottomInset; }
     const tabs: number = this.breakpoint === 'lg' ? 0 : TAB_BAR_HEIGHT;
     return 24 + tabs + this.bottomInset;
-  }
-
-  @Builder
-  private BatchActionPill(label: string, isDanger: boolean, enabled: boolean, onTap: () => void) {
-    Text(label)
-      .fontSize(13)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(!enabled ? TEXT_SUB : (isDanger ? DANGER : TEXT_MAIN))
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .padding({ top: 10, bottom: 10 })
-      .borderRadius(16)
-      .backgroundColor(SUB_CARD)
-      .opacity(enabled ? 1.0 : 0.45)
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-      .onClick(() => {
-        if (enabled) {
-          onTap();
-        }
-      })
   }
 
   build() {
@@ -304,40 +329,7 @@ export struct LibraryPage {
 
         // Bottom Batch Action Bar in Selection Mode
         if (this.selected.length > 0) {
-          Row({ space: 8 }) {
-            this.BatchActionPill('分类', false, true, () => {
-              this.categorySheet = true;
-            })
-            this.BatchActionPill('标已读', false, true, () => {
-              this.action('read');
-            })
-            this.BatchActionPill('下载', false, true, () => {
-              this.action('download');
-            })
-            this.BatchActionPill('换源', false, this.selected.length === 1, () => {
-              const work: LibraryWork | undefined = this.works.find((w: LibraryWork) => w.id === this.selected[0]);
-              if (work !== undefined) {
-                this.stack.pushPathByName(ROUTE_ALBUM, { aid: work.activeKey, match: true, fromLibrary: true } as MangaRouteParams);
-              }
-            })
-            this.BatchActionPill('移除', true, true, () => {
-              this.getUIContext().showAlertDialog({
-                title: '移出书架',
-                message: `确认将所选的 ${this.selected.length} 部漫画移出书架吗？阅读记录与已下载文件会保留。`,
-                primaryButton: { value: '取消', action: () => {} },
-                secondaryButton: {
-                  value: '移除',
-                  fontColor: DANGER,
-                  action: () => {
-                    this.action('remove');
-                  }
-                }
-              });
-            })
-          }
-          .padding({ left: 14, right: 14, top: 12, bottom: 12 + this.bottomInset })
-          .width('100%')
-          .backgroundColor(CARD)
+          SelectionToolBar({ items: this.toolbar, bottomInset: this.bottomInset })
         }
       }
       .width('100%')
@@ -352,7 +344,7 @@ export struct LibraryPage {
     }
     .titleBar({
       content: {
-        title: { mainTitle: this.selected.length > 0 ? `已选 ${this.selected.length} 部` : '书架', mainTitleSize: TitleSize.TITLE_ML },
+        title: { mainTitle: this.selected.length > 0 ? `已选 ${this.selected.length} 项` : '书架', mainTitleSize: TitleSize.TITLE_ML },
         menu: { value: this.headerMenus() }
       },
       style: HDS_TITLE_STYLE,

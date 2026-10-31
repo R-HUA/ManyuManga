@@ -1,4 +1,4 @@
-import { SUB_CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -97,7 +97,7 @@ export struct SuwayomiConnectSheet {
         Button(this.busy ? '正在连接…' : '连接书库', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.EMPHASIZED })
           .fontSize(15)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
+          .fontColor(ON_PRIMARY)
           .width('100%')
           .height(46)
           .borderRadius(23)
@@ -122,7 +122,7 @@ export struct SuwayomiConnectSheet {
     Text(label)
       .fontSize(13)
       .fontWeight(this.authIndex === index ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.authIndex === index ? Color.White : TEXT_MAIN)
+      .fontColor(this.authIndex === index ? ON_PRIMARY : TEXT_MAIN)
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 9, bottom: 9 })

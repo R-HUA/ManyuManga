@@ -1,12 +1,12 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
-import { EMPTY_MATERIAL, HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
+import { EMPTY_MATERIAL, HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
 import { EmptyView } from '../common/Components';
-import { BG, SUB_CARD, PRIMARY, TEXT_SUB, DIVIDER, COVER_R, NEUTRAL_PROGRESS, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
+import { BG, SUB_CARD, PRIMARY, TEXT_SUB, DIVIDER, COVER_R, NEUTRAL_PROGRESS, HDS_TITLE_BAR_HEIGHT, ON_OVERLAY, OVERLAY_SCRIM } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -142,7 +142,8 @@ export struct ChapterPreviewPage {
     .height(52)
     .padding({ left: 14, right: 14 })
     .borderRadius(26)
-    .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+    .backgroundColor($r('sys.color.comp_background_list_card'))
+    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
   }
 
   build() {
@@ -190,10 +191,10 @@ export struct ChapterPreviewPage {
                         .fontSize(11)
                         .fontWeight(FontWeight.Medium)
                         .fontFeature('"tnum" 1')
-                        .fontColor(Color.White)
+                        .fontColor(ON_OVERLAY)
                         .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                         .borderRadius(6)
-                        .backgroundColor('rgba(14,17,26,0.72)')
+                        .backgroundColor(OVERLAY_SCRIM)
                         .margin(6)
                     }
                     .width('100%')

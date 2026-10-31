@@ -1,4 +1,4 @@
-import { SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -36,7 +36,7 @@ export struct LibraryCategorySheet {
             ForEach(this.categories, (cat: string) => {
               Text(cat)
                 .fontSize(13)
-                .fontColor(this.categoryName === cat ? Color.White : TEXT_MAIN)
+                .fontColor(this.categoryName === cat ? ON_PRIMARY : TEXT_MAIN)
                 .padding({ left: 14, right: 14, top: 7, bottom: 7 })
                 .margin({ right: 8, bottom: 8 })
                 .borderRadius(16)
@@ -67,7 +67,7 @@ export struct LibraryCategorySheet {
         Text('保存应用')
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
+          .fontColor(ON_PRIMARY)
           .textAlign(TextAlign.Center)
           .layoutWeight(1)
           .height(44)

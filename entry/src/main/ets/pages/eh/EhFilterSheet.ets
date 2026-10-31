@@ -14,7 +14,7 @@ import {
 } from '../../data/eh/EhSearchFilter';
 import { IconCircleButton } from '../../common/Components';
 import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
-import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 class EhFlagRow {
@@ -147,13 +147,13 @@ export struct EhFilterSheet {
       Text(option.label)
         .fontSize(13)
         .fontWeight(this.draft.categoryOn(option.bit) ? FontWeight.Bold : FontWeight.Normal)
-        .fontColor(this.draft.categoryOn(option.bit) ? Color.White : TEXT_MAIN)
+        .fontColor(this.draft.categoryOn(option.bit) ? ON_PRIMARY : TEXT_MAIN)
         .maxLines(1)
         .layoutWeight(1)
       if (this.draft.categoryOn(option.bit)) {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(14)
-          .fontColor([Color.White])
+          .fontColor([ON_PRIMARY])
       }
     }
     .width('100%')
@@ -248,14 +248,8 @@ export struct EhFilterSheet {
                 .layoutWeight(1)
 
               // 紧凑型 26vp 胶囊按钮，杜绝竖向胖椭圆变形
-              Text(this.draft.categoryMask === 0x3ff ? '清空全部' : '全选分类')
-                .fontSize(11)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(PRIMARY)
-                .height(26)
-                .padding({ left: 10, right: 10 })
-                .borderRadius(13)
-                .backgroundColor(PRIMARY_SOFT)
+              Button(this.draft.categoryMask === 0x3ff ? '清空全部' : '全选分类',
+                { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
                 .onClick(() => {
                   this.draft.categoryMask = this.draft.categoryMask === 0x3ff ? 0 : 0x3ff;
                   this.refreshDraft();
@@ -409,7 +403,7 @@ export struct EhFilterSheet {
         Button('应用筛选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
+          .fontColor(ON_PRIMARY)
           .backgroundColor(PRIMARY)
           .layoutWeight(2)
           .height(40)

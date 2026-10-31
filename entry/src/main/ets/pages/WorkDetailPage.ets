@@ -1,6 +1,6 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
-import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
+import { HDS_TITLE_STYLE, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { WorkSourceSheet } from './detail/WorkSourceSheet';
 import { WorkChapterList } from './detail/WorkChapterList';
 import { WorkHeroInfo } from './detail/WorkHeroInfo';
@@ -591,7 +591,8 @@ export struct WorkDetailPage {
     .height(64)
     .padding({ left: 8, right: 8 })
     .borderRadius(32)
-    .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+    .backgroundColor($r('sys.color.comp_background_list_card'))
+    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
   }
 
   @Builder

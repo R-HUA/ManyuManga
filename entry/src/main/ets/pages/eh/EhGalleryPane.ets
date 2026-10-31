@@ -185,13 +185,7 @@ export struct EhGalleryPane {
             .fontColor(TEXT_SUB)
             .textAlign(TextAlign.Center)
             .padding({ left: 24, right: 24 })
-          Text('重试')
-            .fontSize(13)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(PRIMARY)
-            .padding({ left: 20, right: 20, top: 9, bottom: 9 })
-            .borderRadius(16)
-            .backgroundColor(PRIMARY_SOFT)
+          Button('重试', { buttonStyle: ButtonStyleMode.NORMAL, controlSize: ControlSize.SMALL })
             .onClick(() => {
               this.load('reset');
             })

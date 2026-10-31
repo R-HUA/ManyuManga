@@ -1,5 +1,5 @@
 import { BasicDataSource } from '../../common/DataSource';
-import { IMMERSIVE_CONTROL_MATERIAL, IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
+import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
 import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { SearchSelection } from '../../common/Route';
 import { MetadataTerm, errorMessage } from '../../models/Models';
@@ -136,7 +136,6 @@ export struct SearchSuggestField {
       .fontColor($r('sys.color.font_primary'))
       .backgroundColor(CARD)
       .border({ width: 0.5, color: DIVIDER })
-      .systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
       .searchButton(this.showSearchButton ? '搜索' : '', { autoDisable: true })
       .cancelButton({ style: CancelButtonStyle.INPUT })
       .onChange((value: string) => {
