@@ -140,7 +140,7 @@ export struct DownloadsPage {
     this.selectedIds = ids;
   }
 
-  private enterSelect(id: number): void {
+  private enterSelectWithId(id: number): void {
     this.selectMode = true;
     this.selectedIds = [id];
   }
@@ -472,7 +472,7 @@ export struct DownloadsPage {
       onOpenFile: (t: DownloadTask): Promise<void> => this.onOpenFile(t),
       onSaveTo: (t: DownloadTask): Promise<void> => this.onSaveTo(t),
       onDelete: (t: DownloadTask): void => this.onDelete(t),
-      enterSelect: (id: number): void => this.enterSelect(id),
+      enterSelect: (id: number): void => this.enterSelectWithId(id),
       item: item
     })
   }

@@ -32,7 +32,7 @@ export struct LibraryPage {
   @State category: string = '';
   @State categories: Array<string> = [];
   @State @Watch('syncToolbar') selected: Array<string> = [];
-  @State toolbar: ToolBarOptions = new ToolBarOptions();
+  @State toolbarItems: ToolBarOptions = new ToolBarOptions();
   @State downloaded: Array<string> = [];
   @State private contentWidth: number = 328;
   private scroller: Scroller = new Scroller();
@@ -166,7 +166,7 @@ export struct LibraryPage {
 
   /** 多选工具栏：分类 / 下载 / 移除（红色警告色）+ 更多（标已读、换源），符合 4+1 上限。 */
   private syncToolbar(): void {
-    this.toolbar = buildToolBar([
+    this.toolbarItems = buildToolBar([
       new ToolAction('分类', $r('sys.symbol.label'), true, false, (): void => { this.categorySheet = true; }),
       new ToolAction('下载', $r('sys.symbol.arrow_down_circle'), true, false, (): void => { this.action('download'); }),
       new ToolAction('移除', $r('sys.symbol.trash'), true, true, (): void => { this.confirmRemove(); }),
@@ -336,7 +336,7 @@ export struct LibraryPage {
 
         // Bottom Batch Action Bar in Selection Mode
         if (this.selected.length > 0) {
-          SelectionToolBar({ items: this.toolbar, bottomInset: this.bottomInset })
+          SelectionToolBar({ items: this.toolbarItems, bottomInset: this.bottomInset })
         }
       }
       .width('100%')

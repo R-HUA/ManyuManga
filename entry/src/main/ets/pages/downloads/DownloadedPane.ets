@@ -43,7 +43,7 @@ export struct DownloadedPane {
   @State @Watch('syncSelection') jobs: Array<ExportJob> = [];
   @State folderUri: string = '';
   @State @Watch('syncSelection') busy: boolean = false;
-  @State toolbar: ToolBarOptions = new ToolBarOptions();
+  @State toolbarItems: ToolBarOptions = new ToolBarOptions();
   private stopExport: boolean = false;
   private visible: boolean = false;
   private reloadVersion: number = 0;
@@ -80,7 +80,7 @@ export struct DownloadedPane {
     }
     this.selectedCount = this.selected.length;
     this.totalCount = this.items.length;
-    this.toolbar = this.makeToolbar();
+    this.toolbarItems = this.makeToolbar();
   }
 
   private allSelected(): boolean {
@@ -90,7 +90,7 @@ export struct DownloadedPane {
   private makeToolbar(): ToolBarOptions {
     const some: boolean = this.selected.length > 0;
     return buildToolBar([
-      new ToolAction(this.busy ? '取消导出' : '导出', $r('sys.symbol.square_and_arrow_up'), this.busy || some, false, (): void => {
+      new ToolAction(this.busy ? '取消导出' : '导出', $r('sys.symbol.share'), this.busy || some, false, (): void => {
         if (this.busy) {
           this.stopExport = true;
         } else if (this.selected.length === 1) {
@@ -358,7 +358,7 @@ export struct DownloadedPane {
         .padding({ left: 16, right: 16, top: 4, bottom: this.managing ? 8 : 28 + this.bottomInset })
 
         if (this.managing) {
-          SelectionToolBar({ items: this.toolbar, bottomInset: this.bottomInset })
+          SelectionToolBar({ items: this.toolbarItems, bottomInset: this.bottomInset })
         }
       }
     }
