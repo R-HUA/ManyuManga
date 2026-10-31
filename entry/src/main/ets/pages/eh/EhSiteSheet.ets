@@ -5,7 +5,7 @@
 import web_webview from '@ohos.web.webview';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { GallerySite } from '../../data/eh/EhNative';
-import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../../common/Route';
 
@@ -123,7 +123,7 @@ export struct EhSiteSheet {
       .fontColor(PRIMARY)
       .padding({ left: 12, right: 12, top: 7, bottom: 7 })
       .borderRadius(14)
-      .backgroundColor(PRIMARY_SOFT)
+      .backgroundColor(SUB_CARD)
       .onClick(() => {
         this.webUrl = url;
       })
@@ -174,7 +174,7 @@ export struct EhSiteSheet {
           .height(44)
           .justifyContent(FlexAlign.Center)
           .borderRadius(14)
-          .backgroundColor(PRIMARY_SOFT)
+          .backgroundColor(SUB_CARD)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
           .onClick(() => {
             this.showWebLogin = true;
@@ -311,7 +311,7 @@ export struct EhSiteSheet {
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
           .fontColor(PRIMARY)
-          .backgroundColor(PRIMARY_SOFT)
+          .backgroundColor(SUB_CARD)
           .width('100%')
           .height(40)
           .onClick(() => {

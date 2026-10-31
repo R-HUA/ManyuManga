@@ -14,7 +14,7 @@ import {
 } from '../../data/eh/EhSearchFilter';
 import { IconCircleButton } from '../../common/Components';
 import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
-import { CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 class EhFlagRow {
@@ -255,7 +255,7 @@ export struct EhFilterSheet {
                 .height(26)
                 .padding({ left: 10, right: 10 })
                 .borderRadius(13)
-                .backgroundColor(PRIMARY_SOFT)
+                .backgroundColor(SUB_CARD)
                 .onClick(() => {
                   this.draft.categoryMask = this.draft.categoryMask === 0x3ff ? 0 : 0x3ff;
                   this.refreshDraft();

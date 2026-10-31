@@ -12,7 +12,7 @@ import { fallbackSource, SourceSwitchResult } from '../../data/SourceSwitch';
 import { clampPage, makeSpreads, spreadForPage, lastPageInSpread } from '../../data/ReaderLayout';
 import { loadPagePixelMap, releasePagePixelMap } from '../../data/ImageDecode';
 import { isRequestCancelled, RequestAbortGroup } from '../../util/RequestAbort';
-import { albumCacheStore, pagesCacheStore, readProgressStore, historyStore } from '../../data/Stores';
+import { albumCacheStore, pagesCacheStore, ChapterPagesCache, readProgressStore, historyStore } from '../../data/Stores';
 import { Prefs, getAppContext } from '../../util/Prefs';
 import { IS_DARK_MODE_KEY } from '../../entryability/EntryAbility';
 import { ROUTE_PREVIEW, MangaRouteParams } from '../../common/Route';
@@ -416,7 +416,8 @@ export class ReaderController {
     });
   }
 
-  async loadChapter(chapterIdx: number, targetPage: number, preserveAttempts: boolean = false): Promise<void> {
+  async loadChapter(chapterIdx: number, targetPage: number, preserveAttempts: boolean = false,
+    refresh: boolean = false): Promise<void> {
     if (this.destroyed) { return; }
     const ch: Chapter | undefined = this.host.chapters[chapterIdx];
     if (ch === undefined) {
@@ -449,76 +450,53 @@ export class ReaderController {
     this.preloadSignal = preloadSignal;
     const initialTarget: number = targetPage;
 
-    let cached: Array<string> | null = null;
-    try {
-      cached = await pagesCacheStore.get(ch.id);
-    } catch (e) {
-      cached = null;
-    }
-    if (!this.chapterCurrent(token, signal)) {
-      return;
-    }
-    if (cached !== null && cached.length > 0) {
-      this.host.pages = cached;
-      this.pagesSource.setList(cached);
-      this.buildSpreads();
-      const t: number = clampPage(initialTarget, cached.length);
-      this.host.currentPage = t;
-      this.host.loadState = 'ready';
-      this.scrollToPageDelayed(t);
-      this.prefetchAhead(t);
-    }
-
-    try {
-      const fresh: Array<string> = await jmApi.chapterImages(ch.id, signal);
-      if (!this.chapterCurrent(token, signal)) {
-        return;
+    let cached: ChapterPagesCache | null = null;
+    if (!refresh) {
+      try {
+        cached = await pagesCacheStore.get(ch.id);
+      } catch (e) {
+        this.toastMsg(`读取章节缓存失败：${errorMessage(e as Error)}`);
       }
-      const hadCache: boolean = cached !== null && cached.length > 0;
-      const changed: boolean = !hadCache || !this.samePages(fresh, cached as Array<string>);
-      if (fresh.length > 0 && changed) {
-        this.host.pages = fresh;
-        this.pagesSource.setList(fresh);
-        this.buildSpreads();
-        const t: number = clampPage(initialTarget, fresh.length);
-        this.host.currentPage = t;
-        this.host.loadState = 'ready';
-        pagesCacheStore.put(ch.id, fresh).catch((_e: Error): void => {
-        });
-        this.prefetched.clear();
-        this.scrollToPageDelayed(t);
-        this.prefetchAhead(t);
+    }
+    try {
+      if (!this.chapterCurrent(token, signal)) { return; }
+      let pages: Array<string>;
+      let scrambleId: number;
+      const complete: boolean = cached !== null && cached.list.length > 0 && cached.scrambleId !== null;
+      if (cached !== null && cached.list.length > 0 && cached.scrambleId !== null) {
+        pages = cached.list;
+        scrambleId = cached.scrambleId;
       } else {
-        this.host.loadState = 'ready';
+        pages = await jmApi.chapterImages(ch.id, signal);
+        if (!this.chapterCurrent(token, signal)) { return; }
+        scrambleId = await jmApi.scrambleId(ch.id, signal);
+        if (!this.chapterCurrent(token, signal)) { return; }
+      }
+      this.host.scrambleId = scrambleId;
+      this.host.pages = pages;
+      this.pagesSource.setList(pages);
+      this.buildSpreads();
+      const target: number = clampPage(initialTarget, pages.length);
+      this.host.currentPage = target;
+      this.host.loadState = 'ready';
+      this.scrollToPageDelayed(target);
+      this.prefetchAhead(target);
+      if (!complete) {
+        await pagesCacheStore.put(ch.id, pages, scrambleId).catch((e: Error): void => {
+          this.toastMsg(`保存章节缓存失败：${errorMessage(e)}`);
+        });
       }
     } catch (e) {
       if (isRequestCancelled(e as Error) || !this.chapterCurrent(token, signal)) {
         return;
       }
-      if (cached === null || cached.length === 0) {
-        this.host.currentPage = initialTarget;
-        if (await this.tryFallback(e as Error)) { return; }
-        if (!this.chapterCurrent(token, signal)) { return; }
-        this.host.loadState = 'error';
-        if (this.host.errorMsg === '') { this.host.errorMsg = errorMessage(e as Error); }
-        this.host.hudVisible = true;
-        return;
-      }
-      this.host.loadState = 'ready';
-    }
-
-    try {
-      const sid: number = await jmApi.scrambleId(ch.id, signal);
-      if (!this.chapterCurrent(token, signal)) {
-        return;
-      }
-      if (sid !== this.host.scrambleId) {
-        this.host.scrambleId = sid;
-        this.prefetched.clear();
-        this.prefetchAhead(this.host.currentPage);
-      }
-    } catch (e) {
-      if (isRequestCancelled(e as Error) || !this.chapterCurrent(token, signal)) { return; }
+      this.host.currentPage = initialTarget;
+      if (await this.tryFallback(e as Error)) { return; }
+      if (!this.chapterCurrent(token, signal)) { return; }
+      this.host.loadState = 'error';
+      if (this.host.errorMsg === '') { this.host.errorMsg = errorMessage(e as Error); }
+      this.host.hudVisible = true;
+      return;
     }
     if (!this.chapterCurrent(token, signal)) { return; }
 
@@ -529,7 +507,7 @@ export class ReaderController {
 
   retryLoad(): void {
     if (this.host.chapters.length > 0) {
-      this.loadChapter(this.host.chapterIndex, 0).catch((_e: Error): void => {
+      this.loadChapter(this.host.chapterIndex, this.host.currentPage, false, true).catch((_e: Error): void => {
       });
     } else {
       this.readingStarted = false;
@@ -589,26 +567,23 @@ export class ReaderController {
       return;
     }
     try {
-      let list: Array<string> | null = null;
-      try {
-        list = await pagesCacheStore.get(next.id);
-      } catch (e) {
-        list = null;
-      }
+      const cached: ChapterPagesCache | null = await pagesCacheStore.get(next.id);
       if (!this.chapterCurrent(token, signal)) { return; }
-      if (list === null || list.length === 0) {
+      let list: Array<string>;
+      let sid: number;
+      if (cached !== null && cached.list.length > 0 && cached.scrambleId !== null) {
+        list = cached.list;
+        sid = cached.scrambleId;
+      } else {
         list = await jmApi.chapterImages(next.id, signal);
         if (!this.chapterCurrent(token, signal)) { return; }
-        if (list.length > 0) {
-          pagesCacheStore.put(next.id, list).catch((_e: Error): void => {
-          });
-        }
+        sid = await jmApi.scrambleId(next.id, signal);
+        if (!this.chapterCurrent(token, signal)) { return; }
+        await pagesCacheStore.put(next.id, list, sid);
       }
       if (list.length === 0) {
         return;
       }
-      const sid: number = await jmApi.scrambleId(next.id, signal);
-      if (!this.chapterCurrent(token, signal)) { return; }
       const count: number = Math.min(5, list.length);
       for (let i: number = 0; i < count; i++) {
         if (!this.chapterCurrent(token, signal)) { return; }
@@ -1095,15 +1070,4 @@ export class ReaderController {
     return Math.max(1, Math.min(8, Math.floor(n)));
   }
 
-  private samePages(a: Array<string>, b: Array<string>): boolean {
-    if (a.length !== b.length) {
-      return false;
-    }
-    for (let i: number = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
 }

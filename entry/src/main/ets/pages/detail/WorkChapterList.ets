@@ -4,7 +4,7 @@ import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { IconCircleButton } from '../../common/Components';
 import {
-  CARD, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, PRIMARY_SOFT, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY
+  CARD, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY
 } from '../../common/Theme';
 import { settingsRowRadius } from '../settings/SettingsRows';
 import {
@@ -13,7 +13,7 @@ import {
 
 /**
  * 详情页唯一的滚动容器：首项为详情头部（由页面以尾随闭包传入），随后是章节 LazyForEach 与评论。
- * 章节排序 / 过滤用 SegmentButton 表达“当前状态”；预览改为左滑或长按。
+ * 章节排序 / 过滤用 SegmentButton 表达“当前状态”；预览通过行尾按钮、左滑或长按直接进入。
  */
 @Component
 export struct WorkChapterList {
@@ -103,13 +103,13 @@ export struct WorkChapterList {
   @Builder
   private PreviewAction(chapter: Chapter) {
     Row() {
-      SymbolGlyph($r('sys.symbol.eye')).fontSize(20).fontColor([Color.White])
+      Text($r('app.string.preview_chapter')).fontSize(13).fontColor(TEXT_MAIN)
     }
-    .width(72)
+    .width(88)
     .height('100%')
     .justifyContent(FlexAlign.Center)
-    .backgroundColor(PRIMARY)
-    .accessibilityText('预览本章页面')
+    .backgroundColor(SUB_CARD)
+    .accessibilityText($r('app.string.preview_chapter'))
     .onClick(() => {
       this.preview(chapter);
     })
@@ -160,12 +160,6 @@ export struct WorkChapterList {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
 
-      if (row.progressText !== '') {
-        Text(row.progressText)
-          .fontSize(12)
-          .fontColor(TEXT_SUB)
-      }
-
       Row() {
         if (row.selecting) {
           Checkbox({ name: row.chapter.id })
@@ -181,6 +175,18 @@ export struct WorkChapterList {
       .width(40)
       .height(40)
       .justifyContent(FlexAlign.Center)
+
+      if (!row.selecting) {
+        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
+          SymbolGlyph($r('sys.symbol.file_preview')).fontSize(20).fontColor([TEXT_SUB])
+        }
+        .width(40).height(40).backgroundColor(Color.Transparent)
+        .accessibilityText($r('app.string.preview_chapter'))
+        .onClick((event: ClickEvent): void => {
+          event.stopPropagation();
+          this.preview(row.chapter);
+        })
+      }
     }
     .width('100%')
     .constraintSize({ minHeight: 52 })
@@ -256,13 +262,8 @@ export struct WorkChapterList {
       } else if (this.commentsDone) {
         Text('已全部加载').fontSize(12).fontColor(TEXT_SUB)
       } else {
-        Text(this.comments.length === 0 ? '加载漫评' : '加载更多')
-          .fontSize(12)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(PRIMARY)
-          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-          .borderRadius(14)
-          .backgroundColor(PRIMARY_SOFT)
+          Button(this.comments.length === 0 ? '加载漫评' : '加载更多', { buttonStyle: ButtonStyleMode.TEXTUAL })
+            .fontSize(12).fontColor(PRIMARY)
           .onClick(() => {
             this.loadComments();
           })

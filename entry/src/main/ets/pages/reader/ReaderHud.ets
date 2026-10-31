@@ -51,6 +51,18 @@ export struct ReaderHud {
   setPreload: (n: number) => void = (n: number): void => {};
   openZoneEditor: () => void = (): void => {};
 
+  /** 进度两侧按钮容易误触，明确目标章节后再执行切换。 */
+  private confirmChapter(delta: number): void {
+    const chapter: Chapter | undefined = this.chapters[this.chapterIndex + delta];
+    if (chapter === undefined) { return; }
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.switch_chapter_title'),
+      message: $r('app.string.switch_chapter_message', chapter.title || `第 ${this.chapterIndex + delta + 1} 章`),
+      primaryButton: { value: $r('app.string.cancel_action'), action: (): void => {} },
+      secondaryButton: { value: $r('app.string.switch_chapter_action'), action: (): void => this.goChapter(delta) }
+    });
+  }
+
   build() {
     Column() {
       this.BottomHud()
@@ -265,7 +277,7 @@ export struct ReaderHud {
     .enabled(enabled)
     .accessibilityText(label)
     .onClick(() => {
-      this.goChapter(delta);
+      this.confirmChapter(delta);
     })
   }
 

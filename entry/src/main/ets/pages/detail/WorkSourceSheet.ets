@@ -3,7 +3,7 @@ import { Album, errorMessage } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
 import { library, LibraryWork } from '../../data/Library';
 import { IconCircleButton } from '../../common/Components';
-import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, CHIP_BG } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB, CHIP_BG } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -48,7 +48,7 @@ export struct WorkSourceSheet {
                     .fontColor(item.id === this.aid ? Color.White : PRIMARY)
                     .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                     .borderRadius(6)
-                    .backgroundColor(item.id === this.aid ? PRIMARY : PRIMARY_SOFT)
+                    .backgroundColor(item.id === this.aid ? PRIMARY : SUB_CARD)
                   Text(item.name)
                     .fontColor(TEXT_MAIN)
                     .fontSize(14)

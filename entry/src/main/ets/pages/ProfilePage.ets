@@ -4,15 +4,11 @@ import {
   ROUTE_SOURCE_SETTINGS, ROUTE_STATS, ROUTE_STORAGE
 } from '../common/Route';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
-import {
-  SETTINGS_VERSION_KEY, SettingsSnapshot, loadSettings, privacySummary, readerSummary, themeSummary
-} from '../data/SettingsService';
-import { BG, CARD, TEXT_MAIN, TEXT_SUB, PRIMARY, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
-import { errorMessage } from '../models/Models';
+import { BG, CARD, TEXT_MAIN, TEXT_SUB, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 /**
- * “我的”一级页：只放导航行，所有立即生效的设置都在二级页里修改，行尾仅显示当前值摘要。
+ * 设置值由各二级页呈现，一级页只承担分组导航。
  */
 @Component
 export struct ProfilePage {
@@ -20,54 +16,23 @@ export struct ProfilePage {
   @StorageProp(TOP_RECT_HEIGHT_KEY) top: number = 0;
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
   @StorageProp('currentBreakpoint') breakpoint: string = 'sm';
-  @StorageProp(SETTINGS_VERSION_KEY) @Watch('load') settingsVersion: number = 0;
-
-  @State readerLabel: string = '';
-  @State themeLabel: string = '';
-  @State privacyLabel: string = '';
-  @State message: string = '';
-
   private scroller: Scroller = new Scroller();
-
-  aboutToAppear(): void {
-    this.load();
-  }
-
-  async load(): Promise<void> {
-    try {
-      const snapshot: SettingsSnapshot = await loadSettings();
-      this.readerLabel = readerSummary(snapshot);
-      this.themeLabel = themeSummary(snapshot);
-      this.privacyLabel = privacySummary(snapshot);
-      this.message = '';
-    } catch (e) {
-      this.message = errorMessage(e as Error);
-    }
-  }
 
   open(route: string, params: MangaRouteParams): void {
     this.stack.pushPathByName(route, params);
   }
 
   @Builder
-  private NavRow(icon: Resource, title: string, valueText: string, onTap: () => void) {
+  private NavRow(icon: Resource, title: string, onTap: () => void) {
     Row({ space: 16 }) {
       SymbolGlyph(icon)
         .fontSize(24).fontWeight(FontWeight.Medium)
-        .fontColor([PRIMARY])
+        .fontColor([TEXT_SUB])
       Text(title)
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
-      if (valueText !== '') {
-        Text(valueText)
-          .fontSize(14)
-          .fontColor(TEXT_SUB)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .constraintSize({ maxWidth: '50%' })
-      }
       SymbolGlyph($r('sys.symbol.chevron_right'))
         .fontSize(16)
         .fontColor([TEXT_SUB])
@@ -91,9 +56,9 @@ export struct ProfilePage {
       Scroll(this.scroller) {
         Column({ space: 12 }) {
           Column() {
-            this.NavRow($r('sys.symbol.clock'), '阅读统计', '', () => { this.open(ROUTE_STATS, {} as MangaRouteParams); })
+            this.NavRow($r('sys.symbol.clock'), '阅读统计', () => { this.open(ROUTE_STATS, {} as MangaRouteParams); })
             this.RowDivider()
-            this.NavRow($r('sys.symbol.arrow_down_circle'), '离线下载与导出', '', () => {
+            this.NavRow($r('sys.symbol.arrow_down_circle'), '离线下载与导出', () => {
               this.open(ROUTE_DOWNLOADS, {} as MangaRouteParams);
             })
           }
@@ -104,19 +69,19 @@ export struct ProfilePage {
           .border({ width: 0.5, color: DIVIDER })
 
           Column() {
-            this.NavRow($r('sys.symbol.book_pages'), '阅读设置', this.readerLabel, () => {
+            this.NavRow($r('sys.symbol.book_pages'), '阅读设置', () => {
               this.open(ROUTE_READER_SETTINGS, {} as MangaRouteParams);
             })
             this.RowDivider()
-            this.NavRow($r('sys.symbol.sun_max'), '外观', this.themeLabel, () => {
+            this.NavRow($r('sys.symbol.sun_max'), '外观', () => {
               this.open(ROUTE_APPEARANCE, {} as MangaRouteParams);
             })
             this.RowDivider()
-            this.NavRow($r('sys.symbol.square_grid_2x2'), '图源设置', '', () => {
+            this.NavRow($r('sys.symbol.square_grid_2x2'), '图源设置', () => {
               this.open(ROUTE_SOURCE_SETTINGS, {} as MangaRouteParams);
             })
             this.RowDivider()
-            this.NavRow($r('sys.symbol.checkmark_shield'), '屏蔽规则', '仅在线图源', () => {
+            this.NavRow($r('sys.symbol.checkmark_shield'), '屏蔽规则', () => {
               this.open(ROUTE_BLOCK_RULES, { sourceId: '' } as MangaRouteParams);
             })
           }
@@ -127,11 +92,11 @@ export struct ProfilePage {
           .border({ width: 0.5, color: DIVIDER })
 
           Column() {
-            this.NavRow($r('sys.symbol.lock_fill'), '隐私与安全', this.privacyLabel, () => {
+            this.NavRow($r('sys.symbol.lock_fill'), '隐私与安全', () => {
               this.open(ROUTE_PRIVACY, {} as MangaRouteParams);
             })
             this.RowDivider()
-            this.NavRow($r('sys.symbol.arrow_clockwise'), '存储与备份', '', () => {
+            this.NavRow($r('sys.symbol.arrow_clockwise'), '存储与备份', () => {
               this.open(ROUTE_STORAGE, {} as MangaRouteParams);
             })
           }

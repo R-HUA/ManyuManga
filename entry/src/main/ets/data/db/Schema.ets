@@ -1,5 +1,5 @@
 /** 新库版本。后续升级从 1 起，在 AppDatabase.upgradeFrom 里追加。 */
-export const APP_DB_VERSION: number = 2;
+export const APP_DB_VERSION: number = 3;
 export const APP_DB_NAME: string = 'manyu_business_v2.db';
 
 /** 子表在前，便于清空。 */

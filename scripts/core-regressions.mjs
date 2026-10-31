@@ -113,7 +113,7 @@ export async function regressionTests(test) {
     const failed = await Promise.allSettled([first, concurrent]);
     assert.ok(failed.every(result => result.status === 'rejected'));
     const store = await db.openDatabase();
-    assert.equal(store.version, 2);
+    assert.equal(store.version, 3);
     assert.deepEqual(env.state.opens, ['manyu_business_v2.db', 'manyu_business_v2.db']);
   });
   await test('首次完整下载发布全部页、可读离线书目和完整 CBZ', async env => {

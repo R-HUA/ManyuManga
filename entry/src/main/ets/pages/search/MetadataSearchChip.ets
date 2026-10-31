@@ -1,6 +1,6 @@
 import { MetadataTerm } from '../../models/Models';
 import { MangaRouteParams, ROUTE_SEARCH, SearchField, SearchScope, SearchSelection } from '../../common/Route';
-import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, DIVIDER } from '../../common/Theme';
+import { CARD, PRIMARY, TEXT_MAIN, DIVIDER } from '../../common/Theme';
 
 @Component
 export struct MetadataSearchChip {
@@ -36,7 +36,7 @@ export struct MetadataSearchChip {
       .constraintSize({ maxWidth: '100%' })
       .padding({ left: 12, right: 12 })
       .margin({ right: 8, bottom: 8 })
-      .backgroundColor(this.field === 'author' ? PRIMARY_SOFT : CARD)
+      .backgroundColor(CARD)
       .borderRadius(14)
       .border({ width: 0.5, color: DIVIDER })
       .onClick(() => this.search('source'))

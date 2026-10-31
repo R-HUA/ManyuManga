@@ -7,7 +7,7 @@ import { sourceApi } from '../data/SourceApi';
 import { readProgressStore, historyStore } from '../data/Stores';
 import { ReadingProgress, HistoryItem, Album, errorMessage } from '../models/Models';
 import { SourceCover } from '../common/SourceCover';
-import { BG, SUB_CARD, TEXT_MAIN, TEXT_SUB, PRIMARY, PRIMARY_SOFT, DANGER, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
+import { BG, SUB_CARD, TEXT_MAIN, TEXT_SUB, PRIMARY, DANGER, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 interface UpdatesSegmentOptions {
@@ -137,7 +137,7 @@ export struct UpdatesPage {
         if ($$.count > 0) {
           Text(`${$$.count}`).fontSize(10).fontWeight(FontWeight.Bold).fontColor(this.section === $$.index ? PRIMARY : TEXT_SUB)
             .padding({ left: 6, right: 6, top: 2, bottom: 2 }).borderRadius(8)
-            .backgroundColor(this.section === $$.index ? PRIMARY_SOFT : SUB_CARD)
+            .backgroundColor(SUB_CARD)
         }
       }.justifyContent(FlexAlign.Center)
     }
@@ -168,7 +168,7 @@ export struct UpdatesPage {
       }.layoutWeight(1)
       .onClick(() => this.stack.pushPathByName(ROUTE_ALBUM, { aid: key } as MangaRouteParams))
       if (reading) {
-        Button('继续阅读', { buttonStyle: ButtonStyleMode.NORMAL }).fontSize(13).fontColor(PRIMARY).backgroundColor(PRIMARY_SOFT)
+        Button('继续阅读', { buttonStyle: ButtonStyleMode.TEXTUAL }).fontSize(13).fontColor(PRIMARY)
           .onClick((): void => {
             this.stack.pushPathByName(ROUTE_READER, { aid: key } as MangaRouteParams);
           })

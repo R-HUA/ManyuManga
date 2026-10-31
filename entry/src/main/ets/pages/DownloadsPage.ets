@@ -5,7 +5,7 @@ import { DownloadedPane } from './downloads/DownloadedPane';
 import { BasicDataSource } from '../common/DataSource';
 import { DownloadTaskCard, chapterStatusText } from './downloads/DownloadTaskCard';
 import { DownloadSummary } from './downloads/DownloadSummary';
-import { PRIMARY, PRIMARY_SOFT, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK, NEUTRAL_PROGRESS } from '../common/Theme';
+import { PRIMARY, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK, NEUTRAL_PROGRESS } from '../common/Theme';
 import { IconCircleButton } from '../common/Components';
 import { EmptyView } from '../common/Components';
 import { errorMessage } from '../models/Models';
@@ -434,7 +434,7 @@ export struct DownloadsPage {
         .fontColor(PRIMARY)
         .padding({ left: 12, right: 12, top: 6, bottom: 6 })
         .borderRadius(14)
-        .backgroundColor(PRIMARY_SOFT)
+        .backgroundColor(SUB_CARD)
         .onClick(() => {
           this.toggleSelectAll();
         })

@@ -1,7 +1,7 @@
 import { ComicCard } from '../../common/ComicCard';
 import promptAction from '@ohos.promptAction';
 import { EmptyView } from '../../common/Components';
-import { comicColumns, BG, CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { comicColumns, BG, CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, SUB_CARD } from '../../common/Theme';
 import { ROUTE_READER, MangaRouteParams } from '../../common/Route';
 import { Album, MetadataTerm, errorMessage } from '../../models/Models';
 import { downloadManager, DownloadTask } from '../../data/DownloadManager';
@@ -254,7 +254,7 @@ export struct DownloadedPane {
             .fontColor(PRIMARY)
             .padding({ left: 14, right: 14, top: 6, bottom: 6 })
             .borderRadius(14)
-            .backgroundColor(PRIMARY_SOFT)
+            .backgroundColor(SUB_CARD)
             .onClick(() => {
               this.managing = !this.managing;
               if (!this.managing) {
@@ -338,44 +338,36 @@ export struct DownloadedPane {
   }
 
   @Builder
-  private ExportBar() {
-    Row({ space: 8 }) {
-      Button(this.busy ? '导出中' : '导出所选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .fontColor(Color.White)
-        .backgroundColor(PRIMARY)
-        .enabled(!this.busy)
-        .onClick(() => { this.exportSelected(false); })
-      Button('重试失败', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .fontColor(PRIMARY)
-        .backgroundColor(PRIMARY_SOFT)
+  private ExportMenu() {
+    Menu() {
+      MenuItem({ content: '重试失败' })
         .enabled(!this.busy && this.jobs.some((job: ExportJob): boolean => job.state === 'failed'))
         .onClick(() => { this.exportSelected(true); })
-      Button(this.busy ? '取消' : '打开目录', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .fontColor(TEXT_MAIN)
-        .backgroundColor(CARD)
-        .onClick(() => {
-          if (this.busy) {
-            this.stopExport = true;
-          } else {
-            this.openFolder();
-          }
-        })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 8, bottom: 12 })
-    Row({ space: 8 }) {
-      Button('单本导出', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .fontColor(PRIMARY)
-        .backgroundColor(PRIMARY_SOFT)
+      MenuItem({ content: '打开目录' }).onClick(() => { this.openFolder(); })
+      MenuItem({ content: '单本导出' })
         .enabled(!this.busy && this.selected.length === 1)
         .onClick(() => { this.exportSingle(); })
-      Button('删除离线内容', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-        .fontColor(TEXT_SUB)
-        .backgroundColor(CARD)
+      MenuItem({ content: '删除离线内容' })
         .enabled(!this.busy && this.selected.length > 0)
         .onClick(() => { this.deleteSelected(); })
     }
+  }
+
+  @Builder
+  private ExportBar() {
+    Row({ space: 12 }) {
+      Button(this.busy ? '导出中' : '导出所选', { buttonStyle: ButtonStyleMode.EMPHASIZED })
+        .layoutWeight(1).enabled(!this.busy)
+        .onClick(() => { this.exportSelected(false); })
+      if (this.busy) {
+        Button($r('app.string.cancel_action'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .onClick(() => { this.stopExport = true; })
+      } else {
+        Button($r('app.string.more_actions'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .fontColor(TEXT_MAIN).bindMenu(this.ExportMenu)
+      }
+    }
     .width('100%')
-    .padding({ left: 16, right: 16, bottom: 12 })
+    .padding({ left: 16, right: 16, top: 8, bottom: 12 })
   }
 }

@@ -1,5 +1,5 @@
 import { ReaderMode } from '../../models/Models';
-import { PRIMARY, PRIMARY_SOFT } from '../../common/Theme';
+import { PRIMARY, SUB_CARD } from '../../common/Theme';
 
 class ModeItem {
   mode: ReaderMode;
@@ -45,7 +45,7 @@ export struct ReaderModePanel {
         .justifyContent(FlexAlign.Center)
         .alignItems(HorizontalAlign.Center)
         .borderRadius(14)
-        .backgroundColor(this.mode === item.mode ? PRIMARY_SOFT : Color.Transparent)
+        .backgroundColor(this.mode === item.mode ? SUB_CARD : Color.Transparent)
         .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
         .onClick(() => {
           this.switchMode(item.mode);

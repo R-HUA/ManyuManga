@@ -50,7 +50,7 @@ async function openNow(context: common.Context): Promise<relationalStore.RdbStor
 }
 
 /**
- * 版本升级入口：v1 建表，v2 增加 download_chapter。
+ * 版本升级入口：v1 建表，v2 增加下载章节，v3 补齐旧安装的标签展示字段。
  * 后续版本继续追加 from < N 的增量语句，不要改写已发布的语句。
  */
 async function upgradeFrom(store: relationalStore.RdbStore, from: number): Promise<void> {
@@ -63,6 +63,23 @@ async function upgradeFrom(store: relationalStore.RdbStore, from: number): Promi
     for (const sql of SCHEMA_V2) {
       await store.executeSql(sql);
     }
+  }
+  if (from < 3) {
+    // 历史 v1 建表语句曾直接追加 label，同版本安装可能存在两种表结构。
+    const columns: relationalStore.ResultSet = await store.querySql('PRAGMA table_info(album_tag)');
+    let hasLabel: boolean = false;
+    try {
+      const nameIndex: number = columns.getColumnIndex('name');
+      while (columns.goToNextRow()) {
+        if (columns.getString(nameIndex) === 'label') { hasLabel = true; }
+      }
+    } finally {
+      columns.close();
+    }
+    if (!hasLabel) {
+      await store.executeSql("ALTER TABLE album_tag ADD COLUMN label TEXT NOT NULL DEFAULT ''");
+    }
+    await store.executeSql("UPDATE album_tag SET label = value WHERE label = ''");
   }
 }
 

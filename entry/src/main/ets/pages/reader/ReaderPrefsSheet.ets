@@ -3,7 +3,6 @@
  * 阅读器底部「设置」浮卡内容：自适应高度，不使用固定行高的 ListItemStyle.CARD，消除内容截断与压叠错位。
  */
 import { PRIMARY, SUB_CARD, TEXT_SUB } from '../../common/Theme';
-import { LengthMetrics } from '@kit.ArkUI';
 import { PRELOAD_LEVELS, ReaderOptions } from '../../data/ReaderOptions';
 import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
 
@@ -36,10 +35,10 @@ export struct ReaderPrefsSheet {
       .constraintSize({ minHeight: 48 })
       .alignItems(VerticalAlign.Center)
 
-      Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
+      Row({ space: 8 }) {
         ForEach(PRELOAD_LEVELS, (count: number) => {
           Button(`${count}页`, { type: ButtonType.Capsule, buttonStyle: this.preloadCount === count ? ButtonStyleMode.EMPHASIZED : ButtonStyleMode.NORMAL })
-            .height(40).fontSize(14)
+            .height(40).fontSize(14).layoutWeight(1)
             .backgroundColor(this.preloadCount === count ? PRIMARY : SUB_CARD)
             .fontColor(this.preloadCount === count ? Color.White : TEXT_SUB)
             .onClick(() => this.setPreload(count))

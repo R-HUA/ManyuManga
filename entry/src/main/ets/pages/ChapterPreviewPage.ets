@@ -1,18 +1,17 @@
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
-import { EMPTY_MATERIAL, HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
+import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { ROUTE_READER, MangaRouteParams } from '../common/Route';
 import { asRecord, asString, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
 import { EmptyView } from '../common/Components';
-import { BG, SUB_CARD, PRIMARY, TEXT_SUB, DIVIDER, COVER_R, NEUTRAL_PROGRESS, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
-import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
+import { BG, CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
+import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
 export struct ChapterPreviewPage {
   @Consume('navPathStack') stack: NavPathStack;
-  @StorageProp(TOP_RECT_HEIGHT_KEY) topInset: number = 38;
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 16;
 
   @State aid: string = '';
@@ -20,9 +19,8 @@ export struct ChapterPreviewPage {
   @State chapterTitle: string = '';
   @State allPages: Array<string> = [];
   @State scrambleId: number = 220980;
-  @State currentPageIndex: number = 0;
+  @State previewPage: number = 0;
   @State columns: number = 3;
-  @State sliderDragging: boolean = false;
   @State loading: boolean = true;
   @State error: string = '';
   private scroller: Scroller = new Scroller();
@@ -38,25 +36,39 @@ export struct ChapterPreviewPage {
     this.loadSignal.abortAll();
   }
 
-  private cycleColumns(): void {
-    if (this.columns === 2) {
-      this.columns = 3;
-    } else if (this.columns === 3) {
-      this.columns = 4;
-    } else {
-      this.columns = 2;
-    }
+  private setColumns(columns: number): void {
+    const first: number = this.previewPage * this.pageSize();
+    this.columns = columns;
+    this.previewPage = Math.floor(first / this.pageSize());
+    this.scroller.scrollTo({ xOffset: 0, yOffset: 0 });
   }
 
-  columnsIcon(): Resource {
-    // 只使用已确认存在的系统图标，按列数切换，图标随状态变化。
-    if (this.columns === 2) {
-      return $r('sys.symbol.rectangle_split_2x1');
-    }
-    if (this.columns === 3) {
-      return $r('sys.symbol.square_grid_2x2');
-    }
-    return $r('sys.symbol.square_fill_grid_2x2');
+  private showColumnsMenu(): void {
+    this.getUIContext().showActionSheet({
+      title: $r('app.string.preview_layout'),
+      message: '',
+      sheets: [
+        { title: this.columns === 2 ? $r('app.string.preview_two_columns_selected') : $r('app.string.preview_two_columns'),
+          action: (): void => this.setColumns(2) },
+        { title: this.columns === 3 ? $r('app.string.preview_three_columns_selected') : $r('app.string.preview_three_columns'),
+          action: (): void => this.setColumns(3) },
+        { title: this.columns === 4 ? $r('app.string.preview_four_columns_selected') : $r('app.string.preview_four_columns'),
+          action: (): void => this.setColumns(4) }
+      ]
+    });
+  }
+
+  private pageSize(): number { return this.columns * 3; }
+
+  private pageCount(): number { return Math.max(1, Math.ceil(this.allPages.length / this.pageSize())); }
+
+  private visiblePages(): Array<string> {
+    return this.allPages.slice(this.previewPage * this.pageSize(), (this.previewPage + 1) * this.pageSize());
+  }
+
+  private changePage(delta: number): void {
+    this.previewPage = Math.max(0, Math.min(this.pageCount() - 1, this.previewPage + delta));
+    this.scroller.scrollTo({ xOffset: 0, yOffset: 0 });
   }
 
   private columnsTemplateStr(): string {
@@ -82,7 +94,7 @@ export struct ChapterPreviewPage {
       if (token !== this.loadToken || signal.aborted()) { return; }
       this.scrambleId = scrambleId;
       this.allPages = pages;
-      this.currentPageIndex = 0;
+      this.previewPage = 0;
     } catch (e) {
       if (token === this.loadToken && !signal.aborted() && !isRequestCancelled(e as Error)) {
         this.error = errorMessage(e as Error);
@@ -100,49 +112,24 @@ export struct ChapterPreviewPage {
     } as MangaRouteParams);
   }
 
-  /** 底栏与阅读器 ProgressCard 同款：InSet 滑杆 + x/y，中性色；点缩略图即进入阅读。 */
   @Builder
-  private JumpBar() {
-    Row({ space: 8 }) {
-      Slider({
-        value: Math.min(this.currentPageIndex + 1, Math.max(this.allPages.length, 1)),
-        min: 1,
-        max: Math.max(this.allPages.length, 1),
-        step: 1,
-        style: SliderStyle.InSet
-      })
-        .selectedColor(NEUTRAL_PROGRESS)
-        .trackThickness(20)
-        .showTips(false)
-        .systemMaterial(EMPTY_MATERIAL)
-        .layoutWeight(1)
-        .enabled(this.allPages.length > 1)
-        .onChange((value: number, mode: SliderChangeMode) => {
-          const targetIdx: number = Math.max(0, Math.min(this.allPages.length - 1, Math.round(value) - 1));
-          this.currentPageIndex = targetIdx;
-          if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
-            this.sliderDragging = true;
-            this.scroller.scrollToIndex(targetIdx, false);
-          } else {
-            this.sliderDragging = false;
-            if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-              this.scroller.scrollToIndex(targetIdx, true);
-            }
-          }
-        })
-
-      Text(`${Math.min(this.currentPageIndex + 1, Math.max(1, this.allPages.length))}/${this.allPages.length}`)
-        .fontSize(12)
-        .fontFeature('"tnum" 1')
-        .fontColor($r('sys.color.font_secondary'))
-        .constraintSize({ minWidth: 38 })
-        .textAlign(TextAlign.Center)
+  private PaginationBar() {
+    Column() {
+      Divider().strokeWidth('1px').color(DIVIDER)
+      Row({ space: 12 }) {
+        Button($r('app.string.previous_page'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .height(48).fontSize(14).fontColor(TEXT_MAIN).enabled(this.previewPage > 0)
+          .onClick((): void => this.changePage(-1))
+        Text($r('app.string.preview_page_number', this.previewPage + 1, this.pageCount()))
+          .fontSize(13).fontFeature('"tnum" 1').fontColor(TEXT_SUB)
+          .layoutWeight(1).textAlign(TextAlign.Center)
+        Button($r('app.string.next_page'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .height(48).fontSize(14).fontColor(TEXT_MAIN).enabled(this.previewPage < this.pageCount() - 1)
+          .onClick((): void => this.changePage(1))
+      }.width('100%').padding({ left: 16, right: 16, top: 8, bottom: 8 + this.bottomInset })
     }
     .width('100%')
-    .height(52)
-    .padding({ left: 14, right: 14 })
-    .borderRadius(26)
-    .systemMaterial(IMMERSIVE_REGULAR_MATERIAL)
+    .backgroundColor(CARD)
   }
 
   build() {
@@ -171,9 +158,9 @@ export struct ChapterPreviewPage {
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
         } else {
-          Stack({ alignContent: Alignment.Bottom }) {
+          Column() {
             Grid(this.scroller) {
-              ForEach(this.allPages, (filename: string, idx: number) => {
+              ForEach(this.visiblePages(), (filename: string, idx: number) => {
                 GridItem() {
                   Column({ space: 4 }) {
                     Stack({ alignContent: Alignment.BottomStart }) {
@@ -186,7 +173,7 @@ export struct ChapterPreviewPage {
                         .width('100%')
                         .height('100%')
 
-                      Text(`P.${idx + 1}`)
+                      Text(`${this.previewPage * this.pageSize() + idx + 1}`)
                         .fontSize(11)
                         .fontWeight(FontWeight.Medium)
                         .fontFeature('"tnum" 1')
@@ -206,32 +193,22 @@ export struct ChapterPreviewPage {
                   .width('100%')
                   .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
                   .onClick(() => {
-                    this.openReaderAt(idx);
+                    this.openReaderAt(this.previewPage * this.pageSize() + idx);
                   })
                 }
-              }, (filename: string, idx: number) => `${idx}_${filename}`)
+              }, (filename: string, idx: number) => `${this.previewPage * this.pageSize() + idx}_${filename}`)
             }
             .columnsTemplate(this.columnsTemplateStr())
             .columnsGap(10)
             .rowsGap(12)
             .padding({ left: 16, right: 16 })
-            .contentStartOffset(this.topInset + HDS_TITLE_BAR_HEIGHT + 12)
-            .contentEndOffset(84 + this.bottomInset)
-            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+            .contentStartOffset(12)
+            .contentEndOffset(12)
             .width('100%')
-            .height('100%')
-            .onScrollIndex((first: number) => {
-              if (!this.sliderDragging && first >= 0 && first < this.allPages.length) {
-                this.currentPageIndex = first;
-              }
-            })
+            .layoutWeight(1)
 
             if (this.allPages.length > 0) {
-              Column() {
-                this.JumpBar()
-              }
-              .width('100%')
-              .padding({ left: 16, right: 16, bottom: 12 + this.bottomInset })
+              this.PaginationBar()
             }
           }
           .width('100%')
@@ -248,17 +225,17 @@ export struct ChapterPreviewPage {
         menu: {
           value: [{
             content: {
-              icon: this.columnsIcon(),
-              label: `${this.columns}列`,
+              icon: $r('sys.symbol.square_grid_2x2'),
+              label: $r('app.string.preview_layout'),
               isEnabled: this.allPages.length > 0,
-              action: (): void => this.cycleColumns()
+              action: (): void => this.showColumnsMenu()
             }
           }]
         }
       },
       style: HDS_TITLE_STYLE,
       avoidLayoutSafeArea: true,
-      enableComponentSafeArea: false
+      enableComponentSafeArea: true
     })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])

@@ -14,7 +14,7 @@ import { searchLibraryWorks } from '../data/SearchQuery';
 import { LibrarySearchResults } from './search/LibrarySearchResults';
 import { highConfidence } from '../data/Matching';
 import { Album, AlbumLite, SearchResult, asRecord, asString, errorMessage } from '../models/Models';
-import { BG, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_SUB } from '../common/Theme';
+import { BG, PRIMARY, DANGER, TEXT_SUB } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { SearchSuggestField } from './search/SearchSuggestField';
 import { searchHistoryStore } from '../data/stores/FilterStores';
@@ -304,7 +304,7 @@ export struct SearchAllPage {
       this.sourceName = source.name;
       this.searchKind = source.kind;
       if (this.query.trim() !== '') {
-        this.search();
+        await this.search();
       }
     } catch (e) {
       if (ticket === this.ticket && this.active) { this.error = errorMessage(e as Error); }
@@ -333,7 +333,7 @@ export struct SearchAllPage {
         }
         .width(40)
         .height(40)
-        .backgroundColor(this.hasActiveFilter() ? PRIMARY_SOFT : Color.Transparent)
+        .backgroundColor(Color.Transparent)
         .systemMaterial(IMMERSIVE_CONTROL_MATERIAL)
         .accessibilityText('筛选')
         .onClick((): void => {

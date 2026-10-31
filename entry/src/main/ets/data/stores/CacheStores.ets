@@ -79,7 +79,7 @@ export class PagesCacheStore {
   private queue: StoreQueue = new StoreQueue();
   private loaded: boolean = false;
   private loading: Promise<void> | null = null;
-  private items: Array<ListEntry> = [];
+  private items: Array<ChapterPagesCache> = [];
 
   private ensureLoaded(): Promise<void> {
     if (this.loading === null) {
@@ -102,8 +102,12 @@ export class PagesCacheStore {
       if (rec === null) {
         continue;
       }
-      const entry: ListEntry = new ListEntry();
+      const entry: ChapterPagesCache = new ChapterPagesCache();
       entry.key = asString(rec['key']);
+      const scramble: Object = rec['scrambleId'];
+      if (typeof scramble === 'number' && Number.isInteger(scramble) && scramble >= 0) {
+        entry.scrambleId = scramble;
+      }
       const list: Array<Object> | null = asArray(rec['list']);
       if (list !== null) {
         for (const x of list) {
@@ -120,24 +124,29 @@ export class PagesCacheStore {
     this.loaded = true;
   }
 
-  async get(photoId: string): Promise<Array<string> | null> {
+  async get(photoId: string): Promise<ChapterPagesCache | null> {
     await this.queue.wait();
     await this.ensureLoaded();
     for (const it of this.items) {
       if (it.key === photoId) {
-        return it.list.slice();
+        const entry: ChapterPagesCache = new ChapterPagesCache();
+        entry.key = it.key;
+        entry.list = it.list.slice();
+        entry.scrambleId = it.scrambleId;
+        return entry;
       }
     }
     return null;
   }
 
-  put(photoId: string, list: Array<string>): Promise<void> {
-    const entry: ListEntry = new ListEntry();
+  put(photoId: string, list: Array<string>, scrambleId: number): Promise<void> {
+    const entry: ChapterPagesCache = new ChapterPagesCache();
     entry.key = photoId;
     entry.list = list.slice();
+    entry.scrambleId = scrambleId;
     return this.queue.run(async (generation: number): Promise<void> => {
       await this.ensureLoaded();
-      const items: Array<ListEntry> = [entry].concat(this.items.filter((item: ListEntry): boolean => item.key !== photoId))
+      const items: Array<ChapterPagesCache> = [entry].concat(this.items.filter((item: ChapterPagesCache): boolean => item.key !== photoId))
         .slice(0, 200);
       const prefs: Prefs = await Prefs.getInstance();
       assertDatabaseGeneration(generation);
@@ -147,9 +156,11 @@ export class PagesCacheStore {
   }
 }
 
-class ListEntry {
+/** 页表与还原参数属于同一份章节快照，重进时不能先用默认参数渲染。 */
+export class ChapterPagesCache {
   key: string = '';
   list: Array<string> = [];
+  scrambleId: number | null = null;
 }
 
 export const albumCacheStore: AlbumCacheStore = new AlbumCacheStore();

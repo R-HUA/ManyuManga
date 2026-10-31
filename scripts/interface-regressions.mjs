@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { until } from './core-regressions.mjs';
 
 function deferred() {
@@ -45,6 +46,55 @@ function tap(controller, x, y) {
 }
 
 export async function interfaceTests(test) {
+  for (const version of [1, 2]) {
+    await test(`旧版 v${version} 标签表缺少展示列时复现入架 SQL 失败，升级后保留原标签并恢复入架`, async env => {
+      const schema = env.load('data/db/Schema');
+      const store = await env.rdb.getRdbStore(env.context, { name: schema.APP_DB_NAME });
+      for (const sql of schema.SCHEMA_V1) await store.executeSql(sql.replace(', label TEXT NOT NULL', ''));
+      if (version === 2) for (const sql of schema.SCHEMA_V2) await store.executeSql(sql);
+      await store.executeSql('INSERT INTO album_tag (album_id, namespace, value, position) VALUES (?, ?, ?, ?)',
+        ['old~book', 'female', 'original', 0]);
+      store.version = version;
+      const codec = env.load('data/db/RowCodec');
+      const tx = await store.createTransaction();
+      await assert.rejects(codec.txUpsert(tx, 'album_tag', ['album_id', 'namespace', 'value'],
+        ['album_id', 'namespace', 'value', 'label', 'position'], ['jm~new', '', '新标签', '新标签', 0]), /label/);
+      await tx.rollback();
+      const db = env.load('data/db/AppDatabase');
+      if (version === 2) {
+        env.state.failSql = record => record.sql.startsWith('UPDATE album_tag SET label');
+        await assert.rejects(db.openDatabase(), /注入/);
+        env.state.failSql = null;
+      }
+      assert.equal((await db.openDatabase()).version, 3);
+      const { Album, MetadataTerm } = env.load('models/Models');
+      const album = new Album('jm~new', '带标签的作品'); album.tags = [new MetadataTerm('new', '新标签', 'female')];
+      await env.load('data/Library').library.add(album);
+      const tags = [];
+      await codec.readRows(await db.dbQuery('SELECT album_id, namespace, value, label FROM album_tag ORDER BY album_id', []),
+        row => tags.push([codec.cellString(row, 'album_id'), codec.cellString(row, 'namespace'),
+          codec.cellString(row, 'value'), codec.cellString(row, 'label')]));
+      assert.deepEqual(tags, [['jm~new', 'female', 'new', '新标签'], ['old~book', 'female', 'original', 'original']]);
+      assert.ok(await env.load('data/Library').library.workFor(album.id));
+      assert.equal(env.state.openResults.size, 0);
+    });
+  }
+
+  await test('已包含标签展示列的 v2 数据库升级不覆盖译名、不重复添加列', async env => {
+    const schema = env.load('data/db/Schema');
+    const store = await env.rdb.getRdbStore(env.context, { name: schema.APP_DB_NAME });
+    for (const sql of [...schema.SCHEMA_V1, ...schema.SCHEMA_V2]) await store.executeSql(sql);
+    await store.executeSql('INSERT INTO album_tag (album_id, namespace, value, label, position) VALUES (?, ?, ?, ?, ?)',
+      ['old~book', 'female', 'raw', '译名', 0]);
+    store.version = 2;
+    const db = env.load('data/db/AppDatabase'), codec = env.load('data/db/RowCodec');
+    await db.openDatabase();
+    let label;
+    await codec.readRows(await db.dbQuery('SELECT label FROM album_tag', []), row => { label = codec.cellString(row, 'label'); });
+    assert.equal(label, '译名');
+    assert.equal(env.state.sql.some(record => record.sql.startsWith('ALTER TABLE')), false);
+  });
+
   await test('图源管理恢复停用状态，隐藏保存失败回滚，展示开关同步生效', async env => {
     const { SourceEntry, sourceStore } = env.load('data/Sources');
     const { SourceManagementPage } = env.load('pages/sources/SourceManagementPage');
@@ -360,6 +410,100 @@ export async function interfaceTests(test) {
     assert.equal(field.open, false); assert.equal(field.source.totalCount(), 0);
   });
 
+  await test('查看全部直接发起单源搜索，程序回填不会取消首次请求或清除元数据选择', async env => {
+    const { SearchAllPage } = env.load('pages/SearchAllPage');
+    const { SearchSuggestField } = env.load('pages/search/SearchSuggestField');
+    const { SourceEntry, sourceStore } = env.load('data/Sources');
+    const api = env.load('data/SourceApi').sourceApi;
+    const source = new SourceEntry('target', '目标图源', 'jm'), metadata = deferred();
+    sourceStore.get = async () => metadata.promise;
+    const requests = [];
+    api.searchSource = async (entry, query, page) => {
+      requests.push([entry.id, query, page]);
+      return { list: [{ id: 'target~1' }], total: 1, hasNext: false };
+    };
+    const page = new SearchAllPage(); page.query = '路由词'; page.onlySource = source.id; page.scope = 'source';
+    const field = new SearchSuggestField(); field.text = page.query;
+    const selection = { field: 'tag' }; field.selection = selection;
+    let edits = 0; field.onEdit = () => { edits++; page.editQuery(); };
+    const pending = page.openScopedSource();
+    field.changeText('路由词'); metadata.resolve(source); await pending;
+    assert.equal(edits, 0); assert.equal(field.selection, selection);
+    assert.deepEqual(requests, [['target', '路由词', 1]]);
+    assert.equal(page.submitted, '路由词'); assert.equal(page.groups[0].items[0].id, 'target~1');
+    field.changeText('真正修改'); assert.equal(edits, 1); assert.deepEqual(page.groups, []);
+  });
+
+  await test('速览分页覆盖全部缩略图，切换布局保留锚点，点击跳转使用全章页码', async env => {
+    const { ChapterPreviewPage } = env.load('pages/ChapterPreviewPage');
+    const page = new ChapterPreviewPage(); page.allPages = Array.from({ length: 23 }, (_, i) => `${i}.jpg`);
+    assert.equal(page.pageCount(), 3); assert.equal(page.visiblePages().length, 9);
+    page.changePage(1); assert.equal(page.visiblePages()[0], '9.jpg');
+    page.changePage(1); assert.deepEqual(page.visiblePages(), ['18.jpg', '19.jpg', '20.jpg', '21.jpg', '22.jpg']);
+    page.changePage(1); assert.equal(page.previewPage, 2);
+    page.setColumns(2); assert.equal(page.previewPage, 3); assert.equal(page.visiblePages()[0], '18.jpg');
+    page.setColumns(4); assert.equal(page.previewPage, 1); assert.equal(page.pageCount(), 2);
+    let route;
+    page.stack = { pushPathByName: (name, params) => { route = { name, params }; } };
+    page.openReaderAt(page.previewPage * page.pageSize() + 4); assert.equal(route.params.page, 16);
+    let sheet; page.getUIContext = () => ({ showActionSheet: value => { sheet = value; } });
+    page.showColumnsMenu(); assert.equal(sheet.sheets.length, 3);
+    sheet.sheets[1].action(); assert.equal(page.columns, 3);
+  });
+
+  await test('进度栏切话必须确认，取消和首尾越界均不跳话', async env => {
+    const { ReaderHud } = env.load('pages/reader/ReaderHud');
+    const hud = new ReaderHud(); hud.chapters = [{ id: '1', title: '第一章' }, { id: '2', title: '第二章' }];
+    hud.chapterIndex = 0; let dialog; const jumps = [];
+    hud.getUIContext = () => ({ showAlertDialog: value => { dialog = value; } });
+    hud.goChapter = delta => jumps.push(delta);
+    hud.confirmChapter(-1); assert.equal(dialog, undefined);
+    hud.confirmChapter(1); assert.deepEqual(jumps, []);
+    dialog.primaryButton.action(); assert.deepEqual(jumps, []);
+    dialog.secondaryButton.action(); assert.deepEqual(jumps, [1]);
+    hud.chapterIndex = 1; dialog = undefined; hud.confirmChapter(1); assert.equal(dialog, undefined);
+  });
+
+  await test('阅读章节缓存持久保存页表及还原参数，重进不请求页表，重试才强制刷新', async env => {
+    const api = env.load('data/SourceApi').sourceApi;
+    const { pagesCacheStore, PagesCacheStore } = env.load('data/Stores');
+    env.load('data/Library').library.activate = async () => {};
+    let requests = 0, restores = 0;
+    api.chapterImages = async () => { requests++; return ['1.jpg', '2.jpg']; };
+    api.scrambleId = async () => { restores++; return 0; };
+    const prepare = () => {
+      const result = reader(env);
+      result.controller.buildSpreads = () => {}; result.controller.scrollToPageDelayed = () => {};
+      result.controller.prefetchAhead = () => {}; result.controller.preloadNextChapter = async () => {};
+      return result;
+    };
+    const first = prepare(); await first.controller.loadChapter(0, 1);
+    assert.equal(first.host.loadState, 'ready'); assert.equal(first.host.scrambleId, 0);
+    const persisted = await new PagesCacheStore().get('jm~chapter');
+    assert.deepEqual(persisted.list, ['1.jpg', '2.jpg']); assert.equal(persisted.scrambleId, 0);
+    const second = prepare(); await second.controller.loadChapter(0, 1);
+    assert.equal(second.host.currentPage, 1); assert.equal(second.host.scrambleId, 0);
+    assert.deepEqual([requests, restores], [1, 1]);
+    persisted.list.push('污染'); assert.equal((await pagesCacheStore.get('jm~chapter')).list.length, 2);
+    await second.controller.loadChapter(0, 1, false, true); assert.deepEqual([requests, restores], [2, 2]);
+    const late = deferred(); api.chapterImages = async () => late.promise;
+    const pending = second.controller.loadChapter(0, 0, false, true); await until(() => second.host.loadState === 'loading', '进入加载');
+    second.controller.chapterToken++; late.resolve(['迟到.jpg']); await pending;
+    assert.deepEqual(second.host.pages, []);
+  });
+
+  await test('加入书架安全处理问号、引号与控制字符，重复加入与同作品关联保持正确', async env => {
+    const { Album, MetadataTerm } = env.load('models/Models');
+    const { library } = env.load('data/Library');
+    const title = '作品?？\t\n\'"';
+    const first = new Album('jm~quoted', title); first.author = [new MetadataTerm('作者')];
+    const second = new Album('other~quoted', title); second.author = [new MetadataTerm('作者')];
+    await library.add(first); await library.add(first); await library.add(second);
+    const works = await library.list();
+    assert.equal(works.length, 1); assert.equal(works[0].albums.length, 2);
+    assert.equal(works[0].title, title); assert.ok(await library.workFor(second.id));
+  });
+
   await test('搜索历史清空失败保留词条与展开状态，成功后恢复空态', async env => {
     const store = env.load('data/stores/FilterStores').searchHistoryStore;
     await store.record('关键词');
@@ -588,7 +732,7 @@ export async function interfaceTests(test) {
   await test('静态检查：同一节点不重复链式 bindSheet，“我的”页只保留导航行', async () => {
     const fs = await import('node:fs');
     const nodePath = await import('node:path');
-    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const root = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
     const files = [];
     const walk = dir => {
       for (const name of fs.readdirSync(dir)) {
@@ -633,7 +777,7 @@ export async function interfaceTests(test) {
     }
   });
 
-  await test('详情页章节行：已读弱化、当前章进度、未读过滤与倒序、LazyForEach 数据源重载', async env => {
+  await test('详情页章节行：已读弱化、当前章标识、未读过滤与倒序、LazyForEach 数据源重载', async env => {
     const { Album, Chapter, ReadingProgress } = env.load('models/Models');
     const { buildChapterRows, ChapterDataSource, ChapterDownloadInfo } = env.load('pages/detail/ChapterRows');
     const album = new Album('jm~1', '作品');
@@ -641,8 +785,8 @@ export async function interfaceTests(test) {
     const progress = new ReadingProgress('jm~1', 'b', 1, 4, 10);
     const downloads = new Map([['c', new ChapterDownloadInfo('running', 2, 5)]]);
     const rows = buildChapterRows(album, progress, '', false, true, downloads);
-    assert.deepEqual(rows.map(row => [row.chapter.id, row.read, row.current, row.progressText]),
-      [['a', true, false, ''], ['b', false, true, '5/10'], ['c', false, false, '']]);
+    assert.deepEqual(rows.map(row => [row.chapter.id, row.read, row.current]),
+      [['a', true, false], ['b', false, true], ['c', false, false]]);
     assert.equal(rows[2].download.state, 'running');
     assert.equal(rows[0].download.state, 'none');
     assert.deepEqual(buildChapterRows(album, progress, '', true, false, new Map()).map(row => row.chapter.id), ['c', 'b']);
@@ -665,16 +809,17 @@ export async function interfaceTests(test) {
     assert.equal(reloaded, 1);
   });
 
-  await test('详情页沉浸式单列表：无眼睛按钮、换源进标题菜单、预览页中性滑杆', async () => {
+  await test('详情页沉浸式单列表：章节预览入口、换源进标题菜单、速览独立分页', async () => {
     const fs = await import('node:fs');
     const nodePath = await import('node:path');
-    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const root = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
     const read = file => fs.readFileSync(nodePath.join(root, file), 'utf8');
     const list = read('pages/detail/WorkChapterList.ets');
     assert.match(list, /LazyForEach\(this\.source/);
     assert.match(list, /swipeAction\(/);
     assert.match(list, /LongPressGesture/);
     assert.match(list, /SegmentButton\(/);
+    assert.doesNotMatch(list, /sys\.symbol\.eye|progressText/);
     assert.doesNotMatch(list, /阅读中/);
     const detail = read('pages/WorkDetailPage.ets');
     assert.match(detail, /enableComponentSafeArea: false/);
@@ -686,13 +831,14 @@ export async function interfaceTests(test) {
     assert.match(hero, /blur\(40\)/);
     const preview = read('pages/ChapterPreviewPage.ets');
     assert.doesNotMatch(preview, /从头阅读|读 P\./);
-    assert.match(preview, /selectedColor\(NEUTRAL_PROGRESS\)/);
+    assert.doesNotMatch(preview, /Slider\(|\.systemMaterial\(/);
+    assert.match(preview, /PaginationBar\(/);
     assert.match(preview, /contentStartOffset/);
   });
   await test('静态检查：下载管理按作品分组展开章节、单行摘要、详情页多选工具栏', async () => {
     const fs = await import('node:fs');
     const nodePath = await import('node:path');
-    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const root = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
     const read = file => fs.readFileSync(nodePath.join(root, file), 'utf8');
     const page = read('pages/DownloadsPage.ets');
     assert.match(page, /ListItemGroup\(\{ ?header: this\.TaskRow\(item\)/);
@@ -715,7 +861,7 @@ export async function interfaceTests(test) {
     assert.equal(host.panel, 'picture');
     const fs = await import('node:fs');
     const nodePath = await import('node:path');
-    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const root = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
     const read = file => fs.readFileSync(nodePath.join(root, file), 'utf8');
     const page = read('pages/ReaderPage.ets');
     assert.doesNotMatch(page, /bindSheet|ReaderChapterSheet/);
@@ -727,7 +873,7 @@ export async function interfaceTests(test) {
     assert.doesNotMatch(hud, /Button\('上一话'|Button\('下一话'/);
     assert.match(hud, /selectedColor\(NEUTRAL_PROGRESS\)/);
     const panel = read('pages/reader/ReaderCatalogPanel.ets');
-    assert.match(panel, /Tabs\(/); assert.match(panel, /'目录'/); assert.match(panel, /'缩略图'/);
+    assert.match(panel, /Tabs\(/); assert.match(panel, /'目录'/); assert.match(panel, /reader_preview_tab/);
     assert.match(panel, /listDirection\(Axis\.Horizontal\)/);
     assert.match(panel, /initialIndex: Math\.max\(0, this\.chapterIndex/);
   });
@@ -765,7 +911,7 @@ export async function interfaceTests(test) {
 
     const fs = await import('node:fs');
     const nodePath = await import('node:path');
-    const root = new URL('../entry/src/main/ets/', import.meta.url).pathname;
+    const root = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
     const read = file => fs.readFileSync(nodePath.join(root, file), 'utf8');
     const sheet = read('pages/reader/ReaderPrefsSheet.ets');
     assert.doesNotMatch(sheet, /触控热区分配|this\.openZoneEditor\(\)/);

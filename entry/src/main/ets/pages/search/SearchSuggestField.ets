@@ -1,6 +1,6 @@
 import { BasicDataSource } from '../../common/DataSource';
 import { IMMERSIVE_CONTROL_MATERIAL, IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
-import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { SearchSelection } from '../../common/Route';
 import { MetadataTerm, errorMessage } from '../../models/Models';
 import { SearchSuggestion, suggestLocal } from '../../data/SearchSuggest';
@@ -86,6 +86,14 @@ export struct SearchSuggestField {
     this.onSubmit(next, selection);
   }
 
+  /** 路由回填和提交后的同值同步不属于用户编辑，不能撤销已提交的搜索。 */
+  private changeText(value: string): void {
+    if (value === this.text) { return; }
+    this.text = value;
+    this.onEdit(value);
+    this.schedule(value);
+  }
+
   @Builder
   private Suggestions() {
     List({ space: 4 }) {
@@ -108,10 +116,10 @@ export struct SearchSuggestField {
             if (item.namespace !== '') {
               Text(item.namespace)
                 .fontSize(10)
-                .fontColor(PRIMARY)
+                .fontColor(TEXT_SUB)
                 .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                 .borderRadius(6)
-                .backgroundColor(PRIMARY_SOFT)
+                .backgroundColor(SUB_CARD)
             }
           }
           .width('100%')
@@ -140,10 +148,7 @@ export struct SearchSuggestField {
       .searchButton(this.showSearchButton ? '搜索' : '', { autoDisable: true })
       .cancelButton({ style: CancelButtonStyle.INPUT })
       .onChange((value: string) => {
-        this.text = value;
-        this.selection = null;
-        this.onEdit(value);
-        this.schedule(value);
+        this.changeText(value);
       })
       .onSubmit((value: string) => {
         this.generation++;

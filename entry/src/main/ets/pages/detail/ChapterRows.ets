@@ -9,14 +9,13 @@ export class ChapterRow {
   index: number = 0;
   read: boolean = false;
   current: boolean = false;
-  progressText: string = '';
   download: ChapterDownloadInfo = new ChapterDownloadInfo();
   /** 多选模式：selecting 表示处于多选，selected 表示本行已勾选。 */
   selecting: boolean = false;
   selected: boolean = false;
 
   key(): string {
-    return `${this.chapter.id}_${this.read}_${this.current}_${this.progressText}_${this.download.state}_${this.download.done}_${this.selecting}_${this.selected}`;
+    return `${this.chapter.id}_${this.read}_${this.current}_${this.download.state}_${this.download.done}_${this.selecting}_${this.selected}`;
   }
 }
 
@@ -51,8 +50,6 @@ export function buildChapterRows(album: Album | null, progress: ReadingProgress 
     row.index = i;
     row.read = read;
     row.current = current;
-    row.progressText = current && progress !== null && progress.totalPages > 0 ?
-      `${progress.page + 1}/${progress.totalPages}` : '';
     const info: ChapterDownloadInfo | undefined = downloads.get(chapter.id);
     row.download = info === undefined ? new ChapterDownloadInfo() : info;
     rows.push(row);

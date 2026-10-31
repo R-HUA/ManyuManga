@@ -6,7 +6,7 @@ import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
-import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { BG, CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 
 @Component
 export struct WorkHeroInfo {
@@ -106,7 +106,7 @@ export struct WorkHeroInfo {
               }
               .padding({ left: 8, right: 8, top: 4, bottom: 4 })
               .borderRadius(8)
-              .backgroundColor(PRIMARY_SOFT)
+              .backgroundColor(SUB_CARD)
               .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
               .onClick(() => {
                 this.sourceSheet = true;
@@ -116,11 +116,11 @@ export struct WorkHeroInfo {
                 Text(this.sourceBadge())
                   .fontSize(11)
                   .fontWeight(FontWeight.Bold)
-                  .fontColor(PRIMARY)
+                  .fontColor(TEXT_SUB)
               }
               .padding({ left: 8, right: 8, top: 4, bottom: 4 })
               .borderRadius(8)
-              .backgroundColor(PRIMARY_SOFT)
+              .backgroundColor(SUB_CARD)
             }
 
             Row({ space: 12 }) {
@@ -164,7 +164,7 @@ export struct WorkHeroInfo {
           .height(42)
           .justifyContent(FlexAlign.Center)
           .borderRadius(21)
-          .backgroundColor(this.work !== null ? PRIMARY_SOFT : SUB_CARD)
+          .backgroundColor(SUB_CARD)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
           .accessibilityText(this.work !== null ? '已在书架，点按移出' : '加入书架')
           .onClick(() => {

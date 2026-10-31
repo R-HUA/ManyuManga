@@ -22,12 +22,7 @@ export async function loadLibraryWorkForAlbum(albumId: string): Promise<LibraryW
   return items.length > 0 ? items[0] : null;
 }
 
-/**
- * 找出与 album 可能是同一作品的书架作品。
- * 之前用 json_extract 加三十多层嵌套 REPLACE 在 SQL 里归一化标题，替换表里含有 '?'、'？' 和制表、换行等控制字符，
- * RDB 绑定参数时会把字面量里的 '?' 误算成占位符，或因 JSON1 不可用而报 SQLITE_ERROR（Generic error），导致收藏失败。
- * 现在只读出 work_id 和 payload，在 TS 里用 normalizedTitle 做同样的归一化比较。
- */
+/** 标题比较复用 ArkTS 归一化规则，避免依赖 SQL 的 JSON 扩展和多层字符串替换。 */
 export async function loadLibraryCandidates(album: Album): Promise<Array<LibraryWork>> {
   const target: string = normalizedTitle(album.name);
   const url: string = album.originalUrl;

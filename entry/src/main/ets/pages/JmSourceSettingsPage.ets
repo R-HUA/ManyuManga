@@ -10,7 +10,6 @@ import {
   CARD,
   SUB_CARD,
   PRIMARY,
-  PRIMARY_SOFT,
   STATUS_OK,
   DANGER,
   DANGER_SOFT,
@@ -99,7 +98,7 @@ export struct JmSourceSettingsPage {
                   .fontSize(12)
                   .fontWeight(FontWeight.Bold)
                   .fontColor(PRIMARY)
-                  .backgroundColor(PRIMARY_SOFT)
+                  .backgroundColor(SUB_CARD)
                   .height(32)
                   .enabled(!this.testingSpeed)
                   .onClick(() => {
@@ -139,7 +138,7 @@ export struct JmSourceSettingsPage {
                       .fontSize(12)
                       .fontWeight(FontWeight.Bold)
                       .fontColor(domain === this.currentDomain ? TEXT_SUB : PRIMARY)
-                      .backgroundColor(domain === this.currentDomain ? SUB_CARD : PRIMARY_SOFT)
+                      .backgroundColor(SUB_CARD)
                       .height(30)
                       .onClick(() => {
                         if (domain !== this.currentDomain) {
@@ -165,7 +164,7 @@ export struct JmSourceSettingsPage {
               .fontSize(14)
               .fontWeight(FontWeight.Bold)
               .fontColor(PRIMARY)
-              .backgroundColor(PRIMARY_SOFT)
+              .backgroundColor(SUB_CARD)
               .width('100%')
               .height(40)
               .onClick(() => {

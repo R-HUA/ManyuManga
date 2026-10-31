@@ -3,7 +3,7 @@ import { SourceSearchOptions } from '../../data/source/SourceContracts';
 import { EhSearchFilter } from '../../data/eh/EhSearchFilter';
 import { EhFilterSheet } from '../eh/EhFilterSheet';
 import { IconCircleButton } from '../../common/Components';
-import { SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB, CARD } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, CARD } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 class FilterOption {
@@ -76,21 +76,11 @@ export struct SearchFilterSheet {
           .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_SUB)
 
-        Row({ space: 8 }) {
-          ForEach(JM_ORDERS, (opt: FilterOption) => {
-            Button(opt.label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(13)
-              .fontWeight(this.draftOrder === opt.value ? FontWeight.Bold : FontWeight.Normal)
-              .fontColor(this.draftOrder === opt.value ? PRIMARY : TEXT_MAIN)
-              .backgroundColor(this.draftOrder === opt.value ? PRIMARY_SOFT : SUB_CARD)
-              .layoutWeight(1)
-              .height(34)
-              .onClick(() => {
-                this.draftOrder = opt.value;
-              })
-          }, (opt: FilterOption) => opt.value)
-        }
-        .width('100%')
+        Select(JM_ORDERS.map((opt: FilterOption): SelectOption => ({ value: opt.label })))
+          .selected(JM_ORDERS.findIndex((opt: FilterOption): boolean => opt.value === this.draftOrder))
+          .value(JM_ORDERS.find((opt: FilterOption): boolean => opt.value === this.draftOrder)?.label ?? '')
+          .font({ size: 14 }).fontColor(TEXT_MAIN).width('100%')
+          .onSelect((index: number): void => { this.draftOrder = JM_ORDERS[index].value; })
       }
       .width('100%')
       .padding({ left: 20, right: 20 })
@@ -103,21 +93,11 @@ export struct SearchFilterSheet {
           .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_SUB)
 
-        Row({ space: 8 }) {
-          ForEach(JM_TIMES, (opt: FilterOption) => {
-            Button(opt.label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(13)
-              .fontWeight(this.draftTime === opt.value ? FontWeight.Bold : FontWeight.Normal)
-              .fontColor(this.draftTime === opt.value ? PRIMARY : TEXT_MAIN)
-              .backgroundColor(this.draftTime === opt.value ? PRIMARY_SOFT : SUB_CARD)
-              .layoutWeight(1)
-              .height(34)
-              .onClick(() => {
-                this.draftTime = opt.value;
-              })
-          }, (opt: FilterOption) => opt.value)
-        }
-        .width('100%')
+        Select(JM_TIMES.map((opt: FilterOption): SelectOption => ({ value: opt.label })))
+          .selected(JM_TIMES.findIndex((opt: FilterOption): boolean => opt.value === this.draftTime))
+          .value(JM_TIMES.find((opt: FilterOption): boolean => opt.value === this.draftTime)?.label ?? '')
+          .font({ size: 14 }).fontColor(TEXT_MAIN).width('100%')
+          .onSelect((index: number): void => { this.draftTime = JM_TIMES[index].value; })
       }
       .width('100%')
       .padding({ left: 20, right: 20 })

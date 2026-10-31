@@ -4,7 +4,7 @@
  * 目录自动定位到当前章节；缩略图为横向列表并定位到当前页。点击面板外由宿主遮罩关闭。
  */
 import { BasicDataSource } from '../../common/DataSource';
-import { DIVIDER, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { DIVIDER, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { Chapter, ReadingProgress } from '../../models/Models';
 import { PageThumbItem } from './ReaderImageItem';
 
@@ -57,9 +57,9 @@ export struct ReaderCatalogPanel {
       TabContent() {
         this.ThumbList()
       }
-      .tabBar(SubTabBarStyle.of('缩略图'))
+      .tabBar(SubTabBarStyle.of($r('app.string.reader_preview_tab')))
     }
-    .barHeight(40)
+    .barHeight(56)
     .barMode(BarMode.Fixed)
     .barBackgroundColor(Color.Transparent)
     .scrollable(false)
@@ -84,12 +84,12 @@ export struct ReaderCatalogPanel {
           Row({ space: 8 }) {
             ForEach(this.bookmarks, (bookmark: ReadingProgress) => {
               Button(`第${bookmark.chapterIndex + 1}话 P.${bookmark.page + 1}`,
-                { type: ButtonType.Capsule, stateEffect: true })
+                { buttonStyle: ButtonStyleMode.TEXTUAL })
                 .fontSize(12)
                 .fontWeight(FontWeight.Bold)
-                .fontColor(PRIMARY)
-                .backgroundColor(PRIMARY_SOFT)
-                .height(28)
+                .fontColor(TEXT_SUB)
+                .backgroundColor(SUB_CARD)
+                .height(40)
                 .onClick(() => {
                   const index: number = this.chapters.findIndex((c: Chapter) => c.id === bookmark.chapterId);
                   if (index >= 0) {

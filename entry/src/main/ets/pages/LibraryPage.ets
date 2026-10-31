@@ -12,7 +12,7 @@ import { downloadManager } from '../data/DownloadManager';
 import { sourceApi } from '../data/SourceApi';
 import { readProgressStore } from '../data/Stores';
 import { Album, ReadingProgress, errorMessage } from '../models/Models';
-import { BG, CARD, SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT, comicColumns } from '../common/Theme';
+import { BG, CARD, SUB_CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT, comicColumns } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -237,7 +237,7 @@ export struct LibraryPage {
               .width(64)
               .height(64)
               .borderRadius(32)
-              .backgroundColor(PRIMARY_SOFT)
+              .backgroundColor(SUB_CARD)
 
               Text(this.works.length === 0 ? '书架还没有收藏漫画' : '没有符合当前筛选的漫画')
                 .fontSize(16)

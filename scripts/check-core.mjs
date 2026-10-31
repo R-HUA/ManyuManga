@@ -92,9 +92,9 @@ function environment() {
       source = source.replace(/  build\(\) \{[\s\S]*?(?=  private reportVisibility)/, '');
     }
     // 保留真实页面方法，只移除本地 Node 无法执行的 ArkUI 声明式布局。
-    if (/[/\\]pages[/\\](SearchAllPage|SuwayomiLibraryPage|WorkDetailPage|ExplorePage|CategoryPage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|sources[/\\](SourceEntryCard|SourceManagementPage|SuwayomiConnectPage)|settings[/\\](ReaderSettingsPage|AppearancePage|PrivacyPage|StoragePage)|detail[/\\]WorkTags|reader[/\\]ReaderImageItem|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
+    if (/[/\\]pages[/\\](SearchAllPage|ChapterPreviewPage|SuwayomiLibraryPage|WorkDetailPage|ExplorePage|CategoryPage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|sources[/\\](SourceEntryCard|SourceManagementPage|SuwayomiConnectPage)|settings[/\\](ReaderSettingsPage|AppearancePage|PrivacyPage|StoragePage)|detail[/\\]WorkTags|reader[/\\](ReaderImageItem|ReaderHud)|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
       const builder = source.indexOf('  @Builder');
-      const end = builder >= 0 ? builder : source.indexOf('  build()');
+      const end = Math.min(...[builder, source.indexOf('  build()')].filter(index => index >= 0));
       assert.ok(end > 0);
       source = (source.slice(0, end) + '\n}').replace(/@Component\s+export struct /g, 'export class ')
         .replace(/@(Consume|StorageProp|Watch|Prop|Link)\([^)]*\)\s*/g, '')
@@ -134,7 +134,7 @@ function environment() {
     return module.exports;
   }
   load(path.join(ets, 'util/Prefs.ets')).setAppContext(context);
-  const env = { load: name => load(path.join(ets, name + '.ets')), state, disk, secrets, directory, context,
+  const env = { load: name => load(path.join(ets, name + '.ets')), state, disk, secrets, directory, context, rdb: relational.platform,
     close: () => { for (const timer of timers) clearTimeout(timer); timers.clear(); relational.close(); } };
   environments.push(env);
   return env;

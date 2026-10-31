@@ -34,7 +34,7 @@ export struct IconCircleButton {
     }
     .width(this.btnSize)
     .height(this.btnSize)
-    .backgroundColor(this.active ? PRIMARY_SOFT : this.bg)
+    .backgroundColor(this.active ? SUB_CARD : this.bg)
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
     .onClick(() => {
       this.onTap();
