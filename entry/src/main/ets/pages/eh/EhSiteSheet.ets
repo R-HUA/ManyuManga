@@ -207,15 +207,8 @@ export struct EhSiteSheet {
               .javaScriptAccess(true)
               .domStorageAccess(true)
               .mixedMode(MixedMode.All)
-            Text('完成')
-              .fontSize(13)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(ON_PRIMARY)
-              .textAlign(TextAlign.Center)
+            Button('完成', { buttonStyle: ButtonStyleMode.EMPHASIZED })
               .width('100%')
-              .height(40)
-              .borderRadius(20)
-              .backgroundColor(PRIMARY)
               .onClick(() => {
                 this.webDone();
                 this.showWebLogin = false;
@@ -243,16 +236,9 @@ export struct EhSiteSheet {
               this.cookieInput = s;
             })
           Row({ space: 10 }) {
-            Text(this.busy ? '保存中…' : '保存 Cookie')
-              .fontSize(13)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(ON_PRIMARY)
-              .textAlign(TextAlign.Center)
+            Button(this.busy ? '保存中…' : '保存 Cookie', { buttonStyle: ButtonStyleMode.EMPHASIZED })
               .layoutWeight(1)
-              .height(38)
-              .borderRadius(19)
-              .backgroundColor(PRIMARY)
-              .opacity(this.busy ? 0.6 : 1.0)
+              .enabled(!this.busy)
               .onClick(() => {
                 if (!this.busy) {
                   this.saveCookie();

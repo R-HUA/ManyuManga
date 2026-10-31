@@ -125,25 +125,15 @@ export struct SearchFilterSheet {
 
       // 底部操作按钮
       Row({ space: 12 }) {
-        Button('重置', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .backgroundColor(SUB_CARD)
+        Button('重置', { buttonStyle: ButtonStyleMode.NORMAL })
           .layoutWeight(1)
-          .height(40)
           .onClick(() => {
             this.draftOrder = 'mr';
             this.draftTime = 'a';
           })
 
-        Button('应用筛选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(ON_PRIMARY)
-          .backgroundColor(PRIMARY)
-          .layoutWeight(2)
-          .height(40)
+        Button('应用筛选', { buttonStyle: ButtonStyleMode.EMPHASIZED })
+          .layoutWeight(1)
           .onClick(() => {
             const next: SourceSearchOptions = this.options.copy();
             next.jm.order = this.draftOrder;
@@ -153,7 +143,7 @@ export struct SearchFilterSheet {
           })
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 4, bottom: 16 + this.bottomInset })
+      .padding({ left: 16, right: 16, top: 4, bottom: 16 + this.bottomInset })
     }
     .width('100%')
   }

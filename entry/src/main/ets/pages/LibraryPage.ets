@@ -274,6 +274,12 @@ export struct LibraryPage {
                 .textAlign(TextAlign.Center)
                 .padding({ left: 36, right: 36 })
 
+              if (this.works.length === 0) {
+                Button('去搜索', { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
+                  .onClick(() => {
+                    this.stack.pushPathByName(ROUTE_SEARCH, {} as MangaRouteParams);
+                  })
+              }
               if (this.works.length > 0) {
                 Button('重置筛选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
                   .height(36)
@@ -324,6 +330,7 @@ export struct LibraryPage {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
           showClose: false,
+          keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_SCROLL,
           systemMaterial: IMMERSIVE_SHEET_MATERIAL
         })
 

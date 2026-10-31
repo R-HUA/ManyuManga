@@ -163,6 +163,7 @@ export struct EhBrowsePage {
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
       showClose: false,
+      keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_SCROLL,
       systemMaterial: IMMERSIVE_SHEET_MATERIAL
     })
   }

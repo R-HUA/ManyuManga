@@ -1,7 +1,7 @@
 import { ComicCard } from '../../common/ComicCard';
 import promptAction from '@ohos.promptAction';
 import { EmptyView } from '../../common/Components';
-import { comicColumns, BG, TEXT_MAIN, TEXT_SUB, DANGER } from '../../common/Theme';
+import { comicColumns, BG, TEXT_MAIN, TEXT_SUB, DANGER, PRIMARY, ON_PRIMARY, OVERLAY_SCRIM } from '../../common/Theme';
 import { ToolBarOptions } from '@kit.ArkUI';
 import { SelectionToolBar, ToolAction, buildToolBar } from '../../common/SelectionToolBar';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
@@ -311,13 +311,13 @@ export struct DownloadedPane {
         Grid() {
           ForEach(this.items, (item: OfflineItem) => {
             GridItem() {
-              Column() {
+              Stack({ alignContent: Alignment.TopEnd }) {
                 ComicCard({
                   coverUrl: item.cover,
                   aid: item.albumId,
                   title: item.title,
                   author: item.author,
-                  badge: this.managing ? (this.selected.indexOf(item.albumId) >= 0 ? '已选' : '') : '',
+                  badge: '',
                   onCardClick: (): void => {
                     if (this.managing) {
                       this.toggle(item.albumId);
@@ -326,6 +326,16 @@ export struct DownloadedPane {
                     }
                   }
                 })
+                if (this.managing) {
+                  Stack() {
+                    if (this.selected.indexOf(item.albumId) >= 0) {
+                      SymbolGlyph($r('sys.symbol.checkmark')).fontSize(13).fontColor([ON_PRIMARY])
+                    }
+                  }
+                  .width(24).height(24).borderRadius(12).margin(7)
+                  .backgroundColor(this.selected.indexOf(item.albumId) >= 0 ? PRIMARY : OVERLAY_SCRIM)
+                  .hitTestBehavior(HitTestMode.None)
+                }
               }
               .width('100%')
               .gesture(

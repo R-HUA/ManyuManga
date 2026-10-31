@@ -400,13 +400,8 @@ export struct EhFilterSheet {
             this.draft = new EhSearchFilter();
           })
 
-        Button('应用筛选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(ON_PRIMARY)
-          .backgroundColor(PRIMARY)
-          .layoutWeight(2)
-          .height(40)
+        Button('应用筛选', { buttonStyle: ButtonStyleMode.EMPHASIZED })
+          .layoutWeight(1)
           .onClick(() => {
             this.draft.save().catch((): void => {});
             this.apply(this.draft);
@@ -414,7 +409,7 @@ export struct EhFilterSheet {
           })
       }
       .width('100%')
-      .padding({ left: 20, right: 20, top: 4, bottom: 16 + this.bottomInset })
+      .padding({ left: 16, right: 16, top: 4, bottom: 16 + this.bottomInset })
     }
     .width('100%')
   }

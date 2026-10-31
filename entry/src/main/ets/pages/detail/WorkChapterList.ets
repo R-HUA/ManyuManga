@@ -2,7 +2,7 @@ import { SegmentButton, SegmentButtonOptions, SegmentButtonTextItem, ItemRestric
 import { Album, Chapter, ReadingProgress, CommentItem } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
-import { IconCircleButton } from '../../common/Components';
+import { IconCircleButton, EmptyView } from '../../common/Components';
 import {
   CARD, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, PRIMARY_SOFT, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY, ON_OVERLAY } from '../../common/Theme';
 import { settingsRowRadius } from '../settings/SettingsRows';
@@ -299,12 +299,7 @@ export struct WorkChapterList {
 
       if (this.rowCount === 0) {
         ListItem() {
-          Text('暂无符合条件的章节')
-            .fontSize(13)
-            .fontColor(TEXT_SUB)
-            .padding(32)
-            .width('100%')
-            .textAlign(TextAlign.Center)
+          EmptyView({ quiet: true, message: '暂无符合条件的章节', showRetry: false })
         }
       }
 

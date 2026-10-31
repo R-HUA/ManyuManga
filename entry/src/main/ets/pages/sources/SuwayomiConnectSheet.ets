@@ -94,15 +94,8 @@ export struct SuwayomiConnectSheet {
             .width('100%')
         }
 
-        Button(this.busy ? '正在连接…' : '连接书库', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.EMPHASIZED })
-          .fontSize(15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(ON_PRIMARY)
+        Button(this.busy ? '正在连接…' : '连接书库', { buttonStyle: ButtonStyleMode.EMPHASIZED })
           .width('100%')
-          .height(46)
-          .borderRadius(23)
-          .backgroundColor(PRIMARY)
-          .opacity(this.busy ? 0.6 : 1.0)
           .enabled(!this.busy)
           .onClick(() => {
             if (!this.busy) {
@@ -111,7 +104,7 @@ export struct SuwayomiConnectSheet {
           })
       }
       .width('100%')
-      .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
+      .padding({ left: 16, right: 16, top: 16, bottom: 28 + this.bottomInset })
     }
     .width('100%')
     .align(Alignment.TopStart)

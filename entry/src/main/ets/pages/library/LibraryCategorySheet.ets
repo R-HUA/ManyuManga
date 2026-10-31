@@ -64,22 +64,15 @@ export struct LibraryCategorySheet {
           .onClick(() => {
             this.categorySheet = false;
           })
-        Text('保存应用')
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(ON_PRIMARY)
-          .textAlign(TextAlign.Center)
+        Button('保存应用', { buttonStyle: ButtonStyleMode.EMPHASIZED })
           .layoutWeight(1)
-          .height(44)
-          .borderRadius(22)
-          .backgroundColor(PRIMARY)
           .onClick(() => {
             this.action('category');
           })
       }
       .width('100%')
     }
-    .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
+    .padding({ left: 16, right: 16, top: 16, bottom: 28 + this.bottomInset })
     .width('100%')
   }
 }

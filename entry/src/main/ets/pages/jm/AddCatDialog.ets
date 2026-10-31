@@ -61,14 +61,8 @@ export struct AddCatDialog {
               this.controller.close();
             }
           })
-        Text('添加')
-          .fontSize(FONT_BODY)
-          .fontColor(ON_PRIMARY)
+        Button('添加', { buttonStyle: ButtonStyleMode.EMPHASIZED })
           .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-          .padding({ top: 9, bottom: 9 })
-          .backgroundColor(PRIMARY)
-          .borderRadius(CHIP_R)
           .onClick(() => {
             this.doAdd();
           })
