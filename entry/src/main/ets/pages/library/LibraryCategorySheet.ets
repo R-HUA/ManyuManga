@@ -1,4 +1,4 @@
-import { SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -36,7 +36,7 @@ export struct LibraryCategorySheet {
             ForEach(this.categories, (cat: string) => {
               Text(cat)
                 .fontSize(13)
-                .fontColor(this.categoryName === cat ? Color.White : TEXT_MAIN)
+                .fontColor(this.categoryName === cat ? ON_PRIMARY : TEXT_MAIN)
                 .padding({ left: 14, right: 14, top: 7, bottom: 7 })
                 .margin({ right: 8, bottom: 8 })
                 .borderRadius(16)
@@ -64,22 +64,15 @@ export struct LibraryCategorySheet {
           .onClick(() => {
             this.categorySheet = false;
           })
-        Text('保存应用')
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .textAlign(TextAlign.Center)
+        Button('保存应用', { buttonStyle: ButtonStyleMode.EMPHASIZED })
           .layoutWeight(1)
-          .height(44)
-          .borderRadius(22)
-          .backgroundColor(PRIMARY)
           .onClick(() => {
             this.action('category');
           })
       }
       .width('100%')
     }
-    .padding({ left: 24, right: 24, top: 16, bottom: 28 + this.bottomInset })
+    .padding({ left: 16, right: 16, top: 16, bottom: 28 + this.bottomInset })
     .width('100%')
   }
 }

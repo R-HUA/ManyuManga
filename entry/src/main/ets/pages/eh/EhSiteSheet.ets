@@ -5,7 +5,7 @@
 import web_webview from '@ohos.web.webview';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { GallerySite } from '../../data/eh/EhNative';
-import { SUB_CARD, PRIMARY, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../../common/Route';
 
@@ -104,7 +104,7 @@ export struct EhSiteSheet {
     Text(label)
       .fontSize(13)
       .fontWeight(this.siteMode === mode ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.siteMode === mode ? Color.White : TEXT_MAIN)
+      .fontColor(this.siteMode === mode ? ON_PRIMARY : TEXT_MAIN)
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 9, bottom: 9 })
@@ -207,15 +207,8 @@ export struct EhSiteSheet {
               .javaScriptAccess(true)
               .domStorageAccess(true)
               .mixedMode(MixedMode.All)
-            Text('完成')
-              .fontSize(13)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
-              .textAlign(TextAlign.Center)
+            Button('完成', { buttonStyle: ButtonStyleMode.EMPHASIZED })
               .width('100%')
-              .height(40)
-              .borderRadius(20)
-              .backgroundColor(PRIMARY)
               .onClick(() => {
                 this.webDone();
                 this.showWebLogin = false;
@@ -243,16 +236,9 @@ export struct EhSiteSheet {
               this.cookieInput = s;
             })
           Row({ space: 10 }) {
-            Text(this.busy ? '保存中…' : '保存 Cookie')
-              .fontSize(13)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(Color.White)
-              .textAlign(TextAlign.Center)
+            Button(this.busy ? '保存中…' : '保存 Cookie', { buttonStyle: ButtonStyleMode.EMPHASIZED })
               .layoutWeight(1)
-              .height(38)
-              .borderRadius(19)
-              .backgroundColor(PRIMARY)
-              .opacity(this.busy ? 0.6 : 1.0)
+              .enabled(!this.busy)
               .onClick(() => {
                 if (!this.busy) {
                   this.saveCookie();

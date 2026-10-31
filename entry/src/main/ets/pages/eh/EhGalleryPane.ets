@@ -5,7 +5,7 @@ import { AlbumLite, errorMessage } from '../../models/Models';
 import { ComicCard } from '../../common/ComicCard';
 import { withoutBlockedAlbums } from '../../data/stores/FilterStores';
 import { BasicDataSource } from '../../common/DataSource';
-import { comicColumns, PRIMARY, TEXT_SUB, HDS_TITLE_BAR_HEIGHT, SUB_CARD } from '../../common/Theme';
+import { comicColumns, PRIMARY, TEXT_SUB, HDS_TITLE_BAR_HEIGHT } from '../../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 const COLUMN_GAP: number = 12;
@@ -185,13 +185,7 @@ export struct EhGalleryPane {
             .fontColor(TEXT_SUB)
             .textAlign(TextAlign.Center)
             .padding({ left: 24, right: 24 })
-          Text('重试')
-            .fontSize(13)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(PRIMARY)
-            .padding({ left: 20, right: 20, top: 9, bottom: 9 })
-            .borderRadius(16)
-            .backgroundColor(SUB_CARD)
+          Button('重试', { buttonStyle: ButtonStyleMode.NORMAL, controlSize: ControlSize.SMALL })
             .onClick(() => {
               this.load('reset');
             })

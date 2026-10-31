@@ -11,6 +11,13 @@ export const CARD: Resource = $r('app.color.card');
 export const SUB_CARD: Resource = $r('app.color.sub_card');
 /** 半模态卡片底：约 55% 不透明度，避免遮挡宿主材质滤镜。 */
 export const SHEET_CARD: Resource = $r('app.color.sheet_card');
+/** 强调色（PRIMARY）底上的文字/图标：系统 onPrimary token，仅用于强调底色之上。 */
+export const ON_PRIMARY: Resource = $r('sys.color.font_on_primary');
+/** 叠加在封面/图片上的深色遮罩与其上的文字（深浅色模式均需保证 3:1 对比度）。 */
+export const OVERLAY_SCRIM: Resource = $r('app.color.overlay_scrim');
+export const ON_OVERLAY: Resource = $r('app.color.on_overlay');
+/** 警示 / 不可逆操作的系统红色警告色。 */
+export const WARNING: Resource = $r('sys.color.warning');
 export const READER_BG: string = '#080A10';
 
 export const TEXT_MAIN: Resource = $r('app.color.text_main');

@@ -1,3 +1,4 @@
+import { EmptyView } from '../common/Components';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { BasicDataSource } from '../common/DataSource';
 import { ComicCard } from '../common/ComicCard';
@@ -76,7 +77,7 @@ export struct SourceBrowsePage {
       else if (this.error !== '') {
         Text(this.error).fontSize(13).fontColor(DANGER)
         Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.load(this.page === 0))
-      } else if (!this.more) { Text(this.items.length === 0 ? '暂无内容' : '没有更多了').fontSize(13).fontColor(TEXT_SUB) }
+      } else if (!this.more && this.items.length === 0) { EmptyView({ quiet: true, message: '暂无内容', showRetry: false }) } else if (!this.more) { Text('没有更多了').fontSize($r('sys.float.Body_S')).fontColor($r('sys.color.font_tertiary')).width('100%').textAlign(TextAlign.Center).padding(12) }
     }.width('100%').padding({ top: 20, bottom: 28 + this.bottom })
   }
 

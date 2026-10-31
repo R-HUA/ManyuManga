@@ -1,5 +1,7 @@
 {
   "color": [
+    { "name": "overlay_scrim", "value": "#C7000000" },
+    { "name": "on_overlay", "value": "#FFFFFFFF" },
     { "name": "start_window_background", "value": "#101112" },
     { "name": "primary", "value": "#5B8DEF" },
     { "name": "primary_soft", "value": "#245B8DEF" },

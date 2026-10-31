@@ -2,7 +2,7 @@ import { SegmentButton, SegmentButtonOptions, SegmentButtonTextItem, ItemRestric
 import { Album, Chapter, ReadingProgress, CommentItem } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
-import { IconCircleButton } from '../../common/Components';
+import { IconCircleButton, EmptyView } from '../../common/Components';
 import {
   CARD, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY
 } from '../../common/Theme';
@@ -182,8 +182,7 @@ export struct WorkChapterList {
         }
         .width(40).height(40).backgroundColor(Color.Transparent)
         .accessibilityText($r('app.string.preview_chapter'))
-        .onClick((event: ClickEvent): void => {
-          event.stopPropagation();
+        .onClick((): void => {
           this.preview(row.chapter);
         })
       }
@@ -262,8 +261,8 @@ export struct WorkChapterList {
       } else if (this.commentsDone) {
         Text('已全部加载').fontSize(12).fontColor(TEXT_SUB)
       } else {
-          Button(this.comments.length === 0 ? '加载漫评' : '加载更多', { buttonStyle: ButtonStyleMode.TEXTUAL })
-            .fontSize(12).fontColor(PRIMARY)
+        Button(this.comments.length === 0 ? '加载漫评' : '加载更多',
+          { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
           .onClick(() => {
             this.loadComments();
           })
@@ -306,12 +305,7 @@ export struct WorkChapterList {
 
       if (this.rowCount === 0) {
         ListItem() {
-          Text('暂无符合条件的章节')
-            .fontSize(13)
-            .fontColor(TEXT_SUB)
-            .padding(32)
-            .width('100%')
-            .textAlign(TextAlign.Center)
+          EmptyView({ quiet: true, message: '暂无符合条件的章节', showRetry: false })
         }
       }
 

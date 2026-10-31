@@ -1,3 +1,4 @@
+import { EmptyView } from '../common/Components';
 import { BottomBuilderShowType, HdsNavigation, HdsNavigationTitleMode, HideMode, TitleSize } from '@kit.UIDesignKit';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import promptAction from '@ohos.promptAction';
@@ -187,12 +188,12 @@ export struct UpdatesPage {
               ForEach(this.updatedWorks(), (work: LibraryWork) => {
                 this.Entry(work.title, work.cover, `发现 ${work.newChapters} 个新章节`, work.activeKey, false)
               }, (work: LibraryWork) => work.id)
-              if (this.updatedWorks().length === 0) { Text('暂无新章节').fontSize(14).fontColor(TEXT_SUB).padding({ top: 36 }).width('100%') }
+              if (this.updatedWorks().length === 0) { EmptyView({ quiet: true, message: '暂无新章节', showRetry: false }) }
             } else {
               ForEach(this.history, (item: HistoryItem) => {
                 this.Entry(item.title, item.coverUrl, this.historySubtitle(item), item.id, true)
               }, (item: HistoryItem) => item.id)
-              if (this.history.length === 0) { Text('暂无阅读历史').fontSize(14).fontColor(TEXT_SUB).padding({ top: 36 }).width('100%') }
+              if (this.history.length === 0) { EmptyView({ quiet: true, message: '暂无阅读历史', showRetry: false }) }
             }
           }.padding({ left: 16, right: 16, bottom: (this.breakpoint === 'lg' ? 28 : TAB_BAR_HEIGHT + 28) + this.bottomInset })
           .width('100%').alignItems(HorizontalAlign.Start)

@@ -7,7 +7,7 @@
 import common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { MainShell } from './MainShell';
-import { PRIMARY } from '../common/Theme';
+import { PRIMARY, PRIMARY_SOFT, BG, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
 import { Prefs, getAppContext } from '../util/Prefs';
 import { APP_IN_BACKGROUND_KEY } from '../entryability/EntryAbility';
 import { NAV_STACK_DEPTH_KEY } from '../common/Route';
@@ -138,27 +138,20 @@ struct Index {
       .width(76)
       .height(76)
       .borderRadius(38)
-      .backgroundColor('rgba(58,122,254,0.16)')
+      .backgroundColor(PRIMARY_SOFT)
 
       Text('应用已锁定')
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
+        .fontColor(TEXT_MAIN)
       Text(this.lockMsg !== '' ? this.lockMsg : '请验证人脸、指纹或锁屏密码以继续')
         .fontSize(13)
-        .fontColor('rgba(255,255,255,0.65)')
+        .fontColor(TEXT_SUB)
         .textAlign(TextAlign.Center)
         .maxLines(3)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .padding({ left: 32, right: 32 })
-      Button('重试解锁')
-        .height(42)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-        .padding({ left: 28, right: 28 })
-        .borderRadius(21)
-        .backgroundColor(PRIMARY)
+      Button('重试解锁', { buttonStyle: ButtonStyleMode.EMPHASIZED })
         .onClick(() => {
           this.beginAuth();
         })
@@ -167,8 +160,7 @@ struct Index {
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor('rgba(14, 17, 26, 0.72)')
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .backgroundColor(BG)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
   }
 

@@ -1,3 +1,4 @@
+import { EmptyView } from '../common/Components';
 import { ComicGrid } from '../common/ComicGrid';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SOURCE_BROWSE } from '../common/Route';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
@@ -123,7 +124,7 @@ export struct ExplorePage {
         Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.fetchSection($$.section))
       }
       if ($$.loading && $$.items.length === 0) { LoadingProgress().width(28).height(28) }
-      if (!$$.loading && $$.error === '' && $$.items.length === 0) { Text('暂无内容').fontSize(13).fontColor(TEXT_SUB).width('100%') }
+      if (!$$.loading && $$.error === '' && $$.items.length === 0) { EmptyView({ quiet: true, message: '暂无内容', showRetry: false }) }
       ComicGrid({ items: $$.items, rows: 2, onOpen: (item: AlbumLite): void => {
         this.navPathStack.pushPathByName(ROUTE_ALBUM, { aid: item.id } as MangaRouteParams);
       } })

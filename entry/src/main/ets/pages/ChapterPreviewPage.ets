@@ -6,7 +6,7 @@ import { sourceApi } from '../data/SourceApi';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
 import { EmptyView } from '../common/Components';
-import { BG, CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R } from '../common/Theme';
+import { BG, CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R, ON_OVERLAY, OVERLAY_SCRIM } from '../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -177,10 +177,10 @@ export struct ChapterPreviewPage {
                         .fontSize(11)
                         .fontWeight(FontWeight.Medium)
                         .fontFeature('"tnum" 1')
-                        .fontColor(Color.White)
+                        .fontColor(ON_OVERLAY)
                         .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                         .borderRadius(6)
-                        .backgroundColor('rgba(14,17,26,0.72)')
+                        .backgroundColor(OVERLAY_SCRIM)
                         .margin(6)
                     }
                     .width('100%')
