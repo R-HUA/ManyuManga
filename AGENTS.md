@@ -26,7 +26,7 @@
 - **设置和操作类内容放到独立的二级页面**（HdsNavDestination），不放进 bindSheet。Sheet 只用于轻量筛选或选择。
 - **多选**统一使用 `common/SelectionToolBar.ets`（`ToolAction` + `buildToolBar` + `SelectionToolBar`）：
   - 工具栏放 4 个操作，加一个"更多"（用 `showActionMenu`）；危险操作 `danger=true`，显示红色。
-  - 标题显示"已选 N 项"，标题栏菜单提供"退出选择"（xmark）。
+  - 标题显示"已选 N 项"，标题栏菜单提供"退出选择"（xmark）。漫画详情页章节多选例外：标题为"选择章节"/"已选择 N 话"，菜单为全选（checkmark_square_on_square）与完成（checkmark）。
   - 多选时隐藏底部 Tab（MainShell 里的 `barHeight(... || this.selecting ? 0 : -1)`）。
   - 每张卡片都显示勾选圈，未选中的用 OVERLAY_SCRIM 底。
   - 不可用的操作设为 DISABLE，或者干脆不放进工具栏。
