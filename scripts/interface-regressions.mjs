@@ -385,8 +385,9 @@ export async function interfaceTests(test) {
     grid.rows = 0; grid.items = grid.items.slice(0, 7);
     assert.deepEqual(grid.grouped().map(row => row.length), [5, 2]); assert.equal(grid.fillers(2).length, 3);
     const { WorkTags } = env.load('pages/detail/WorkTags');
-    const tags = new WorkTags(); tags.expanded = true; tags.contentHeight = 240; tags.reset();
-    assert.equal(tags.expanded, false); assert.equal(tags.contentHeight, 80);
+    const tags = new WorkTags(); tags.expanded = true; tags.contentWidth = 600; tags.viewportWidth = 300;
+    assert.equal(tags.overflowing(), true); tags.reset();
+    assert.equal(tags.expanded, false); tags.contentWidth = 280; assert.equal(tags.overflowing(), false);
   });
 
   await test('首页随机换批替换列表，旧榜单响应不覆盖新排序，离页响应不回写', async env => {
@@ -678,8 +679,8 @@ export async function interfaceTests(test) {
     assert.doesNotMatch(list, /阅读中/);
     const detail = read('pages/WorkDetailPage.ets');
     assert.match(detail, /enableComponentSafeArea: false/);
-    assert.match(detail, /label: this\.sourceMenuLabel\(\)/);
-    assert.match(detail, /label: this\.remoteMenuLabel\(\)/);
+    assert.match(detail, /text: this\.sourceMenuLabel\(\)/);
+    assert.match(detail, /text: this\.remoteMenuLabel\(\)/);
     assert.doesNotMatch(detail, /Scroll\(this\.chaptersScroller\)/);
     const hero = read('pages/detail/WorkHeroInfo.ets');
     assert.doesNotMatch(hero, /'换源'/);

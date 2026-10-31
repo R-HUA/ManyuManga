@@ -1,9 +1,10 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { HDS_TITLE_STYLE, IMMERSIVE_SHEET_MATERIAL } from '../common/ImmersiveMaterials';
 import { WorkSourceSheet } from './detail/WorkSourceSheet';
 import { WorkChapterList } from './detail/WorkChapterList';
 import { WorkHeroInfo } from './detail/WorkHeroInfo';
+import { EmptyView } from '../common/Components';
 import promptAction from '@ohos.promptAction';
 import { MangaRouteParams, ROUTE_READER, ROUTE_PREVIEW } from '../common/Route';
 import { Album, Chapter, ReadingProgress, CommentItem, CommentsResult, asRecord, asString, errorMessage } from '../models/Models';
@@ -13,10 +14,10 @@ import { suwayomiLibrary } from '../data/SuwayomiLibrary';
 import { library, LibraryWork } from '../data/Library';
 import { readProgressStore, albumCacheStore } from '../data/Stores';
 import { downloadManager, DownloadTask } from '../data/DownloadManager';
-import { ChapterDownloadInfo, markedProgress, pickDownloadChapters } from './detail/ChapterRows';
+import { ChapterDownloadInfo, ChapterRow, buildChapterRows, markedProgress, pickDownloadChapters } from './detail/ChapterRows';
 import { prepareSourceSwitch, switchedProgress, SourceSwitchResult, discoverSources, SourceDiscovery } from '../data/SourceSwitch';
 import { matchingChapter } from '../data/Matching';
-import { BG, CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
+import { BG, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 
@@ -326,6 +327,28 @@ export struct WorkDetailPage {
     this.selectionStamp++;
   }
 
+  /** 全选当前筛选后可见的章节；已全部选中时取消全选。 */
+  private toggleSelectAll(): void {
+    const visible: Array<string> = this.visibleChapterIds();
+    const allSelected: boolean = visible.length > 0 && visible.every((id: string): boolean => this.selected.has(id));
+    if (allSelected) {
+      for (const id of visible) {
+        this.selected.delete(id);
+      }
+    } else {
+      for (const id of visible) {
+        this.selected.add(id);
+      }
+    }
+    this.selectedCount = this.selected.size;
+    this.selectionStamp++;
+  }
+
+  private visibleChapterIds(): Array<string> {
+    return buildChapterRows(this.album, this.progress, this.filter, this.unread, this.ascending, this.downloadMap)
+      .map((row: ChapterRow): string => row.chapter.id);
+  }
+
   private toggleSelect(chapter: Chapter): void {
     if (this.selected.has(chapter.id)) {
       this.selected.delete(chapter.id);
@@ -436,10 +459,6 @@ export struct WorkDetailPage {
     promptAction.showToast({ message: `${action}：${errorMessage(e)}` });
   }
 
-  private readFromStart(): void {
-    this.stack.pushPathByName(ROUTE_READER, { aid: this.aid, chapterIndex: 0, page: 0 } as MangaRouteParams);
-  }
-
   private read(chapter?: Chapter): void {
     if (chapter === undefined) {
       this.stack.pushPathByName(ROUTE_READER, { aid: this.aid } as MangaRouteParams);
@@ -496,6 +515,70 @@ export struct WorkDetailPage {
     return this.remoteSaved ? '移出远程书架' : '加入远程书架';
   }
 
+  /** 浏览时标题栏不显示作品名（头部已展示）；多选时显示选择进度。 */
+  titleText(): string {
+    if (!this.selecting) {
+      return '';
+    }
+    return this.selectedCount === 0 ? '选择章节' : `已选择 ${this.selectedCount} 话`;
+  }
+
+  titleMenu(): Array<HdsNavigationMenuItemOptions> {
+    if (this.selecting) {
+      return [
+        { content: { icon: $r('sys.symbol.checkmark_square_on_square'), label: '全选',
+          action: (): void => { this.toggleSelectAll(); } } },
+        { content: { icon: $r('sys.symbol.checkmark'), label: '完成',
+          action: (): void => { this.stopSelecting(); } } }
+      ];
+    }
+    if (this.album === null) {
+      return [];
+    }
+    return [
+      { content: { icon: this.work !== null ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
+        label: this.work !== null ? '移出书架' : '加入书架', action: (): void => { this.toggleShelf(); } } },
+      { content: { icon: $r('sys.symbol.arrow_down_circle'), label: '下载',
+        action: (): void => { this.download(); } } },
+      { content: { icon: $r('sys.symbol.dot_grid_2x2'), label: '更多',
+        action: (): void => { this.showMoreMenu(); } } }
+    ];
+  }
+
+  /**
+   * 标题栏「更多」：HDS 菜单项只有 action 回调、没有自定义菜单槽位，因此点按后用 showActionMenu 列出次要操作。
+   * showActionMenu 的 buttons 是 1～6 项的元组，按实际条目数构造。
+   */
+  private async showMoreMenu(): Promise<void> {
+    const labels: Array<promptAction.Button> = [];
+    const actions: Array<() => void> = [];
+    const normal: ResourceColor = $r('sys.color.font_primary');
+    if (this.fromLibrary) {
+      labels.push({ text: this.sourceMenuLabel(), color: normal });
+      actions.push((): void => { this.sourceSheet = true; });
+    }
+    if (this.remoteAvailable) {
+      const enabled: boolean = this.remoteReady && !this.remoteBusy;
+      labels.push({ text: this.remoteMenuLabel(), color: enabled ? normal : $r('sys.color.font_tertiary') });
+      actions.push((): void => { this.toggleRemoteShelf(); });
+    }
+    labels.push({ text: '多选章节', color: normal });
+    actions.push((): void => { this.startSelecting(); });
+    labels.push({ text: '刷新', color: normal });
+    actions.push((): void => { this.refresh(); });
+    try {
+      const picked: promptAction.ActionMenuSuccessResponse = await this.getUIContext().getPromptAction().showActionMenu({
+        buttons: labels.length >= 4 ? [labels[0], labels[1], labels[2], labels[3]] :
+          labels.length === 3 ? [labels[0], labels[1], labels[2]] : [labels[0], labels[1]]
+      });
+      if (picked.index >= 0 && picked.index < actions.length) {
+        actions[picked.index]();
+      }
+    } catch (e) {
+      // 用户取消菜单不提示。
+    }
+  }
+
   @Builder
   private Info() {
     Column({ space: 8 }) {
@@ -508,10 +591,6 @@ export struct WorkDetailPage {
       sourceSheet: this.$sourceSheet,
       progress: this.$progress,
       read: (chapter?: Chapter): void => this.read(chapter),
-      reread: (): void => this.readFromStart(),
-      add: (): Promise<void> => this.add(),
-      toggleShelf: (): Promise<void> => this.toggleShelf(),
-      download: (): Promise<void> => this.download(),
       descExpanded: this.$descExpanded,
       topInset: this.topInset + HDS_TITLE_BAR_HEIGHT
       })
@@ -624,19 +703,8 @@ export struct WorkDetailPage {
           .width('100%')
         } else if (this.album === null && this.error !== '') {
           // 只有详情本身加载失败才占满内容区显示错误与重试。
-          Column({ space: 12 }) {
-            SymbolGlyph($r('sys.symbol.exclamationmark_circle'))
-              .fontSize(40)
-              .fontColor([DANGER])
-            Text(this.error)
-              .fontSize(13)
-              .fontColor(TEXT_SUB)
-              .textAlign(TextAlign.Center)
-              .padding({ left: 32, right: 32 })
-            Button('重试')
-              .onClick(() => {
-                this.load(this.aid);
-              })
+          Column() {
+            EmptyView({ message: this.error, showRetry: true, onRetry: (): void => { this.load(this.aid); } })
           }
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
@@ -682,21 +750,7 @@ export struct WorkDetailPage {
         systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }
-    .titleBar({ content: { title: { mainTitle: this.album === null ? '漫画详情' : this.album.name },
-      menu: { value: this.fromLibrary && this.remoteAvailable ? [
-        { content: { icon: $r('sys.symbol.arrow_left_arrow_right'), label: this.sourceMenuLabel(),
-          action: (): void => { this.sourceSheet = true; } } },
-        { content: { icon: this.remoteSaved ? $r('sys.symbol.cloud_fill') : $r('sys.symbol.cloud'),
-          label: this.remoteMenuLabel(), isEnabled: this.remoteReady && !this.remoteBusy,
-          action: (): void => { this.toggleRemoteShelf(); } } }
-      ] : this.fromLibrary ? [
-        { content: { icon: $r('sys.symbol.arrow_left_arrow_right'), label: this.sourceMenuLabel(),
-          action: (): void => { this.sourceSheet = true; } } }
-      ] : this.remoteAvailable ? [
-        { content: { icon: this.remoteSaved ? $r('sys.symbol.cloud_fill') : $r('sys.symbol.cloud'),
-          label: this.remoteMenuLabel(), isEnabled: this.remoteReady && !this.remoteBusy,
-          action: (): void => { this.toggleRemoteShelf(); } } }
-      ] : [] } },
+    .titleBar({ content: { title: { mainTitle: this.titleText() }, menu: { value: this.titleMenu() } },
       style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: false })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.mainScroller, this.chaptersScroller])

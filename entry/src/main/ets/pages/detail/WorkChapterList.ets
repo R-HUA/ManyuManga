@@ -3,6 +3,7 @@ import { Album, Chapter, ReadingProgress, CommentItem } from '../../models/Model
 import { sourceId } from '../../data/Sources';
 import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { IconCircleButton, EmptyView } from '../../common/Components';
+import { IMMERSIVE_SHEET_MATERIAL } from '../../common/ImmersiveMaterials';
 import {
   CARD, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, PRIMARY_SOFT, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY, ON_OVERLAY } from '../../common/Theme';
 import { settingsRowRadius } from '../settings/SettingsRows';
@@ -12,7 +13,7 @@ import {
 
 /**
  * 详情页唯一的滚动容器：首项为详情头部（由页面以尾随闭包传入），随后是章节 LazyForEach 与评论。
- * 章节排序 / 过滤用 SegmentButton 表达“当前状态”；预览改为左滑或长按。
+ * 章节排序 / 范围收进标题右侧筛选按钮打开的半模态（SegmentButton 即时生效）；预览改为左滑或长按。
  */
 @Component
 export struct WorkChapterList {
@@ -34,15 +35,12 @@ export struct WorkChapterList {
   @State @Watch('sortChanged') sortIndexes: number[] = [0];
   @State @Watch('scopeChanged') scopeIndexes: number[] = [0];
   @State sortOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
-    buttons: [{ text: '正序' }, { text: '倒序' }] as ItemRestriction<SegmentButtonTextItem>,
-    fontSize: 12, selectedFontSize: 12,
-    buttonPadding: { top: 4, bottom: 4, left: 8, right: 8 }
+    buttons: [{ text: '正序' }, { text: '倒序' }] as ItemRestriction<SegmentButtonTextItem>
   });
   @State scopeOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
-    buttons: [{ text: '全部' }, { text: '未读' }] as ItemRestriction<SegmentButtonTextItem>,
-    fontSize: 12, selectedFontSize: 12,
-    buttonPadding: { top: 4, bottom: 4, left: 8, right: 8 }
+    buttons: [{ text: '全部' }, { text: '未读' }] as ItemRestriction<SegmentButtonTextItem>
   });
+  @State filterSheet: boolean = false;
   scroller: Scroller = new Scroller();
   read: (chapter?: Chapter) => void = (_chapter?: Chapter): void => {};
   preview: (chapter: Chapter) => void = (_chapter: Chapter): void => {};
@@ -82,6 +80,23 @@ export struct WorkChapterList {
   scopeChanged(): void {
     const next: boolean = this.scopeIndexes.length > 0 && this.scopeIndexes[0] === 1;
     if (next !== this.unread) { this.unread = next; }
+  }
+
+  private filterIsDefault(): boolean {
+    return this.ascending && !this.unread;
+  }
+
+  private filterSummary(): string {
+    const parts: Array<string> = [];
+    if (!this.ascending) { parts.push('倒序'); }
+    if (this.unread) { parts.push('未读'); }
+    return parts.join(' · ');
+  }
+
+  /** 恢复默认经由 SegmentButton 选中索引回写，保持索引与 ascending / unread 同源。 */
+  private resetFilter(): void {
+    this.sortIndexes = [0];
+    this.scopeIndexes = [0];
   }
 
   private commentsAvailable(): boolean {
@@ -201,13 +216,17 @@ export struct WorkChapterList {
             .fontSize(13)
             .fontColor(TEXT_SUB)
         }
+        if (!this.filterIsDefault()) {
+          Text(this.filterSummary())
+            .fontSize(12)
+            .fontColor(PRIMARY)
+        }
         Blank()
-        Column() {
-          SegmentButton({ options: this.sortOptions, selectedIndexes: $sortIndexes })
-        }.width(108)
-        Column() {
-          SegmentButton({ options: this.scopeOptions, selectedIndexes: $scopeIndexes })
-        }.width(108)
+        IconCircleButton({
+          glyph: $r('sys.symbol.funnel'), btnSize: 40, iconSize: 18, active: !this.filterIsDefault(),
+          onTap: (): void => { this.filterSheet = true; }
+        })
+          .accessibilityText(this.filterIsDefault() ? '章节筛选' : `章节筛选：${this.filterSummary()}`)
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -221,6 +240,7 @@ export struct WorkChapterList {
             .fontColor(TEXT_MAIN)
             .placeholderColor(TEXT_SUB)
             .layoutWeight(1)
+            .defaultFocus(false)
             .onChange((value: string) => {
               this.filter = value;
             })
@@ -240,6 +260,35 @@ export struct WorkChapterList {
     }
     .width('100%')
     .padding({ top: 8, bottom: 10 })
+  }
+
+  @Builder
+  private FilterGroup(label: string, options: SegmentButtonOptions, isSort: boolean) {
+    Column({ space: 8 }) {
+      Text(label)
+        .fontSize(14)
+        .fontColor(TEXT_SUB)
+      if (isSort) {
+        SegmentButton({ options: options, selectedIndexes: $sortIndexes })
+      } else {
+        SegmentButton({ options: options, selectedIndexes: $scopeIndexes })
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private FilterSheet() {
+    Column({ space: 16 }) {
+      this.FilterGroup('排序', this.sortOptions, true)
+      this.FilterGroup('范围', this.scopeOptions, false)
+      Button('恢复默认', { buttonStyle: ButtonStyleMode.TEXTUAL })
+        .enabled(!this.filterIsDefault())
+        .onClick(() => { this.resetFilter(); })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 16 })
   }
 
   @Builder
@@ -344,6 +393,12 @@ export struct WorkChapterList {
     .contentEndOffset(this.bottomOffset)
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .cachedCount(6)
+    .bindSheet($$this.filterSheet, this.FilterSheet(), {
+      height: SheetSize.FIT_CONTENT,
+      title: { title: '章节筛选' },
+      dragBar: true,
+      systemMaterial: IMMERSIVE_SHEET_MATERIAL
+    })
     .onScrollIndex((start: number) => {
       this.onHeroVisible(start === 0);
     })
