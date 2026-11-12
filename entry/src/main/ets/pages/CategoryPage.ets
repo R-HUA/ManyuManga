@@ -59,15 +59,21 @@ export struct CategoryPage {
   private rawItems: Array<AlbumLite> = [];
   private pageSeenIds: Set<string> = new Set<string>();
   private dupPageStreak: number = 0;
+  private failedPage: number = 0;
 
   aboutToAppear(): void {
     sourceApi.init().catch((e: Error) => {
       console.info(`[CategoryPage] sourceApi.init: ${errorMessage(e)}`);
     });
-    this.reload();
+    if (this.rawItems.length === 0) { this.reload(); }
   }
 
-  aboutToDisappear(): void { this.requestSeq++; }
+  aboutToDisappear(): void {
+    this.requestSeq++;
+    this.firstLoading = false;
+    this.loadingMore = false;
+    this.refreshing = false;
+  }
 
   private onQueryChanged(): void {
     this.reload();
@@ -102,25 +108,29 @@ export struct CategoryPage {
     this.emptyResult = this.source.count() === 0;
   }
 
-  private async reload(): Promise<void> {
-    if (this.loadedCount > 0) { this.scroller.scrollTo({ xOffset: 0, yOffset: 0 }); }
+  private async reload(preserveItems: boolean = false): Promise<void> {
     this.loadingMore = false;
-    this.page = 1;
-    this.finished = false;
     this.moreError = false;
-    this.emptyResult = false;
+    this.failedPage = 0;
     this.firstError = '';
-    this.firstLoading = true;
-    this.loadedCount = 0;
-    this.rawItems = [];
-    this.pageSeenIds = new Set<string>();
-    this.dupPageStreak = 0;
-    this.source.setItems([]);
+    this.refreshing = preserveItems;
+    if (!preserveItems) {
+      if (this.loadedCount > 0) { this.scroller.scrollTo({ xOffset: 0, yOffset: 0 }); }
+      this.page = 1;
+      this.finished = false;
+      this.emptyResult = false;
+      this.loadedCount = 0;
+      this.rawItems = [];
+      this.pageSeenIds = new Set<string>();
+      this.dupPageStreak = 0;
+      this.source.setItems([]);
+    }
+    this.firstLoading = this.source.count() === 0;
     await this.fetchPage(1);
   }
 
   private async loadMore(): Promise<void> {
-    if (this.firstLoading || this.loadingMore || this.finished || this.moreError) {
+    if (this.firstLoading || this.refreshing || this.loadingMore || this.finished || this.moreError) {
       return;
     }
     this.loadingMore = true;
@@ -129,16 +139,18 @@ export struct CategoryPage {
   }
 
   private retryMore(): void {
+    const target: number = this.failedPage;
     this.moreError = false;
-    this.loadMore();
+    this.loadingMore = true;
+    this.fetchPage(target);
   }
 
-  private dedupById(list: Array<AlbumLite>): Array<AlbumLite> {
+  private dedupById(list: Array<AlbumLite>, append: boolean): Array<AlbumLite> {
     const local: Set<string> = new Set<string>();
     const out: Array<AlbumLite> = [];
     for (const it of list) {
       if (it.id !== '') {
-        if (this.pageSeenIds.has(it.id) || local.has(it.id)) {
+        if ((append && this.pageSeenIds.has(it.id)) || local.has(it.id)) {
           continue;
         }
         local.add(it.id);
@@ -168,17 +180,19 @@ export struct CategoryPage {
       if (seq !== this.requestSeq) {
         return;
       }
-      const fresh: Array<AlbumLite> = this.dedupById(raw);
+      const fresh: Array<AlbumLite> = this.dedupById(raw, target > 1);
       const visible: Array<AlbumLite> = await this.filterBlocked(fresh);
       if (seq !== this.requestSeq) {
         return;
       }
       if (target === 1) {
+        this.pageSeenIds = new Set<string>();
         this.rememberIds(fresh);
         this.rawItems = fresh.slice();
         this.source.setItems(visible);
         this.emptyResult = fresh.length === 0;
         this.dupPageStreak = 0;
+        this.finished = raw.length === 0;
       } else if (raw.length === 0) {
         this.finished = true;
       } else if (fresh.length === 0) {
@@ -192,9 +206,8 @@ export struct CategoryPage {
         this.rawItems = this.rawItems.concat(fresh);
         this.source.appendItems(visible);
       }
-      if (fresh.length > 0 || (target > 1 && raw.length > 0 && !this.finished)) {
-        this.page = target;
-      }
+      this.page = target;
+      this.failedPage = 0;
       this.loadedCount = this.source.count();
     } catch (e) {
       if (seq !== this.requestSeq) {
@@ -205,6 +218,7 @@ export struct CategoryPage {
         this.firstError = msg;
       } else {
         this.moreError = true;
+        this.failedPage = target;
       }
     } finally {
       if (seq === this.requestSeq) {
@@ -310,7 +324,8 @@ export struct CategoryPage {
             .fontSize(FONT_CAPTION)
             .fontColor(TEXT_SUB)
         } else if (this.moreError) {
-          Text('加载失败，点击重试')
+          Button(this.failedPage === 1 ? '刷新失败，点按重试' : '加载失败，点按重试', { buttonStyle: ButtonStyleMode.TEXTUAL })
+            .constraintSize({ minWidth: 40, minHeight: 40 })
             .fontSize(FONT_CAPTION)
             .fontColor(PRIMARY)
             .onClick(() => {
@@ -340,7 +355,7 @@ export struct CategoryPage {
     }
     .width('100%')
     .height('100%')
-    .onRefreshing(() => { this.reload(); })
+    .onRefreshing(() => { this.reload(true); })
     .onAreaChange((_old: Area, area: Area): void => { this.contentWidth = Number(area.width) - 32; })
   }
 }

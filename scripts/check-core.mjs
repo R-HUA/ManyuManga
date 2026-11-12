@@ -79,7 +79,7 @@ function environment() {
   function load(file) {
     file = path.resolve(file);
     if (file.endsWith(path.normalize('/data/JmApi.ets'))) return jm;
-    if (file.endsWith(path.normalize('/data/ImageDecode.ets'))) return imageDecode;
+    if (file.endsWith(path.normalize('/data/ImageDecode.ets')) && !state.realImageDecode) return imageDecode;
     if (file.endsWith(path.normalize('/util/Http.ets'))) return { httpUtil };
     if (file.endsWith(path.normalize('/entryability/EntryAbility.ets'))) return {
       TOP_RECT_HEIGHT_KEY: 'topRectHeight', BOTTOM_RECT_HEIGHT_KEY: 'bottomRectHeight', IS_DARK_MODE_KEY: 'isDarkMode'
@@ -87,14 +87,18 @@ function environment() {
     if (modules.has(file)) return modules.get(file).exports;
     const module = { exports: {} }; modules.set(file, module);
     let source = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+    if (file.endsWith(path.normalize('/common/SelectionToolBar.ets'))) {
+      source = source.slice(0, source.indexOf('@Component'));
+    }
     if (file.endsWith(path.normalize('/pages/reader/ReaderImageItem.ets'))) {
       source = source.slice(0, source.indexOf('@Component')) + source.slice(source.indexOf('@Component\nexport struct ReaderImageItem'));
       source = source.replace(/  build\(\) \{[\s\S]*?(?=  private reportVisibility)/, '');
     }
     // 保留真实页面方法，只移除本地 Node 无法执行的 ArkUI 声明式布局。
-    if (/[/\\]pages[/\\](SearchAllPage|ChapterPreviewPage|SuwayomiLibraryPage|WorkDetailPage|ExplorePage|CategoryPage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\]EhBrowsePage|sources[/\\](SourceEntryCard|SourceManagementPage|SuwayomiConnectPage)|settings[/\\](ReaderSettingsPage|AppearancePage|PrivacyPage|StoragePage)|detail[/\\]WorkTags|reader[/\\](ReaderImageItem|ReaderHud)|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || file.endsWith(path.normalize('/common/ComicGrid.ets'))) {
+    if (/[/\\]pages[/\\](SearchAllPage|ChapterPreviewPage|SuwayomiLibraryPage|WorkDetailPage|ExplorePage|CategoryPage|UpdatesPage|ProfilePage|ReadingStatsPage|jm[/\\]JmBrowsePage|eh[/\\](EhBrowsePage|EhFilterSheet|EhGalleryPane)|downloads[/\\]DownloadedPane|sources[/\\](SourceEntryCard|SourceManagementPage|SuwayomiConnectPage)|settings[/\\](ReaderSettingsPage|AppearancePage|PrivacyPage|StoragePage)|detail[/\\]WorkTags|reader[/\\](ReaderImageItem|ReaderHud|ReaderPictureSheet)|search[/\\](SearchHistory|SearchSuggestField|MetadataSearchChip|SearchGroupResults))\.ets$/.test(file) || /[/\\]common[/\\](ComicGrid|PagePreview|SourceCover)\.ets$/.test(file)) {
       const builder = source.indexOf('  @Builder');
-      const end = Math.min(...[builder, source.indexOf('  build()')].filter(index => index >= 0));
+      const build = source.indexOf('  build()');
+      const end = builder < 0 ? build : build < 0 ? builder : Math.min(builder, build);
       assert.ok(end > 0);
       source = (source.slice(0, end) + '\n}').replace(/@Component\s+export struct /g, 'export class ')
         .replace(/@(Consume|StorageProp|Watch|Prop|Link)\([^)]*\)\s*/g, '')
@@ -110,11 +114,11 @@ function environment() {
         encodeToStringSync(bytes) { return Buffer.from(bytes).toString('base64'); }
         decodeSync(value) { return new Uint8Array(Buffer.from(value, 'base64')); }
       }, TextDecoder: { create: () => ({ decodeToString: bytes => Buffer.from(bytes).toString('utf8') }) } },
-      '@ohos.app.ability.common': {}, '@ohos.multimedia.image': {},
+      '@ohos.app.ability.common': {}, '@ohos.multimedia.image': state.image ??= {},
       '@ohos.arkui.uiMaterial': { Material: { empty: {} }, ImmersiveMaterial: class { constructor() {} }, ImmersiveStyle: { ULTRA_THIN: 0, THIN: 1, REGULAR: 2, ULTRA_THICK: 3 } },
       '@ohos.arkui.modifier': { SymbolGlyphModifier: class {} },
       '@ohos.display': { getDefaultDisplaySync: () => ({ width: 1080 }) }, '@kit.ArkUI': { window: {},
-        SegmentButtonOptions: { capsule: options => options } },
+        SegmentButtonOptions: { capsule: options => options }, ToolBarOptions: class extends Array {} },
       '@ohos.app.ability.ConfigurationConstant': {}, '@ohos.promptAction': { showToast: () => {} },
       '@ohos.window': { findWindow: name => {
         state.privacyWindows ??= []; state.privacyWindows.push(name);

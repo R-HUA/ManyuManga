@@ -55,9 +55,18 @@ export struct WorkDetailPage {
   @State selectedCount: number = 0;
   private downloadMap: Map<string, ChapterDownloadInfo> = new Map<string, ChapterDownloadInfo>();
   private selected: Set<string> = new Set<string>();
+  private downloadRefreshTimer: number = -1;
+  private downloadsVisible: boolean = true;
   private downloadListener: (task: DownloadTask) => void = (task: DownloadTask): void => {
-    if (this.album !== null && task.albumId === this.album.id) {
+    if (!this.downloadsVisible || this.album === null || task.albumId !== this.album.id) { return; }
+    if (task.state !== 'running') {
+      this.cancelDownloadRefresh();
       this.refreshDownloads();
+    } else if (this.downloadRefreshTimer < 0) {
+      this.downloadRefreshTimer = setTimeout((): void => {
+        this.downloadRefreshTimer = -1;
+        this.refreshDownloads();
+      }, 250);
     }
   };
   private remoteGeneration: number = 0;
@@ -88,6 +97,8 @@ export struct WorkDetailPage {
   }
 
   aboutToDisappear(): void {
+    this.downloadsVisible = false;
+    this.cancelDownloadRefresh();
     this.generation++;
     this.cancelRequests();
     downloadManager.offChange(this.downloadListener);
@@ -97,6 +108,13 @@ export struct WorkDetailPage {
     this.downloadMap = this.album === null ? new Map<string, ChapterDownloadInfo>() :
       downloadManager.chapterStates(this.album);
     this.downloadStamp++;
+  }
+
+  private cancelDownloadRefresh(): void {
+    if (this.downloadRefreshTimer >= 0) {
+      clearTimeout(this.downloadRefreshTimer);
+      this.downloadRefreshTimer = -1;
+    }
   }
 
   private async load(key: string): Promise<void> {
@@ -746,7 +764,7 @@ export struct WorkDetailPage {
       .bindSheet($$this.sourceSheet, this.SourcesSheet(), {
         height: SheetSize.MEDIUM,
         dragBar: true,
-        showClose: false,
+        showClose: true,
         systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }
@@ -763,6 +781,8 @@ export struct WorkDetailPage {
       this.sourceSheet = params !== null && params['match'] === true;
     })
     .onShown(() => {
+      this.downloadsVisible = true;
+      this.refreshDownloads();
       if (this.detailRequests.aborted()) {
         this.renewRequests();
         this.busy = false;
@@ -774,6 +794,8 @@ export struct WorkDetailPage {
       this.refresh();
     })
     .onHidden(() => {
+      this.downloadsVisible = false;
+      this.cancelDownloadRefresh();
       this.generation++;
       this.cancelRequests();
     })

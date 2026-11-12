@@ -124,8 +124,16 @@ export async function regressionTests(test) {
     assert.deepEqual(fetched.sort(), ['001.jpg', '002.png']);
     const offline = env.load('data/OfflineStore').offlineStore;
     assert.equal((await offline.album(album.id)).name, album.name);
+    let start = env.state.sql.length;
     assert.deepEqual(await offline.pages('jm~201'), ['001.jpg', '002.png']);
+    assert.equal(env.state.sql.slice(start).filter(row => row.kind === 'read').length, 2,
+      '同一章节只查一次页面和一次书目');
+    start = env.state.sql.length;
     assert.equal((await offline.bytes('jm~201', '001.jpg')).byteLength, 2048);
+    assert.equal(env.state.sql.slice(start).filter(row => row.kind === 'read').length, 2);
+    start = env.state.sql.length;
+    assert.deepEqual((await offline.albums()).map(item => item.id), [album.id]);
+    assert.equal(env.state.sql.slice(start).filter(row => row.kind === 'read').length, 1);
     assert.deepEqual(zipEntries(task.savedTo).map(entry => entry.name), ['00001.jpg', '00002.webp']);
     assert.equal(env.state.released, 2);
   });

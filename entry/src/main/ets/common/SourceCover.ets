@@ -1,5 +1,6 @@
 import image from '@ohos.multimedia.image';
 import { sourceApi } from '../data/SourceApi';
+import { memoryKey, takeFromMemory, publishIntoMemory, releasePagePixelMap } from '../data/PageCachePool';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { SUB_CARD, TEXT_SUB, DIVIDER } from './Theme';
 
@@ -22,7 +23,7 @@ export struct SourceCover {
     this.generation++;
     this.signal.abortAll();
     if (this.bitmap !== null) {
-      this.bitmap.release();
+      releasePagePixelMap(this.bitmap);
       this.bitmap = null;
     }
   }
@@ -35,28 +36,35 @@ export struct SourceCover {
     const previous: image.PixelMap | null = this.bitmap;
     this.bitmap = null;
     if (previous !== null) {
-      await previous.release();
+      releasePagePixelMap(previous);
     }
     if (ticket !== this.generation || this.url === '') {
       return;
     }
     let pending: image.PixelMap | null = null;
     try {
-      const bytes: ArrayBuffer = await sourceApi.fetchCover(this.sourceKey, this.url, signal);
-      const source: image.ImageSource = image.createImageSource(bytes);
-      let bitmap: image.PixelMap;
-      try {
-        bitmap = await source.createPixelMap({
-          desiredSize: { width: 300, height: 400 },
-          desiredPixelFormat: image.PixelMapFormat.RGBA_8888
-        });
-      } finally {
-        await source.release();
+      const key: string = `cover/${memoryKey(this.sourceKey, this.url, 0, 300)}`;
+      pending = await takeFromMemory(key);
+      if (pending === null) {
+        if (ticket !== this.generation || signal.aborted()) { return; }
+        const bytes: ArrayBuffer = await sourceApi.fetchCover(this.sourceKey, this.url, signal);
+        if (ticket !== this.generation || signal.aborted()) { return; }
+        const source: image.ImageSource = image.createImageSource(bytes);
+        let bitmap: image.PixelMap;
+        try {
+          bitmap = await source.createPixelMap({
+            desiredSize: { width: 300, height: 400 },
+            desiredPixelFormat: image.PixelMapFormat.RGBA_8888
+          });
+        } finally {
+          await source.release();
+        }
+        pending = publishIntoMemory(key, bitmap) ?? bitmap;
       }
-      pending = bitmap;
-      if (ticket !== this.generation) {
+      if (ticket !== this.generation || signal.aborted()) {
         return;
       }
+      const bitmap: image.PixelMap = pending;
       if (this.deriveColor) {
         const buf: ArrayBuffer = new ArrayBuffer(300 * 400 * 4);
         await bitmap.readPixelsToBuffer(buf);
@@ -87,7 +95,7 @@ export struct SourceCover {
       }
     } finally {
       if (pending !== null) {
-        await pending.release();
+        releasePagePixelMap(pending);
       }
     }
   }

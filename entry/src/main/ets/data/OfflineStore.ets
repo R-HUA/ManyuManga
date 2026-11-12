@@ -6,7 +6,7 @@ import { md5Hex } from './JmApi';
 import { cbzFileName, copyBytesAsync, readBytesAsync } from './CbzPacker';
 import {
   deleteOffline, DownloadPageRow, loadCompletePages, loadDownloadPages, loadOfflineAlbum,
-  loadOfflineAlbumIds, loadOfflinePages, OfflineBookRow, OfflinePageRow, pageRow, publishOffline,
+  loadOfflineAlbumIds, loadOfflineAlbums, loadOfflinePages, OfflineBookRow, OfflinePageRow, pageRow, publishOffline,
   saveDownloadPage, TaskRow
 } from './db/ContentDao';
 
@@ -32,6 +32,7 @@ class OfflineStore {
     return book === null ? null : book.album;
   }
   async albumIds(): Promise<Array<string>> { return loadOfflineAlbumIds(); }
+  async albums(): Promise<Array<Album>> { return loadOfflineAlbums(); }
   async pages(key: string): Promise<Array<string> | null> {
     const rows: Array<OfflinePageRow> = await this.readyPages(key);
     return rows.length === 0 ? null : rows.map((row: OfflinePageRow): string => row.filename);
@@ -188,10 +189,14 @@ class OfflineStore {
   private async readyPages(chapterId: string): Promise<Array<OfflinePageRow>> {
     const rows: Array<OfflinePageRow> = await loadOfflinePages(chapterId);
     const ready: Array<OfflinePageRow> = [];
+    const books: Map<string, OfflineBookRow | null> = new Map<string, OfflineBookRow | null>();
     for (const row of rows) {
       if (row.complete !== 1) { continue; }
-      const book: OfflineBookRow | null = await loadOfflineAlbum(row.albumId);
-      if (book !== null && row.relativePath.startsWith(`${book.directory}/`) && !row.relativePath.includes('..')) {
+      if (!books.has(row.albumId)) {
+        books.set(row.albumId, await loadOfflineAlbum(row.albumId));
+      }
+      const book: OfflineBookRow | null | undefined = books.get(row.albumId);
+      if (book !== null && book !== undefined && row.relativePath.startsWith(`${book.directory}/`) && !row.relativePath.includes('..')) {
         ready.push(row);
       }
     }

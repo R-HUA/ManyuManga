@@ -4,7 +4,7 @@
  * 目录自动定位到当前章节；缩略图为横向列表并定位到当前页。点击面板外由宿主遮罩关闭。
  */
 import { BasicDataSource } from '../../common/DataSource';
-import { DIVIDER, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { DIVIDER, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { Chapter, ReadingProgress } from '../../models/Models';
 import { PageThumbItem } from './ReaderImageItem';
 
@@ -13,7 +13,7 @@ export struct ReaderCatalogPanel {
   @Link bookmarks: Array<ReadingProgress>;
   @Link chapters: Array<Chapter>;
   @Link chapterIndex: number;
-  @Link pages: Array<string>;
+  @Link @Watch('syncPages') pages: Array<string>;
   @Link currentPage: number;
   @Link scrambleId: number;
   chapterSource: BasicDataSource<Chapter> = new BasicDataSource<Chapter>();
@@ -26,6 +26,15 @@ export struct ReaderCatalogPanel {
   @State private catalogTab: number = 0;
   private chapterScroller: Scroller = new Scroller();
   private thumbScroller: Scroller = new Scroller();
+  private pageSource: BasicDataSource<string> = new BasicDataSource<string>();
+
+  aboutToAppear(): void {
+    this.syncPages();
+  }
+
+  private syncPages(): void {
+    this.pageSource.setList(this.pages);
+  }
 
   private openChapter(idx: number, page: number): void {
     this.close();
@@ -59,7 +68,7 @@ export struct ReaderCatalogPanel {
       }
       .tabBar(SubTabBarStyle.of($r('app.string.reader_preview_tab')))
     }
-    .barHeight(56)
+    .barHeight(40)
     .barMode(BarMode.Fixed)
     .barBackgroundColor(Color.Transparent)
     .scrollable(false)
@@ -87,8 +96,8 @@ export struct ReaderCatalogPanel {
                 { buttonStyle: ButtonStyleMode.TEXTUAL })
                 .fontSize(12)
                 .fontWeight(FontWeight.Bold)
-                .fontColor(TEXT_SUB)
-                .backgroundColor(SUB_CARD)
+                .fontColor(PRIMARY)
+                .backgroundColor(PRIMARY_SOFT)
                 .height(40)
                 .onClick(() => {
                   const index: number = this.chapters.findIndex((c: Chapter) => c.id === bookmark.chapterId);
@@ -152,7 +161,7 @@ export struct ReaderCatalogPanel {
           .fontColor(TEXT_SUB)
       } else {
         List({ scroller: this.thumbScroller, space: 8, initialIndex: Math.max(0, this.currentPage - 1) }) {
-          ForEach(this.pages, (filename: string, index: number) => {
+          LazyForEach(this.pageSource, (filename: string, index: number) => {
             ListItem() {
               Column({ space: 4 }) {
                 PageThumbItem({
@@ -178,6 +187,7 @@ export struct ReaderCatalogPanel {
           }, (filename: string, index: number): string => `pg_${index}_${filename}`)
         }
         .listDirection(Axis.Horizontal)
+        .cachedCount(2)
         .height(144)
         .width('100%')
         .scrollBar(BarState.Off)

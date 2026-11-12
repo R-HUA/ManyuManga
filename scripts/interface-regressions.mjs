@@ -602,6 +602,150 @@ export async function interfaceTests(test) {
     assert.equal(page.firstLoading, false); assert.equal(page.loadingMore, false);
   });
 
+  await test('分类刷新保留列表到成功提交，失败保留游标，重试仍请求失败页', async env => {
+    const { CategoryPage } = env.load('pages/CategoryPage');
+    const { AlbumLite } = env.load('models/Models');
+    const api = env.load('data/SourceApi').sourceApi, calls = [];
+    api.init = async () => {};
+    api.ranking = async (_source, _slug, _order, page) => {
+      calls.push(page); return [new AlbumLite(`jm~${page}`, `作品${page}`)];
+    };
+    const page = new CategoryPage(); page.sourceIdValue = 'jm';
+    await page.reload(); await page.loadMore();
+    const pending = deferred(); api.ranking = async () => pending.promise;
+    const refreshing = page.reload(true);
+    assert.equal(page.firstLoading, false); assert.equal(page.refreshing, true);
+    assert.equal(page.source.totalCount(), 2); assert.equal(page.page, 2);
+    pending.resolve([new AlbumLite('jm~1', '更新标题'), new AlbumLite('jm~3', '新作品')]); await refreshing;
+    assert.equal(page.page, 1); assert.equal(page.source.totalCount(), 2);
+    assert.equal(page.source.getData(0).title, '更新标题'); assert.equal(page.refreshing, false);
+    api.ranking = async () => { throw new Error('刷新失败'); };
+    await page.reload(true);
+    assert.equal(page.source.totalCount(), 2); assert.equal(page.failedPage, 1); assert.equal(page.moreError, true);
+    api.ranking = async (_source, _slug, _order, target) => {
+      calls.push(target); return [new AlbumLite('jm~4', '重试结果')];
+    };
+    page.retryMore(); await until(() => !page.loadingMore);
+    assert.equal(calls.at(-1), 1); assert.equal(page.source.getData(0).id, 'jm~4');
+    const count = calls.length; page.aboutToDisappear(); page.aboutToAppear();
+    await new Promise(resolve => setImmediate(resolve)); assert.equal(calls.length, count);
+  });
+
+  await test('画廊刷新失败保留已加载结果，续页和刷新分别重试原地址', async env => {
+    const { EhGalleryPane } = env.load('pages/eh/EhGalleryPane');
+    const { ehSource } = env.load('data/EhSource');
+    const { AlbumLite } = env.load('models/Models');
+    const pane = new EhGalleryPane(), calls = []; pane.baseUrl = () => 'first';
+    ehSource.list = async url => {
+      calls.push(url); return { items: [new AlbumLite('eh~1', '画廊')], nextUrl: 'next', prevUrl: '', firstUrl: 'first', totalLabel: '' };
+    };
+    await pane.load('reset');
+    ehSource.list = async () => { throw new Error('网络失败'); };
+    await pane.load('more');
+    assert.equal(pane.failedMode, 'more'); assert.equal(pane.items.length, 1); assert.equal(pane.nextUrl, 'next');
+    ehSource.list = async url => {
+      calls.push(url); return { items: [new AlbumLite('eh~2', '下一页')], nextUrl: 'last', prevUrl: 'first', firstUrl: 'first', totalLabel: '' };
+    };
+    await pane.load(pane.failedMode); assert.equal(calls.at(-1), 'next'); assert.equal(pane.items.length, 2);
+    ehSource.list = async () => { throw new Error('刷新失败'); };
+    await pane.load('reset');
+    assert.equal(pane.failedMode, 'reset'); assert.equal(pane.items.length, 2); assert.equal(pane.nextUrl, 'last');
+    ehSource.list = async url => {
+      calls.push(url); return { items: [new AlbumLite('eh~3', '刷新结果')], nextUrl: '', prevUrl: '', firstUrl: 'first', totalLabel: '' };
+    };
+    await pane.load(pane.failedMode); assert.equal(calls.at(-1), 'first'); assert.equal(pane.items[0].id, 'eh~3');
+    const count = calls.length; pane.aboutToDisappear(); pane.aboutToAppear();
+    assert.equal(calls.length, count);
+  });
+
+  await test('预览重试清除失败态，离开后重新出现可加载，迟到图片不覆盖新结果', async env => {
+    const decode = env.load('data/ImageDecode'), late = deferred(), released = [];
+    let calls = 0;
+    const current = { id: 'current' }, stale = { id: 'stale' };
+    decode.releasePagePixelMap = bitmap => released.push(bitmap.id);
+    decode.loadPagePixelMap = async () => {
+      calls++;
+      if (calls === 1) throw new Error('图片失败');
+      if (calls === 2) return late.promise;
+      return current;
+    };
+    const { PagePreview } = env.load('common/PagePreview');
+    const preview = new PagePreview(); preview.chapter = 'jm~chapter'; preview.filename = '1.jpg';
+    preview.aboutToAppear(); await until(() => preview.error !== ''); assert.match(preview.error, /图片失败/);
+    const retry = preview.load(); assert.equal(preview.error, '');
+    preview.aboutToDisappear(); preview.aboutToAppear();
+    await until(() => preview.bitmap === current);
+    late.resolve(stale); await retry;
+    assert.equal(preview.bitmap, current); assert.deepEqual(released, ['stale']);
+    const count = calls;
+    preview.active = false; preview.onActiveChanged();
+    preview.active = true; preview.onActiveChanged();
+    assert.equal(calls, count); assert.equal(preview.bitmap, current);
+    preview.aboutToDisappear(); assert.deepEqual(released, ['stale', 'current']);
+    decode.loadPagePixelMap = async () => { throw new Error('再次失败'); };
+    preview.aboutToAppear(); await until(() => preview.error !== '');
+    preview.active = false; preview.onActiveChanged();
+    decode.loadPagePixelMap = async () => current;
+    preview.active = true; preview.onActiveChanged();
+    assert.equal(preview.error, ''); await until(() => preview.bitmap === current);
+    preview.aboutToDisappear();
+  });
+
+  await test('章节图片丢弃不可解码的缓存，重试重新下载，成功缩略图及原图共享有效字节', async env => {
+    env.state.realImageDecode = true;
+    const { SourceEntry, sourceStore } = env.load('data/Sources');
+    await sourceStore.save(new SourceEntry('preview_local', '本地图源', 'local'));
+    let fetches = 0; const sizes = [];
+    env.load('data/SourceApi').sourceApi.fetchPage = async () => {
+      const bytes = new Uint8Array(2048); bytes.fill(++fetches === 1 ? 0 : 1); return bytes.buffer;
+    };
+    Object.assign(env.state.image, {
+      PixelMapFormat: { RGBA_8888: 1 },
+      createImageSource: bytes => ({
+        getImageInfo: async () => ({ size: { width: 1600, height: 2400 } }), release: async () => {},
+        createPixelMap: async options => {
+          if (new Uint8Array(bytes)[0] === 0) throw new Error('图片解码失败');
+          sizes.push(options.desiredSize);
+          const size = { ...(options.desiredSize ?? { width: 1600, height: 2400 }) };
+          return { getImageInfoSync: () => ({ size }), getPixelBytesNumber: () => size.width * size.height * 4,
+            release: async () => {}, scale: async ratio => { size.width *= ratio; size.height *= ratio; } };
+        }
+      }),
+      createImagePacker: () => ({ packToData: async () => new Uint8Array(2048).buffer, release: async () => {} })
+    });
+    const decode = env.load('data/ImageDecode'), key = 'preview_local~chapter';
+    await assert.rejects(decode.loadPagePixelMap(key, '1.jpg', 0, 240), /解码失败/);
+    assert.equal(decode.cachedRawFilePath(key, '1.jpg'), null);
+    const thumb = await decode.loadPagePixelMap(key, '1.jpg', 0, 240);
+    assert.equal(fetches, 2); assert.deepEqual(sizes[0], { width: 240, height: 360 });
+    decode.releasePagePixelMap(thumb);
+    const back = await decode.loadPagePixelMap(key, '1.jpg', 0, 240);
+    assert.equal(back, thumb); assert.equal(fetches, 2);
+    const full = await decode.loadPagePixelMap(key, '1.jpg', 0, 960);
+    assert.equal(fetches, 2); assert.equal(sizes[1], undefined); assert.equal(full.getImageInfoSync().size.width, 960);
+    decode.releasePagePixelMap(back); decode.releasePagePixelMap(full);
+  });
+
+  await test('签名封面返回列表复用内存位图，相同地址的不同来源不共用缓存', async env => {
+    let fetches = 0, decodes = 0, released = 0;
+    env.load('data/SourceApi').sourceApi.fetchCover = async () => { fetches++; return new ArrayBuffer(8); };
+    Object.assign(env.state.image, { PixelMapFormat: { RGBA_8888: 1 }, createImageSource: () => ({
+      release: async () => {}, createPixelMap: async () => {
+        decodes++;
+        return { getImageInfoSync: () => ({ size: { width: 300, height: 400 } }),
+          getPixelBytesNumber: () => 300 * 400 * 4, release: async () => { released++; } };
+      }
+    }) });
+    const { SourceCover } = env.load('common/SourceCover');
+    const cover = new SourceCover(); cover.sourceKey = 'first~book'; cover.url = 'https://cover.invalid/image';
+    await cover.reload(); const bitmap = cover.bitmap;
+    cover.aboutToDisappear(); await cover.reload();
+    assert.equal(cover.bitmap, bitmap); assert.equal(fetches, 1); assert.equal(decodes, 1); assert.equal(released, 0);
+    cover.sourceKey = 'second~book'; await cover.reload();
+    assert.equal(fetches, 2); assert.notEqual(cover.bitmap, bitmap);
+    cover.aboutToDisappear();
+  });
+
   await test('图源重新进入使用默认会话，已有浏览实例保留当前筛选', async env => {
     const { JmBrowsePage } = env.load('pages/jm/JmBrowsePage');
     const existing = new JmBrowsePage(); existing.tab = 1;
@@ -728,6 +872,121 @@ export async function interfaceTests(test) {
     const pending = page.saveOption('preview', true); await page.saveOption('preview', false);
     assert.equal(page.previewOn, true); assert.equal(page.privacyBusy, true);
     gate.resolve(); await pending; assert.equal(page.privacyBusy, false);
+  });
+
+  await test('章节首次显示等待还原参数，页表与参数成对保存，取消后拒收迟到参数', async env => {
+    const { controller, host } = reader(env), api = env.load('data/SourceApi').sourceApi;
+    const cache = env.load('data/Stores').pagesCacheStore;
+    env.load('data/Library').library.activate = async () => {};
+    controller.scrollToPageDelayed = () => {};
+    const prefetched = []; controller.prefetchAhead = () => prefetched.push(host.scrambleId);
+    controller.preloadNextChapter = async () => {};
+    let requested = false; const sid = deferred();
+    api.chapterImages = async () => ['a.jpg', 'b.jpg'];
+    api.scrambleId = async () => { requested = true; return sid.promise; };
+    const pending = controller.loadChapter(0, 1); await until(() => requested);
+    assert.equal(host.loadState, 'loading'); assert.deepEqual(host.pages, []); assert.deepEqual(prefetched, []);
+    sid.resolve(123456); await pending;
+    assert.equal(host.scrambleId, 123456); assert.equal(host.currentPage, 1);
+    assert.deepEqual(prefetched, [123456]);
+    const saved = await cache.get('jm~chapter');
+    assert.deepEqual(saved.list, ['a.jpg', 'b.jpg']); assert.equal(saved.scrambleId, 123456);
+    requested = false; const lateSid = deferred();
+    api.scrambleId = async () => { requested = true; return lateSid.promise; };
+    const late = controller.loadChapter(0, 0, false, true); await until(() => requested);
+    const pendingScramble = host.scrambleId;
+    controller.aboutToDisappear(); lateSid.resolve(999999); await late;
+    assert.equal(host.scrambleId, pendingScramble); assert.equal((await cache.get('jm~chapter')).scrambleId, 123456);
+  });
+
+  await test('离线重进使用成对缓存，下一章预载复用缓存参数，旧格式不按默认参数显示', async env => {
+    const { controller, host } = reader(env), api = env.load('data/SourceApi').sourceApi;
+    const cache = env.load('data/Stores').pagesCacheStore;
+    env.load('data/Library').library.activate = async () => {};
+    controller.scrollToPageDelayed = () => {}; controller.prefetchAhead = () => {};
+    await cache.put('jm~chapter', ['cached.jpg'], 345678);
+    api.chapterImages = async () => { throw new Error('网络离线'); };
+    api.scrambleId = async () => { throw new Error('不应重新请求缓存参数'); };
+    await controller.loadChapter(0, 0);
+    assert.equal(host.loadState, 'ready'); assert.deepEqual(host.pages, ['cached.jpg']); assert.equal(host.scrambleId, 345678);
+    host.chapters.push({ id: 'jm~next', title: '下一话' }); await cache.put('jm~next', ['next.jpg'], 567890);
+    controller.autoCacheOn = true;
+    const decoded = []; env.load('data/ImageDecode').loadPagePixelMap = async (...args) => { decoded.push(args); return null; };
+    await controller.preloadNextChapter(controller.chapterToken, new (env.load('util/RequestAbort').RequestAbortGroup)());
+    assert.equal(decoded[0][2], 567890);
+    const legacy = new (env.load('data/Stores').ChapterPagesCache)(); legacy.list = ['legacy.jpg'];
+    cache.get = async () => legacy;
+    await controller.loadChapter(0, 0);
+    assert.equal(host.loadState, 'error'); assert.deepEqual(host.pages, []);
+    controller.aboutToDisappear();
+  });
+
+  await test('详情下载进度合并刷新，终止状态立即更新，离页取消待刷任务', async env => {
+    const { WorkDetailPage } = env.load('pages/WorkDetailPage');
+    const { Album } = env.load('models/Models');
+    const page = new WorkDetailPage(); page.album = new Album('jm~1', '作品');
+    let refreshed = 0; page.refreshDownloads = () => { refreshed++; };
+    page.downloadListener({ albumId: 'jm~other', state: 'running' });
+    assert.equal(page.downloadRefreshTimer, -1);
+    for (let i = 0; i < 50; i++) page.downloadListener({ albumId: 'jm~1', state: 'running' });
+    assert.equal(refreshed, 0);
+    await until(() => refreshed === 1, '合并下载刷新');
+    page.downloadListener({ albumId: 'jm~1', state: 'running' });
+    page.downloadListener({ albumId: 'jm~1', state: 'done' });
+    assert.equal(refreshed, 2); assert.equal(page.downloadRefreshTimer, -1);
+    page.downloadListener({ albumId: 'jm~1', state: 'running' });
+    page.aboutToDisappear(); assert.equal(page.downloadRefreshTimer, -1);
+    page.downloadListener({ albumId: 'jm~1', state: 'running' });
+    assert.equal(page.downloadRefreshTimer, -1); assert.equal(refreshed, 2);
+  });
+
+  await test('离线列表批量加载，失败保留错误可重试，重复通知合并且拒收离页结果', async env => {
+    const { DownloadedPane } = env.load('pages/downloads/DownloadedPane');
+    const { Album } = env.load('models/Models');
+    const offline = env.load('data/OfflineStore').offlineStore;
+    const manager = env.load('data/DownloadManager').downloadManager;
+    manager.init = async () => {};
+    let calls = 0, fail = true;
+    offline.albums = async () => { calls++; if (fail) throw new Error('书目读取失败'); return [new Album('jm~1', '离线作品')]; };
+    offline.album = async () => { throw new Error('不应逐本查询'); };
+    const page = new DownloadedPane(); page.visible = true; page.selected = [];
+    await page.reload(); assert.match(page.loadError, /书目读取失败/); assert.equal(page.loading, false);
+    fail = false; await page.reload(); assert.equal(page.loadError, ''); assert.equal(page.items[0].title, '离线作品');
+    assert.equal(page.itemSource.totalCount(), 1);
+    for (let i = 0; i < 20; i++) page.contentListener();
+    assert.equal(calls, 2); await until(() => calls === 3 && !page.loading, '离线通知合并');
+    const gate = deferred(); let requested = false;
+    offline.albums = async () => { requested = true; return gate.promise; };
+    const pending = page.reload(); await until(() => requested);
+    page.aboutToDisappear(); gate.resolve([new Album('jm~2', '迟到书目')]); await pending;
+    assert.equal(page.items[0].albumId, 'jm~1'); assert.equal(page.reloadTimer, -1);
+  });
+
+  await test('阅读亮度保存后可重新读取，持久化失败有可见提示且保留旧值', async env => {
+    const { ReaderPictureSheet } = env.load('pages/reader/ReaderPictureSheet');
+    const prefs = await env.load('util/Prefs').Prefs.getInstance();
+    const sheet = new ReaderPictureSheet(), notices = [];
+    sheet.getUIContext = () => ({ getPromptAction: () => ({ showToast: notice => notices.push(notice.message) }) });
+    await sheet.saveBrightness(55); assert.equal(await prefs.brightness(), 55);
+    env.state.failFlush = true; await sheet.saveBrightness(75);
+    assert.equal(await prefs.brightness(), 55); assert.match(notices[0], /保存亮度失败/);
+  });
+
+  await test('筛选拒绝倒置页数，保存失败保留草稿，成功后才应用，离页不回写', async env => {
+    const { EhFilterSheet } = env.load('pages/eh/EhFilterSheet');
+    const { EhSearchFilter } = env.load('data/eh/EhSearchFilter');
+    const original = new EhSearchFilter(); original.pageFrom = '10'; await original.save();
+    const sheet = new EhFilterSheet(); sheet.filter = original; sheet.aboutToAppear();
+    const applied = []; let closed = 0; sheet.apply = value => applied.push(value); sheet.close = () => { closed++; };
+    sheet.draft.pageFrom = '100'; sheet.draft.pageTo = '20';
+    await sheet.submit(); assert.match(sheet.error, /最少页数/); assert.equal(applied.length, 0);
+    sheet.draft.pageTo = '200'; env.state.failFlush = true;
+    await sheet.submit(); assert.match(sheet.error, /磁盘/); assert.equal(sheet.draft.pageFrom, '100');
+    assert.equal(applied.length, 0); assert.equal(closed, 0); assert.equal(sheet.saving, false);
+    await sheet.submit(); assert.equal(applied[0].pageFrom, '100'); assert.equal(closed, 1);
+    const gate = deferred(); EhSearchFilter.prototype.save = async () => gate.promise;
+    const pending = sheet.submit(); assert.equal(sheet.saving, true); sheet.aboutToDisappear();
+    gate.resolve(); await pending; assert.equal(applied.length, 1); assert.equal(closed, 1);
   });
 
   await test('静态检查：同一节点不重复链式 bindSheet，“我的”页只保留导航行', async () => {

@@ -3,7 +3,7 @@ import { Album, errorMessage } from '../../models/Models';
 import { sourceId } from '../../data/Sources';
 import { library, LibraryWork } from '../../data/Library';
 import { IconCircleButton } from '../../common/Components';
-import { SUB_CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -48,7 +48,7 @@ export struct WorkSourceSheet {
                     .fontColor(PRIMARY)
                     .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                     .borderRadius(6)
-                    .backgroundColor(SUB_CARD)
+                    .backgroundColor(PRIMARY_SOFT)
                   Text(item.name)
                     .fontColor(TEXT_MAIN)
                     .fontSize(14)
@@ -71,6 +71,7 @@ export struct WorkSourceSheet {
                   .accessibilityText('当前源')
               } else {
                 Button('切换', { buttonStyle: ButtonStyleMode.NORMAL, controlSize: ControlSize.SMALL })
+                  .constraintSize({ minWidth: 40, minHeight: 40 })
                   .enabled(!this.busy)
                   .onClick(() => {
                   if (item.id !== this.aid && !this.busy) {
@@ -92,6 +93,7 @@ export struct WorkSourceSheet {
                     });
                   }
                 })
+                  .accessibilityText('移除备用图源')
               }
             }
             .padding(14)

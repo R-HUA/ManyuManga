@@ -5,6 +5,8 @@
 import { PRIMARY, PRIMARY_SOFT } from '../../common/Theme';
 import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
 import { ReaderOptions, EYE_COMFORT_DEFAULT, EYE_COMFORT_MAX, EYE_COMFORT_MIN } from '../../data/ReaderOptions';
+import { Prefs } from '../../util/Prefs';
+import { errorMessage } from '../../models/Models';
 
 @Component
 export struct ReaderPictureSheet {
@@ -17,10 +19,20 @@ export struct ReaderPictureSheet {
   persistOptions: () => Promise<void> = async (): Promise<void> => {};
   toggleBackground: (paper: boolean) => void = (paper: boolean): void => {};
 
+  private async saveBrightness(value: number): Promise<void> {
+    try {
+      const prefs: Prefs = await Prefs.getInstance();
+      await prefs.setBrightness(value);
+    } catch (e) {
+      this.getUIContext().getPromptAction().showToast({ message: `保存亮度失败：${errorMessage(e as Error)}` });
+    }
+  }
+
   build() {
     Column({ space: 10 }) {
-      this.SliderRow('亮度', this.brightnessValue, '%', 10, 100, (value: number): void => {
+      this.SliderRow('亮度', this.brightnessValue, '%', 10, 100, (value: number, mode: SliderChangeMode): void => {
         this.brightnessValue = value;
+        if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) { this.saveBrightness(value); }
       })
 
       Row({ space: 10 }) {
@@ -84,7 +96,7 @@ export struct ReaderPictureSheet {
         .fontColor(active ? PRIMARY : $r('sys.color.font_secondary'))
     }
     .layoutWeight(1)
-    .height(34)
+    .height(40)
     .justifyContent(FlexAlign.Center)
     .borderRadius(17)
     .backgroundColor(active ? PRIMARY_SOFT : Color.Transparent)
@@ -114,7 +126,7 @@ export struct ReaderPictureSheet {
 
   @Builder
   private SliderRow(label: string, value: number, unit: string, min: number, max: number,
-    onChange: (value: number) => void) {
+    onChange: (value: number, mode: SliderChangeMode) => void) {
     Row({ space: 10 }) {
       Text(label)
         .fontSize(14)
@@ -128,7 +140,7 @@ export struct ReaderPictureSheet {
         .onChange((next: number, mode: SliderChangeMode) => {
           if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click ||
             mode === SliderChangeMode.Moving) {
-            onChange(Math.round(next));
+            onChange(Math.round(next), mode);
           }
         })
       Text(`${Math.round(value)}${unit}`)

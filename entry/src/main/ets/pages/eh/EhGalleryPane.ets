@@ -44,17 +44,25 @@ export struct EhGalleryPane {
   private ticket: number = 0;
   private listGate: RequestAbortGroup = new RequestAbortGroup();
   private gallerySource: BasicDataSource<AlbumLite> = new BasicDataSource<AlbumLite>();
+  private failedMode: string = 'reset';
 
   aboutToAppear(): void {
-    this.load('reset');
+    if (this.items.length === 0) { this.load('reset'); }
   }
 
   aboutToDisappear(): void {
     this.ticket++;
     this.listGate.abortAll();
+    this.loading = false;
+    this.refreshing = false;
   }
 
   private onFilterChanged(): void {
+    this.items = [];
+    this.gallerySource.setList([]);
+    this.nextUrl = '';
+    this.prevUrl = '';
+    this.firstUrl = '';
     this.load('reset');
   }
 
@@ -115,13 +123,7 @@ export struct EhGalleryPane {
         return;
       }
       this.error = errorMessage(e as Error);
-      if (mode !== 'more') {
-        this.items = [];
-        this.gallerySource.setList([]);
-        this.nextUrl = '';
-        this.prevUrl = '';
-        this.firstUrl = '';
-      }
+      this.failedMode = mode;
     } finally {
       if (ticket === this.ticket) {
         this.loading = false;
@@ -150,12 +152,13 @@ export struct EhGalleryPane {
         LoadingProgress().width(18).height(18).color(PRIMARY)
         Text('正在加载下一组画廊…').fontSize(12).fontColor(TEXT_SUB)
       } else if (this.error !== '' && this.items.length > 0) {
-        Text('加载失败，点击重试')
+        Button(this.failedMode === 'more' ? '加载失败，点按重试' : '刷新失败，点按重试', { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .constraintSize({ minWidth: 40, minHeight: 40 })
           .fontSize(12)
           .fontWeight(FontWeight.Bold)
           .fontColor(PRIMARY)
           .onClick(() => {
-            this.load('more');
+            this.load(this.failedMode);
           })
       } else if (this.items.length > 0 && this.nextUrl === '') {
         Text('— 没有更多了 —').fontSize(12).fontColor(TEXT_SUB)
@@ -186,6 +189,7 @@ export struct EhGalleryPane {
             .textAlign(TextAlign.Center)
             .padding({ left: 24, right: 24 })
           Button('重试', { buttonStyle: ButtonStyleMode.NORMAL, controlSize: ControlSize.SMALL })
+            .constraintSize({ minWidth: 40, minHeight: 40 })
             .onClick(() => {
               this.load('reset');
             })
@@ -233,7 +237,7 @@ export struct EhGalleryPane {
         .width('100%')
         .height('100%')
         .onReachEnd(() => {
-          this.load('more');
+          if (this.error === '') { this.load('more'); }
         })
       }
     }

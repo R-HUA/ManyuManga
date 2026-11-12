@@ -178,6 +178,17 @@ export async function loadOfflineAlbumIds(): Promise<Array<string>> {
   return ids;
 }
 
+/** 离线列表一次读取书目，避免逐本查询。 */
+export async function loadOfflineAlbums(): Promise<Array<Album>> {
+  const albums: Array<Album> = [];
+  const result: relationalStore.ResultSet = await dbQuery(
+    'SELECT payload FROM offline_book ORDER BY updated_at DESC', []);
+  await readRows(result, (row: relationalStore.ResultSet): void => {
+    albums.push(albumFromJson(cellString(row, 'payload')));
+  });
+  return albums;
+}
+
 export async function loadCompletePages(albumId: string): Promise<Array<OfflinePageRow>> {
   const items: Array<OfflinePageRow> = [];
   const result: relationalStore.ResultSet = await dbQuery(

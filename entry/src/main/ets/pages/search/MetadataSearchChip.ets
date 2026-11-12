@@ -1,6 +1,6 @@
 import { MetadataTerm } from '../../models/Models';
 import { MangaRouteParams, ROUTE_SEARCH, SearchField, SearchScope, SearchSelection } from '../../common/Route';
-import { CARD, PRIMARY, TEXT_MAIN, DIVIDER } from '../../common/Theme';
+import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, DIVIDER } from '../../common/Theme';
 
 /** capsule：带底色胶囊（标签）；plain：纯文字（详情页作者行），无背景、边框。 */
 export type MetadataChipStyle = 'capsule' | 'plain';
@@ -35,6 +35,7 @@ export struct MetadataSearchChip {
       Text(this.term.label)
         .fontSize(13)
         .fontColor(PRIMARY)
+        .constraintSize({ minWidth: 40, minHeight: 40 })
         .accessibilityText(this.term.label)
         .onClick(() => this.search('source'))
         .bindContextMenu(this.Actions, ResponseType.LongPress)
@@ -49,12 +50,12 @@ export struct MetadataSearchChip {
       Text(this.term.label).fontSize(12).fontColor(this.field === 'author' ? PRIMARY : TEXT_MAIN)
         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
     }
-      .height(32)
+      .height(40)
       .width('auto')
       .constraintSize({ maxWidth: '100%' })
       .padding({ left: 12, right: 12 })
       .margin({ right: 8, bottom: 8 })
-      .backgroundColor(CARD)
+      .backgroundColor(this.field === 'author' ? PRIMARY_SOFT : CARD)
       .borderRadius(14)
       .border({ width: 0.5, color: DIVIDER })
       .onClick(() => this.search('source'))

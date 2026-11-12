@@ -5,21 +5,26 @@ import { TEXT_SUB } from './Theme';
 
 @Component
 export struct PagePreview {
-  @Prop chapter: string = '';
-  @Prop filename: string = '';
-  @Prop scramble: number = 0;
-  @Prop thumbWidth: number = 240;
+  @Prop @Watch('load') chapter: string = '';
+  @Prop @Watch('load') filename: string = '';
+  @Prop @Watch('load') scramble: number = 0;
+  @Prop @Watch('load') thumbWidth: number = 240;
+  @Prop @Watch('onActiveChanged') active: boolean = true;
+  onOpen: () => void = (): void => {};
   @State bitmap: image.PixelMap | null = null;
   @State error: string = '';
-  private active: boolean = true;
+  private attached: boolean = false;
+  private generation: number = 0;
   private signal: RequestAbortGroup = new RequestAbortGroup();
 
   aboutToAppear(): void {
+    this.attached = true;
     this.load();
   }
 
   aboutToDisappear(): void {
-    this.active = false;
+    this.attached = false;
+    this.generation++;
     this.signal.abortAll();
     if (this.bitmap !== null) {
       releasePagePixelMap(this.bitmap);
@@ -27,14 +32,30 @@ export struct PagePreview {
     }
   }
 
+  private onActiveChanged(): void {
+    if (!this.active) {
+      this.generation++;
+      this.signal.abortAll();
+    } else if (this.attached && this.bitmap === null) {
+      this.load();
+    }
+  }
+
   private async load(): Promise<void> {
+    const ticket: number = ++this.generation;
     this.signal.abortAll();
     this.signal = new RequestAbortGroup();
     const signal: RequestAbortGroup = this.signal;
+    this.error = '';
+    if (this.bitmap !== null) {
+      releasePagePixelMap(this.bitmap);
+      this.bitmap = null;
+    }
+    if (!this.active || !this.attached) { return; }
     try {
       const bitmap: image.PixelMap | null = await loadPagePixelMap(
         this.chapter, this.filename, this.scramble, this.thumbWidth, signal);
-      if (!this.active || signal.aborted()) {
+      if (!this.active || !this.attached || ticket !== this.generation || signal.aborted()) {
         if (bitmap !== null) {
           releasePagePixelMap(bitmap);
         }
@@ -48,7 +69,7 @@ export struct PagePreview {
       if (isRequestCancelled(e as Error)) {
         return;
       }
-      if (this.active) {
+      if (this.active && ticket === this.generation && !signal.aborted()) {
         this.error = (e as Error).message;
       }
     }
@@ -61,12 +82,13 @@ export struct PagePreview {
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Cover)
+          .onClick((): void => this.onOpen())
       } else if (this.error !== '') {
-        Text('重试')
-          .fontSize(11)
+        Button('重试', { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .constraintSize({ minWidth: 40, minHeight: 40 })
+          .fontSize(12)
           .fontColor(TEXT_SUB)
           .onClick(() => {
-            this.error = '';
             this.load();
           })
       } else {

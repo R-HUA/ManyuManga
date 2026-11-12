@@ -50,12 +50,43 @@ export struct EhFilterSheet {
   @Prop searchFilters: boolean = true;
   filter: EhSearchFilter = new EhSearchFilter();
   @State draft: EhSearchFilter = new EhSearchFilter();
+  @State error: string = '';
+  @State saving: boolean = false;
+  private active: boolean = false;
   apply: (filter: EhSearchFilter) => void = (): void => {};
   close: () => void = (): void => {};
 
   aboutToAppear(): void {
+    this.active = true;
     this.draft = new EhSearchFilter();
     this.draft.copyFrom(this.filter);
+  }
+
+  aboutToDisappear(): void {
+    this.active = false;
+  }
+
+  private async submit(): Promise<void> {
+    if (this.saving) { return; }
+    this.error = '';
+    if (this.draft.pageFrom.trim() !== '' && this.draft.pageTo.trim() !== '' &&
+      Number(this.draft.pageFrom) > Number(this.draft.pageTo)) {
+      this.error = '最少页数不能大于最多页数';
+      return;
+    }
+    const next: EhSearchFilter = new EhSearchFilter();
+    next.copyFrom(this.draft);
+    this.saving = true;
+    try {
+      await next.save();
+      if (!this.active) { return; }
+      this.apply(next);
+      this.close();
+    } catch (e) {
+      if (this.active) { this.error = `保存筛选失败：${e instanceof Error ? e.message : '请重试'}`; }
+    } finally {
+      this.saving = false;
+    }
   }
 
   private isOnlyCategory(): boolean {
@@ -385,6 +416,12 @@ export struct EhFilterSheet {
       .scrollBar(BarState.Off)
       .constraintSize({ maxHeight: this.isOnlyCategory() ? 260 : 500 })
       .width('100%')
+      .enabled(!this.saving)
+
+      if (this.error !== '') {
+        Text(this.error).fontSize(12).fontColor($r('sys.color.warning'))
+          .width('100%').padding({ left: 16, right: 16 })
+      }
 
       // ── 底部单行操作栏（彻底移除第二排冗余的「取消/收起」巨型按钮） ──
       Row({ space: 12 }) {
@@ -395,16 +432,16 @@ export struct EhFilterSheet {
           .backgroundColor(SUB_CARD)
           .layoutWeight(1)
           .height(40)
+          .enabled(!this.saving)
           .onClick(() => {
             this.draft = new EhSearchFilter();
           })
 
-        Button('应用筛选', { buttonStyle: ButtonStyleMode.EMPHASIZED })
+        Button(this.saving ? '保存中…' : '应用筛选', { buttonStyle: ButtonStyleMode.EMPHASIZED })
           .layoutWeight(1)
+          .enabled(!this.saving)
           .onClick(() => {
-            this.draft.save().catch((): void => {});
-            this.apply(this.draft);
-            this.close();
+            this.submit();
           })
       }
       .width('100%')

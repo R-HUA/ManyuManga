@@ -243,6 +243,7 @@ export struct WorkHeroInfo {
               Text(this.sourceBadge())
                 .fontSize(13)
                 .fontColor(TEXT_SUB)
+                .constraintSize({ minWidth: 40, minHeight: 40 })
                 .accessibilityText(`当前来源 ${this.sourceBadge()}，点按换源`)
                 .onClick(() => {
                   this.sourceSheet = true;

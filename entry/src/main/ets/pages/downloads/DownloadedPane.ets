@@ -1,6 +1,7 @@
 import { ComicCard } from '../../common/ComicCard';
 import promptAction from '@ohos.promptAction';
 import { EmptyView } from '../../common/Components';
+import { BasicDataSource } from '../../common/DataSource';
 import { comicColumns, BG, TEXT_MAIN, TEXT_SUB, DANGER, PRIMARY, ON_PRIMARY, OVERLAY_SCRIM } from '../../common/Theme';
 import { ToolBarOptions } from '@kit.ArkUI';
 import { SelectionToolBar, ToolAction, buildToolBar } from '../../common/SelectionToolBar';
@@ -39,17 +40,25 @@ export struct DownloadedPane {
   @Link totalCount: number;
   @StorageProp(BOTTOM_RECT_HEIGHT_KEY) bottomInset: number = 0;
   @State items: Array<OfflineItem> = [];
+  @State loading: boolean = true;
+  @State loadError: string = '';
   @State @Watch('syncSelection') selected: Array<string> = [];
   @State @Watch('syncSelection') jobs: Array<ExportJob> = [];
   @State folderUri: string = '';
   @State @Watch('syncSelection') busy: boolean = false;
-  @State selectionItems: ToolBarOptions = new ToolBarOptions();
+  @State toolbarItems: ToolBarOptions = new ToolBarOptions();
   private stopExport: boolean = false;
   private visible: boolean = false;
   private reloadVersion: number = 0;
+  private reloadTimer: number = -1;
+  private itemSource: BasicDataSource<OfflineItem> = new BasicDataSource<OfflineItem>();
   private lastExportFolder: string = '';
   private contentListener: () => void = (): void => {
-    this.reload().catch((e: Error): void => { this.toast(errorMessage(e)); });
+    if (!this.visible || this.reloadTimer >= 0) { return; }
+    this.reloadTimer = setTimeout((): void => {
+      this.reloadTimer = -1;
+      this.reload();
+    }, 250);
   };
   private taskListener: (task: DownloadTask) => void = (task: DownloadTask): void => {
     if (task.state === 'done') { this.contentListener(); }
@@ -59,7 +68,7 @@ export struct DownloadedPane {
     this.visible = true;
     offlineStore.onChange(this.contentListener);
     downloadManager.onChange(this.taskListener);
-    this.initialize().catch((e: Error): void => { this.toast(errorMessage(e)); });
+    this.reload();
     this.syncSelection();
   }
 
@@ -80,7 +89,7 @@ export struct DownloadedPane {
     }
     this.selectedCount = this.selected.length;
     this.totalCount = this.items.length;
-    this.selectionItems = this.makeToolbar();
+    this.toolbarItems = this.makeToolbar();
   }
 
   private allSelected(): boolean {
@@ -133,43 +142,54 @@ export struct DownloadedPane {
     this.visible = false;
     this.stopExport = true;
     this.reloadVersion++;
+    if (this.reloadTimer >= 0) {
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = -1;
+    }
     offlineStore.offChange(this.contentListener);
     downloadManager.offChange(this.taskListener);
   }
 
-  private async initialize(): Promise<void> {
-    await downloadManager.init();
-    this.lastExportFolder = await recentExportFolder();
-    await this.reload();
-  }
-
   private async reload(): Promise<void> {
+    if (this.reloadTimer >= 0) {
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = -1;
+    }
     const version: number = ++this.reloadVersion;
-    await downloadManager.init();
-    const ids: Array<string> = await offlineStore.albumIds();
-    const next: Array<OfflineItem> = [];
-    for (const id of ids) {
-      const album: Album | null = await offlineStore.album(id);
-      if (album === null) {
-        continue;
-      }
-      const item: OfflineItem = new OfflineItem();
-      item.albumId = album.id;
-      item.title = album.name;
-      item.author = album.author.map((term: MetadataTerm): string => term.label).join(' / ');
-      item.cover = album.coverUrl;
+    this.loading = true;
+    this.loadError = '';
+    try {
+      await downloadManager.init();
+      const folder: string = await recentExportFolder();
+      const albums: Array<Album> = await offlineStore.albums();
+      if (!this.visible || version !== this.reloadVersion) { return; }
+      const tasks: Map<string, DownloadTask> = new Map<string, DownloadTask>();
       for (const task of downloadManager.tasks) {
-        if (task.albumId === album.id && task.state === 'done' && task.savedTo !== '') {
+        if (task.state === 'done' && task.savedTo !== '') { tasks.set(task.albumId, task); }
+      }
+      const next: Array<OfflineItem> = [];
+      for (const album of albums) {
+        const item: OfflineItem = new OfflineItem();
+        item.albumId = album.id;
+        item.title = album.name;
+        item.author = album.author.map((term: MetadataTerm): string => term.label).join(' / ');
+        item.cover = album.coverUrl;
+        const task: DownloadTask | undefined = tasks.get(album.id);
+        if (task !== undefined) {
           item.taskId = task.id;
           item.savedTo = task.savedTo;
         }
+        next.push(item);
       }
-      next.push(item);
-    }
-    if (this.visible && version === this.reloadVersion) {
+      this.lastExportFolder = folder;
       this.items = next;
+      this.itemSource.setList(next);
       this.totalCount = next.length;
       this.selected = this.selected.filter((id: string): boolean => next.some((item: OfflineItem): boolean => item.albumId === id));
+    } catch (e) {
+      if (this.visible && version === this.reloadVersion) { this.loadError = errorMessage(e as Error); }
+    } finally {
+      if (this.visible && version === this.reloadVersion) { this.loading = false; }
     }
   }
 
@@ -305,7 +325,21 @@ export struct DownloadedPane {
 
   build() {
     Column() {
-      if (this.items.length === 0 && this.jobs.length === 0) {
+      if (this.loading && this.items.length === 0 && this.jobs.length === 0) {
+        Column() {
+          LoadingProgress().width(36).height(36).color(PRIMARY)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+      } else if (this.loadError !== '') {
+        Column() {
+          EmptyView({ message: this.loadError, onRetry: (): void => { this.reload(); } })
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+      } else if (this.items.length === 0 && this.jobs.length === 0) {
         Column() {
           EmptyView({ message: '还没有已下载的漫画', showRetry: false, quiet: true })
         }
@@ -317,7 +351,7 @@ export struct DownloadedPane {
           this.ExportList()
         }
         Grid() {
-          ForEach(this.items, (item: OfflineItem) => {
+          LazyForEach(this.itemSource, (item: OfflineItem) => {
             GridItem() {
               Stack({ alignContent: Alignment.TopEnd }) {
                 ComicCard({
@@ -355,18 +389,19 @@ export struct DownloadedPane {
                 })
               )
             }
-          }, (item: OfflineItem) => item.albumId)
+          }, (item: OfflineItem): string => JSON.stringify([item.albumId, item.title, item.author, item.cover]))
         }
         .columnsTemplate('1fr '.repeat(comicColumns(this.contentWidth)))
         .columnsGap(12)
         .rowsGap(12)
+        .cachedCount(2)
         .onAreaChange((_old: Area, area: Area): void => { this.contentWidth = Number(area.width); })
         .width('100%')
         .layoutWeight(1)
         .padding({ left: 16, right: 16, top: 4, bottom: this.managing ? 8 : 28 + this.bottomInset })
 
         if (this.managing) {
-          SelectionToolBar({ items: this.selectionItems, bottomInset: this.bottomInset })
+          SelectionToolBar({ items: this.toolbarItems, bottomInset: this.bottomInset })
         }
       }
     }

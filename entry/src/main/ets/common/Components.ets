@@ -32,9 +32,9 @@ export struct IconCircleButton {
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
     }
-    .width(this.btnSize)
-    .height(this.btnSize)
-    .backgroundColor(this.active ? SUB_CARD : this.bg)
+    .width(Math.max(40, this.btnSize))
+    .height(Math.max(40, this.btnSize))
+    .backgroundColor(this.active ? PRIMARY_SOFT : this.bg)
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
     .onClick(() => {
       this.onTap();
@@ -135,7 +135,7 @@ export struct EmptyView {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       if (this.showRetry) {
         Button(this.retryText, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-          .height(36)
+          .height(40)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .padding({ left: 24, right: 24 })
@@ -167,7 +167,7 @@ export struct TagChip {
       .fontColor(this.selected ? PRIMARY : TEXT_MAIN)
       .maxLines(1)
       .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .constraintSize({ minHeight: 32 })
+      .constraintSize({ minWidth: 40, minHeight: 40 })
       .backgroundColor(this.selected ? PRIMARY_SOFT : SUB_CARD)
       .borderRadius(16)
       .onClick(() => {

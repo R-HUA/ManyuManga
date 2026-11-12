@@ -121,6 +121,7 @@ export struct ReaderPage {
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
+    .enableScrollInteraction(this.zoomScale <= 1.05)
     .cachedCount(this.preloadCount)
     .onScrollStart(() => { this.controller.tapGuard.motion(true, Date.now()); })
     .onScrollStop(() => { this.controller.tapGuard.motion(false, Date.now()); })
@@ -165,6 +166,7 @@ export struct ReaderPage {
     .index(Math.max(0, this.controller.pageToSpreadIndex(this.currentPage)))
     .loop(false)
     .vertical(this.mode === 'pagedVertical')
+    .disableSwipe(this.zoomScale > 1.05)
     .indicator(false)
     .duration(240)
     .cachedCount(Math.max(2, this.preloadCount))
@@ -346,6 +348,13 @@ export struct ReaderPage {
         .width('100%')
         .height('100%')
         .onTouch((event: TouchEvent): void => { this.trackTouch(event); })
+        .onGestureJudgeBegin((info: GestureInfo, _event: BaseGestureEvent): GestureJudgeResult => {
+          // 未放大时不让画面拖动手势抢占列表滚动或翻页。
+          if (info.tag === 'readerZoomPan' && this.zoomScale <= 1.05) {
+            return GestureJudgeResult.REJECT;
+          }
+          return GestureJudgeResult.CONTINUE;
+        })
         .gesture(
           GestureGroup(GestureMode.Parallel,
             GestureGroup(GestureMode.Exclusive,
@@ -371,6 +380,7 @@ export struct ReaderPage {
                 this.controller.bounceZoomBack();
               }),
             PanGesture({ fingers: 1, distance: 3 })
+              .tag('readerZoomPan')
               .onActionStart((event: GestureEvent): void => {
                 if (this.zoomScale > 1.05) {
                   this.controller.onTwoFingerPanStart(event);

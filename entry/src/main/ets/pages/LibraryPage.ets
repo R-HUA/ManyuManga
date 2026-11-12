@@ -32,7 +32,7 @@ export struct LibraryPage {
   @State category: string = '';
   @State categories: Array<string> = [];
   @State @Watch('syncToolbar') selected: Array<string> = [];
-  @State selectionItems: ToolBarOptions = new ToolBarOptions();
+  @State toolbarItems: ToolBarOptions = new ToolBarOptions();
   @State downloaded: Array<string> = [];
   @State private contentWidth: number = 328;
   private scroller: Scroller = new Scroller();
@@ -166,7 +166,7 @@ export struct LibraryPage {
 
   /** 多选工具栏：分类 / 下载 / 移除（红色警告色）+ 更多（标已读、换源），符合 4+1 上限。 */
   private syncToolbar(): void {
-    this.selectionItems = buildToolBar([
+    this.toolbarItems = buildToolBar([
       new ToolAction('分类', $r('sys.symbol.label'), true, false, (): void => { this.categorySheet = true; }),
       new ToolAction('下载', $r('sys.symbol.arrow_down_circle'), true, false, (): void => { this.action('download'); }),
       new ToolAction('移除', $r('sys.symbol.trash'), true, true, (): void => { this.confirmRemove(); }),
@@ -239,7 +239,8 @@ export struct LibraryPage {
                 .fontColor(TEXT_SUB)
                 .layoutWeight(1)
                 .maxLines(2)
-              Text('重试')
+              Button('重试', { buttonStyle: ButtonStyleMode.TEXTUAL })
+                .constraintSize({ minWidth: 40, minHeight: 40 })
                 .fontSize(12)
                 .fontColor(PRIMARY)
                 .onClick(() => {
@@ -282,7 +283,7 @@ export struct LibraryPage {
               }
               if (this.works.length > 0) {
                 Button('重置筛选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                  .height(36)
+                  .height(40)
                   .fontSize(13)
                   .fontWeight(FontWeight.Medium)
                   .padding({ left: 20, right: 20 })
@@ -336,7 +337,7 @@ export struct LibraryPage {
 
         // Bottom Batch Action Bar in Selection Mode
         if (this.selected.length > 0) {
-          SelectionToolBar({ items: this.selectionItems, bottomInset: this.bottomInset })
+          SelectionToolBar({ items: this.toolbarItems, bottomInset: this.bottomInset })
         }
       }
       .width('100%')

@@ -5,7 +5,7 @@
 import web_webview from '@ohos.web.webview';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { GallerySite } from '../../data/eh/EhNative';
-import { SUB_CARD, PRIMARY, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER, ON_PRIMARY } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER, ON_PRIMARY } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../../common/Route';
 
@@ -108,6 +108,7 @@ export struct EhSiteSheet {
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 9, bottom: 9 })
+      .constraintSize({ minWidth: 40, minHeight: 40 })
       .borderRadius(16)
       .backgroundColor(this.siteMode === mode ? PRIMARY : SUB_CARD)
       .onClick(() => {
@@ -117,13 +118,14 @@ export struct EhSiteSheet {
 
   @Builder
   private WebLinkButton(label: string, url: string) {
-    Text(label)
+    Button(label, { buttonStyle: ButtonStyleMode.TEXTUAL })
       .fontSize(12)
       .fontWeight(FontWeight.Bold)
       .fontColor(PRIMARY)
       .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+      .constraintSize({ minWidth: 40, minHeight: 40 })
       .borderRadius(14)
-      .backgroundColor(SUB_CARD)
+      .backgroundColor(PRIMARY_SOFT)
       .onClick(() => {
         this.webUrl = url;
       })
@@ -174,7 +176,7 @@ export struct EhSiteSheet {
           .height(44)
           .justifyContent(FlexAlign.Center)
           .borderRadius(14)
-          .backgroundColor(SUB_CARD)
+          .backgroundColor(PRIMARY_SOFT)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
           .onClick(() => {
             this.showWebLogin = true;
@@ -188,10 +190,11 @@ export struct EhSiteSheet {
                 .layoutWeight(1)
               this.WebLinkButton('登录页', FORUMS_LOGIN_URL)
               this.WebLinkButton('论坛首页', FORUMS_HOME_URL)
-              Text('收起')
+              Button('收起', { buttonStyle: ButtonStyleMode.TEXTUAL })
                 .fontSize(12)
                 .fontColor(TEXT_SUB)
                 .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .constraintSize({ minWidth: 40, minHeight: 40 })
                 .borderRadius(8)
                 .backgroundColor(SUB_CARD)
                 .onClick(() => {
@@ -207,7 +210,7 @@ export struct EhSiteSheet {
               .javaScriptAccess(true)
               .domStorageAccess(true)
               .mixedMode(MixedMode.All)
-            Button('完成', { buttonStyle: ButtonStyleMode.EMPHASIZED })
+            Button('完成', { buttonStyle: ButtonStyleMode.NORMAL })
               .width('100%')
               .onClick(() => {
                 this.webDone();
@@ -297,7 +300,7 @@ export struct EhSiteSheet {
           .fontSize(14)
           .fontWeight(FontWeight.Bold)
           .fontColor(PRIMARY)
-          .backgroundColor(SUB_CARD)
+          .backgroundColor(PRIMARY_SOFT)
           .width('100%')
           .height(40)
           .onClick(() => {

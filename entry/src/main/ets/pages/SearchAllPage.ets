@@ -14,7 +14,7 @@ import { searchLibraryWorks } from '../data/SearchQuery';
 import { LibrarySearchResults } from './search/LibrarySearchResults';
 import { highConfidence } from '../data/Matching';
 import { Album, AlbumLite, SearchResult, asRecord, asString, errorMessage } from '../models/Models';
-import { BG, PRIMARY, DANGER, TEXT_SUB } from '../common/Theme';
+import { BG, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_SUB } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 import { SearchSuggestField } from './search/SearchSuggestField';
 import { searchHistoryStore } from '../data/stores/FilterStores';
@@ -333,7 +333,7 @@ export struct SearchAllPage {
         }
         .width(40)
         .height(40)
-        .backgroundColor(Color.Transparent)
+        .backgroundColor(this.hasActiveFilter() ? PRIMARY_SOFT : Color.Transparent)
         .accessibilityText('筛选')
         .onClick((): void => {
           this.filterSheet = true;

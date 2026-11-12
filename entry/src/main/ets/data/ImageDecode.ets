@@ -145,15 +145,23 @@ export async function descramble(src: image.PixelMap, segments: number): Promise
 }
 
 /**
- * 网络字节 → 原尺寸解码 → 分块重排 → PixelMap（不做缩放）。
- * 下载导出与"只要原图"的场景使用。
+ * 反混淆必须保留原始分段边界；普通预览可直接按目标尺寸解码。
  */
 export async function descrambleFromBytes(buf: ArrayBuffer, photoId: string,
-  filename: string, scrambleId: number): Promise<image.PixelMap | null> {
+  filename: string, scrambleId: number, targetWidth: number = 0): Promise<image.PixelMap | null> {
+  const restore: boolean = capabilitiesForSourceId(sourceId(photoId)).pageRestore;
   const source: image.ImageSource = image.createImageSource(buf);
   let pm: image.PixelMap | null = null;
   try {
-    pm = await source.createPixelMap({ desiredPixelFormat: image.PixelMapFormat.RGBA_8888 });
+    const options: image.DecodingOptions = { desiredPixelFormat: image.PixelMapFormat.RGBA_8888 };
+    if (!restore && targetWidth > 0) {
+      const info: image.ImageInfo = await source.getImageInfo();
+      if (info.size.width > targetWidth) {
+        options.desiredSize = { width: targetWidth,
+          height: Math.max(1, Math.round(info.size.height * targetWidth / info.size.width)) };
+      }
+    }
+    pm = await source.createPixelMap(options);
   } finally {
     // 解码抛错也要释放 ImageSource（Review M-3：原生内存泄漏）
     await source.release();
@@ -161,14 +169,14 @@ export async function descrambleFromBytes(buf: ArrayBuffer, photoId: string,
   if (pm === null) {
     return null;
   }
-  if (!capabilitiesForSourceId(sourceId(photoId)).pageRestore) {
+  if (!restore) {
     return pm;
   }
   return descramble(pm, computeSegments(scrambleId, nativeId(photoId), filename));
 }
 
 /**
- * 整链路加载阅读页：网络/缓存字节 → 原尺寸解码 → 反混淆 → 等比缩放到 targetWidth。
+ * 整链路加载阅读页：网络/缓存字节 → 按需解码与反混淆 → 等比缩放到 targetWidth。
  *  - 缓存键 `"{photoId}/{filename}@{scrambleId}@{targetWidth}"`：先查 96MB 内存 LRU（克隆交接，
  *    信号量外快路径 + 取得许可后二次确认）；命中直接返回；
  *  - 整个"缩略图磁盘缓存 → 取字节 → 解码 → 重排 → 缩放"全程持解码信号量
@@ -234,13 +242,18 @@ export async function loadPagePixelMap(photoId: string, filename: string,
     if (signal !== null) {
       signal.throwIfAborted();
     }
-    let pm: image.PixelMap | null = await descrambleFromBytes(bytes, photoId, filename, scrambleId);
-    if (pm === null) {
-      return null;
-    }
-    if (!isPixelMapValid(pm)) {
-      await pm.release();
-      return null;
+    let pm: image.PixelMap | null = null;
+    try {
+      pm = await descrambleFromBytes(bytes, photoId, filename, scrambleId, isThumb ? targetWidth : 0);
+      if (pm === null || !isPixelMapValid(pm)) {
+        throw new Error('图片解码失败，请重试');
+      }
+    } catch (e) {
+      if (pm !== null) { releasePagePixelMap(pm); }
+      // 解码失败的字节不能继续作为缓存命中，否则预览和阅读器都会重复失败。
+      const cacheFile: string | null = pageCacheFile(photoId, filename);
+      if (cacheFile !== null && fileExists(cacheFile)) { fs.unlinkSync(cacheFile); }
+      throw e as Error;
     }
     const info: image.ImageInfo = pm.getImageInfoSync();
     if (info.size === undefined) {

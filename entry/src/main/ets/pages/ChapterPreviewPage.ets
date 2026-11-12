@@ -23,6 +23,7 @@ export struct ChapterPreviewPage {
   @State columns: number = 3;
   @State loading: boolean = true;
   @State error: string = '';
+  @State private previewActive: boolean = true;
   private scroller: Scroller = new Scroller();
   private loadToken: number = 0;
   private loadSignal: RequestAbortGroup = new RequestAbortGroup();
@@ -168,7 +169,9 @@ export struct ChapterPreviewPage {
                         chapter: this.chapterId,
                         filename: filename,
                         scramble: this.scrambleId,
-                        thumbWidth: 240
+                        thumbWidth: 240,
+                        active: this.previewActive,
+                        onOpen: (): void => this.openReaderAt(this.previewPage * this.pageSize() + idx)
                       })
                         .width('100%')
                         .height('100%')
@@ -182,6 +185,7 @@ export struct ChapterPreviewPage {
                         .borderRadius(6)
                         .backgroundColor(OVERLAY_SCRIM)
                         .margin(6)
+                        .hitTestBehavior(HitTestMode.None)
                     }
                     .width('100%')
                     .aspectRatio(0.72)
@@ -192,9 +196,6 @@ export struct ChapterPreviewPage {
                   }
                   .width('100%')
                   .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
-                  .onClick(() => {
-                    this.openReaderAt(this.previewPage * this.pageSize() + idx);
-                  })
                 }
               }, (filename: string, idx: number) => `${this.previewPage * this.pageSize() + idx}_${filename}`)
             }
@@ -239,8 +240,9 @@ export struct ChapterPreviewPage {
     })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.scroller])
-    .onHidden((): void => { this.cancelLoad(); })
+    .onHidden((): void => { this.previewActive = false; this.cancelLoad(); })
     .onShown((): void => {
+      this.previewActive = true;
       if (this.loading && this.loadSignal.aborted()) { this.load(); }
     })
     .onReady((ctx: NavDestinationContext) => {
