@@ -14,7 +14,7 @@ import {
 
 /**
  * 详情页唯一的滚动容器：首项为详情头部（由页面以尾随闭包传入），随后是章节 LazyForEach 与评论。
- * 章节排序 / 范围收进标题右侧筛选按钮打开的半模态（SegmentButton 即时生效）；预览通过行尾按钮、左滑或长按直接进入。
+ * 章节排序 / 范围收进标题右侧筛选按钮打开的半模态（SegmentButton 即时生效）；预览通过左滑或长按直接进入。
  */
 @Component
 export struct WorkChapterList {
@@ -117,12 +117,12 @@ export struct WorkChapterList {
 
   @Builder
   private PreviewAction(chapter: Chapter) {
-    Row() {
-      Text($r('app.string.preview_chapter')).fontSize(13).fontColor(TEXT_MAIN)
+    Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
+      SymbolGlyph($r('sys.symbol.file_preview')).fontSize(20).fontColor([TEXT_SUB])
     }
-    .width(88)
+    .width(64)
     .height('100%')
-    .justifyContent(FlexAlign.Center)
+    .borderRadius(0)
     .backgroundColor(SUB_CARD)
     .accessibilityText($r('app.string.preview_chapter'))
     .onClick(() => {
@@ -191,16 +191,6 @@ export struct WorkChapterList {
       .height(40)
       .justifyContent(FlexAlign.Center)
 
-      if (!row.selecting) {
-        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
-          SymbolGlyph($r('sys.symbol.file_preview')).fontSize(20).fontColor([TEXT_SUB])
-        }
-        .width(40).height(40).backgroundColor(Color.Transparent)
-        .accessibilityText($r('app.string.preview_chapter'))
-        .onClick((): void => {
-          this.preview(row.chapter);
-        })
-      }
     }
     .width('100%')
     .constraintSize({ minHeight: 52 })
@@ -334,6 +324,7 @@ export struct WorkChapterList {
           }
           .backgroundColor(CARD)
           .borderRadius(settingsRowRadius(index, this.rowCount))
+          .clip(true)
           .swipeAction(row.selecting ? {} : { end: { builder: (): void => { this.PreviewAction(row.chapter); } } })
           .onClick(() => {
             if (row.selecting) {
