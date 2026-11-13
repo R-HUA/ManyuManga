@@ -371,7 +371,7 @@ export struct DownloadedPane {
                 if (this.managing) {
                   Stack() {
                     if (this.selected.indexOf(item.albumId) >= 0) {
-                      SymbolGlyph($r('sys.symbol.checkmark')).fontSize(13).fontColor([ON_PRIMARY])
+                      SymbolGlyph($r('sys.symbol.checkmark')).fontSize(14).fontColor([ON_PRIMARY])
                     }
                   }
                   .width(24).height(24).borderRadius(12).margin(7)
@@ -416,7 +416,7 @@ export struct DownloadedPane {
       ForEach(this.jobs, (job: ExportJob) => {
         Row() {
           Text(job.title)
-            .fontSize(13)
+            .fontSize(14)
             .fontColor(TEXT_MAIN)
             .maxLines(1)
             .layoutWeight(1)

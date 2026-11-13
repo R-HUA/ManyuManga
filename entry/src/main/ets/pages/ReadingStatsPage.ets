@@ -31,7 +31,7 @@ export struct ReadingStatsPage {
         ForEach(value.split(' '), (part: string, index: number) => {
           Span(index % 2 === 0 ? part : ` ${part} `)
             .fontSize(index % 2 === 0 ? 24 : 12)
-            .fontWeight(index % 2 === 0 ? FontWeight.Bold : FontWeight.Regular)
+            .fontWeight(index % 2 === 0 ? FontWeight.Medium : FontWeight.Regular)
             .fontColor(index % 2 === 0 ? TEXT_MAIN : TEXT_SUB)
         }, (part: string, index: number): string => `${index}_${part}`)
       }.fontFeature('"tnum" 1')
@@ -50,7 +50,7 @@ export struct ReadingStatsPage {
             GridCol() { this.Metric('已读页数', `${this.stats.pages.length} 页`) }
             GridCol() { this.Metric('阅读时长', this.duration()) }
           }
-          if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(13) }
+          if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(14) }
         }.width('100%').padding(16)
       }.width('100%').height('100%').align(Alignment.TopStart)
     }.titleBar({ content: { title: { mainTitle: '阅读统计' } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })

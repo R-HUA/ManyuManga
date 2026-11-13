@@ -314,9 +314,9 @@ export struct SearchAllPage {
   @Builder
   private SearchTitle() {
     Row({ space: 8 }) {
-      Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+      Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
         SymbolGlyph($r('sys.symbol.chevron_left')).fontSize(22).fontColor([$r('sys.color.font_primary')])
-      }.width(40).height(40).backgroundColor(Color.Transparent)
+      }.width(40).height(40)
       .accessibilityText('返回').onClick((): void => { this.stack.pop(); })
       SearchSuggestField({ text: this.$query, sourceId: this.onlySource, selection: this.selection,
         showSearchButton: !this.filterAvailable(),
@@ -326,7 +326,7 @@ export struct SearchAllPage {
           this.query = text; this.selection = selection; this.search();
         } }).layoutWeight(1)
       if (this.filterAvailable()) {
-        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
           SymbolGlyph($r('sys.symbol.slider_horizontal_2'))
             .fontSize(20)
             .fontColor([this.hasActiveFilter() ? PRIMARY : $r('sys.color.font_primary')])
@@ -368,14 +368,14 @@ export struct SearchAllPage {
               if (this.query.trim() === '' && !this.filterSearch) {
                 SearchHistory({ onSubmit: (text: string): void => { this.query = text; this.selection = null; this.search(); } })
               }
-              if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(13).width('100%') }
-              if (this.matching) { Text('正在核对关联作品').fontColor(TEXT_SUB).fontSize(13).width('100%') }
+              if (this.error !== '') { Text(this.error).fontColor(DANGER).fontSize(14).width('100%') }
+              if (this.matching) { Text('正在核对关联作品').fontColor(TEXT_SUB).fontSize(14).width('100%') }
               if (this.hasSubmission()) {
                 if (this.groups.length > 1) {
                   Row({ space: 8 }) {
                     Toggle({ type: ToggleType.Checkbox, isOn: this.onlyHits })
                       .onChange((value: boolean): void => { this.onlyHits = value; })
-                    Text('仅看有结果').fontColor(TEXT_SUB).fontSize(13)
+                    Text('仅看有结果').fontColor(TEXT_SUB).fontSize(14)
                   }.width('100%')
                 }
                 if (this.scope === 'library') { LibrarySearchResults({ works: this.libraryWorks, loading: this.libraryLoading }) }

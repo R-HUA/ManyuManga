@@ -1083,12 +1083,13 @@ export async function interfaceTests(test) {
     assert.doesNotMatch(list, /阅读中/);
     const detail = read('pages/WorkDetailPage.ets');
     assert.match(detail, /enableComponentSafeArea: false/);
-    assert.match(detail, /text: this\.sourceMenuLabel\(\)/);
-    assert.match(detail, /text: this\.remoteMenuLabel\(\)/);
+    assert.match(detail, /label: this\.sourceMenuLabel\(\)/);
+    assert.match(detail, /label: this\.remoteMenuLabel\(\)/);
+    assert.doesNotMatch(detail, /showMoreMenu/);
     assert.doesNotMatch(detail, /Scroll\(this\.chaptersScroller\)/);
     const hero = read('pages/detail/WorkHeroInfo.ets');
     assert.doesNotMatch(hero, /'换源'/);
-    assert.match(hero, /blur\(40\)/);
+    assert.doesNotMatch(hero, /blur\(|linearGradient/);
     const preview = read('pages/ChapterPreviewPage.ets');
     assert.doesNotMatch(preview, /从头阅读|读 P\./);
     assert.doesNotMatch(preview, /Slider\(|\.systemMaterial\(/);

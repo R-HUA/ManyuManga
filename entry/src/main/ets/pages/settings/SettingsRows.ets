@@ -29,7 +29,6 @@ export struct SettingsToggleRow {
       Column({ space: 2 }) {
         Text(this.title)
           .fontSize(16)
-          .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_MAIN)
         if (this.subtitle !== '') {
           Text(this.subtitle)
@@ -68,7 +67,6 @@ export struct SettingsActionRow {
     Row({ space: 12 }) {
       Text(this.title)
         .fontSize(16)
-        .fontWeight(FontWeight.Medium)
         .fontColor(this.danger ? DANGER : TEXT_MAIN)
         .layoutWeight(1)
       if (this.value !== '') {

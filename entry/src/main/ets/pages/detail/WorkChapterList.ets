@@ -159,21 +159,19 @@ export struct WorkChapterList {
 
   @Builder
   private ChapterLine(row: ChapterRow) {
-    Row({ space: 10 }) {
-      Column()
-        .width(4)
-        .height(row.current ? 28 : 0)
-        .borderRadius(2)
-        .backgroundColor(PRIMARY)
-        .visibility(row.current ? Visibility.Visible : Visibility.Hidden)
-
+    Row({ space: 8 }) {
       Text(chapterLabel(row.chapter))
         .fontColor(row.current ? PRIMARY : (row.read ? TEXT_TERTIARY : TEXT_MAIN))
-        .fontWeight(row.current ? FontWeight.Bold : FontWeight.Regular)
-        .fontSize(15)
+        .fontSize(16)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
+
+      if (row.current) {
+        Text('上次读到')
+          .fontSize(12)
+          .fontColor(PRIMARY)
+      }
 
       Row() {
         if (row.selecting) {
@@ -193,8 +191,8 @@ export struct WorkChapterList {
 
     }
     .width('100%')
-    .constraintSize({ minHeight: 52 })
-    .padding({ left: 8, right: 4 })
+    .constraintSize({ minHeight: 56 })
+    .padding({ left: 12, right: 4 })
     .alignItems(VerticalAlign.Center)
   }
 
@@ -203,13 +201,13 @@ export struct WorkChapterList {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
         Text('章节')
-          .fontSize(18)
+          .fontSize(16)
           .fontColor(TEXT_MAIN)
-          .fontWeight(FontWeight.Bold)
+          .fontWeight(FontWeight.Medium)
         if (this.album !== null) {
           Text(this.rowCount === this.album.episodes.length ? `${this.album.episodes.length}` :
             `${this.rowCount}/${this.album.episodes.length}`)
-            .fontSize(13)
+            .fontSize(14)
             .fontColor(TEXT_SUB)
         }
         if (!this.filterIsDefault()) {
@@ -231,7 +229,6 @@ export struct WorkChapterList {
         Row() {
           TextInput({ text: this.filter, placeholder: '筛选章节号或关键词…' })
             .height(38)
-            .borderRadius(14)
             .backgroundColor(SUB_CARD)
             .fontColor(TEXT_MAIN)
             .placeholderColor(TEXT_SUB)
@@ -291,8 +288,8 @@ export struct WorkChapterList {
   private CommentsHeader() {
     Row() {
       Text('读者漫评')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
+        .fontSize(16)
+        .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
       if (this.commentsDone && this.comments.length === 0) {
@@ -341,7 +338,7 @@ export struct WorkChapterList {
         }, (row: ChapterRow) => row.key())
       }
       .padding({ left: 16, right: 16 })
-      .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 22, endMargin: 12 })
+      .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 12, endMargin: 12 })
 
       if (this.rowCount === 0) {
         ListItem() {
@@ -356,26 +353,26 @@ export struct WorkChapterList {
               Column({ space: 6 }) {
                 Row() {
                   Text(comment.nickname)
-                    .fontColor(PRIMARY)
+                    .fontColor(TEXT_SUB)
                     .fontSize(12)
-                    .fontWeight(FontWeight.Bold)
+                    .fontWeight(FontWeight.Medium)
                     .layoutWeight(1)
                   if (comment.time !== '') {
-                    Text(comment.time).fontColor(TEXT_SUB).fontSize(11)
+                    Text(comment.time).fontColor(TEXT_SUB).fontSize(12)
                   }
                 }
                 .width('100%')
 
                 Text(comment.content)
                   .fontColor(TEXT_MAIN)
-                  .fontSize(13)
+                  .fontSize(14)
                   .lineHeight(19)
               }
               .alignItems(HorizontalAlign.Start)
               .width('100%')
               .padding(14)
               .backgroundColor(CARD)
-              .borderRadius(14)
+              .borderRadius(16)
             }
           }, (comment: CommentItem, idx: number) => `${comment.id}_${idx}`)
         }

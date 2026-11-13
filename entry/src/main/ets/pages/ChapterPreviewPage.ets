@@ -122,7 +122,7 @@ export struct ChapterPreviewPage {
           .height(48).fontSize(14).fontColor(TEXT_MAIN).enabled(this.previewPage > 0)
           .onClick((): void => this.changePage(-1))
         Text($r('app.string.preview_page_number', this.previewPage + 1, this.pageCount()))
-          .fontSize(13).fontFeature('"tnum" 1').fontColor(TEXT_SUB)
+          .fontSize(14).fontFeature('"tnum" 1').fontColor(TEXT_SUB)
           .layoutWeight(1).textAlign(TextAlign.Center)
         Button($r('app.string.next_page'), { buttonStyle: ButtonStyleMode.TEXTUAL })
           .height(48).fontSize(14).fontColor(TEXT_MAIN).enabled(this.previewPage < this.pageCount() - 1)
@@ -139,7 +139,7 @@ export struct ChapterPreviewPage {
         if (this.loading) {
           Column({ space: 12 }) {
             LoadingProgress().width(36).height(36).color(PRIMARY)
-            Text('正在加载章节预览…').fontSize(13).fontColor(TEXT_SUB)
+            Text('正在加载章节预览…').fontSize(14).fontColor(TEXT_SUB)
           }
           .width('100%')
           .layoutWeight(1)
@@ -177,12 +177,12 @@ export struct ChapterPreviewPage {
                         .height('100%')
 
                       Text(`${this.previewPage * this.pageSize() + idx + 1}`)
-                        .fontSize(11)
+                        .fontSize(12)
                         .fontWeight(FontWeight.Medium)
                         .fontFeature('"tnum" 1')
                         .fontColor(ON_OVERLAY)
                         .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-                        .borderRadius(6)
+                        .borderRadius(4)
                         .backgroundColor(OVERLAY_SCRIM)
                         .margin(6)
                         .hitTestBehavior(HitTestMode.None)

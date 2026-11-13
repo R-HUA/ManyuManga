@@ -121,7 +121,7 @@ export struct DownloadTaskCard {
           })
       }
       Column() {
-        SourceCover({ url: this.item.cover, sourceKey: this.item.albumId, radius: 6 })
+        SourceCover({ url: this.item.cover, sourceKey: this.item.albumId, radius: 8 })
       }
       .width(36)
       .height(48)
@@ -134,7 +134,7 @@ export struct DownloadTaskCard {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(taskStatusText(this.item))
-          .fontSize(11)
+          .fontSize(12)
           .fontColor(this.failed() ? DANGER : TEXT_SUB)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })

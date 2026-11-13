@@ -92,7 +92,7 @@ export struct ReaderPictureSheet {
     Row() {
       Text(label)
         .fontSize(12)
-        .fontWeight(active ? FontWeight.Bold : FontWeight.Medium)
+        .fontWeight(active ? FontWeight.Medium : FontWeight.Regular)
         .fontColor(active ? PRIMARY : $r('sys.color.font_secondary'))
     }
     .layoutWeight(1)

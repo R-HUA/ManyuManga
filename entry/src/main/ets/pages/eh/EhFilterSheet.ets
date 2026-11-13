@@ -135,13 +135,13 @@ export struct EhFilterSheet {
   @Builder
   private ModeSegmentItem(label: string, mode: EhSearchMode) {
     Text(label)
-      .fontSize(13)
-      .fontWeight(this.draft.mode === mode ? FontWeight.Bold : FontWeight.Medium)
+      .fontSize(14)
+      .fontWeight(this.draft.mode === mode ? FontWeight.Medium : FontWeight.Regular)
       .fontColor(this.draft.mode === mode ? PRIMARY : TEXT_SUB)
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .height(30)
-      .borderRadius(10)
+      .borderRadius(15)
       .backgroundColor(this.draft.mode === mode ? CARD : Color.Transparent)
       .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
       .onClick(() => {
@@ -155,12 +155,12 @@ export struct EhFilterSheet {
   private RatingSegmentItem(value: number) {
     Text(value === 0 ? '不限' : `${value}星+`)
       .fontSize(12)
-      .fontWeight(this.draft.minRating === value ? FontWeight.Bold : FontWeight.Medium)
+      .fontWeight(this.draft.minRating === value ? FontWeight.Medium : FontWeight.Regular)
       .fontColor(this.draft.minRating === value ? PRIMARY : TEXT_SUB)
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .height(30)
-      .borderRadius(10)
+      .borderRadius(15)
       .backgroundColor(this.draft.minRating === value ? CARD : Color.Transparent)
       .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
       .onClick(() => {
@@ -176,8 +176,8 @@ export struct EhFilterSheet {
       Circle({ width: 8, height: 8 })
         .fill(option.color)
       Text(option.label)
-        .fontSize(13)
-        .fontWeight(this.draft.categoryOn(option.bit) ? FontWeight.Bold : FontWeight.Normal)
+        .fontSize(14)
+        .fontWeight(this.draft.categoryOn(option.bit) ? FontWeight.Medium : FontWeight.Normal)
         .fontColor(this.draft.categoryOn(option.bit) ? ON_PRIMARY : TEXT_MAIN)
         .maxLines(1)
         .layoutWeight(1)
@@ -191,12 +191,8 @@ export struct EhFilterSheet {
     .height(34)
     .padding({ left: 10, right: 10 })
     .alignItems(VerticalAlign.Center)
-    .borderRadius(10)
+    .borderRadius(8)
     .backgroundColor(this.draft.categoryOn(option.bit) ? option.color : SUB_CARD)
-    .border({
-      width: 0.5,
-      color: this.draft.categoryOn(option.bit) ? option.color : DIVIDER
-    })
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
     .onClick(() => {
       this.draft.toggleCategory(option.bit);
@@ -208,7 +204,7 @@ export struct EhFilterSheet {
   private FlagRow(row: EhFlagRow) {
     Row() {
       Text(row.label)
-        .fontSize(13)
+        .fontSize(14)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.flagValue(row.key) })
@@ -228,8 +224,8 @@ export struct EhFilterSheet {
       // ── 顶部标题栏（配合 bindSheet showClose: false，彻底消除右上角 × 重叠） ──
       Row({ space: 10 }) {
         Text(this.isOnlyCategory() ? '画廊分类' : '搜索筛选')
-          .fontSize(19)
-          .fontWeight(FontWeight.Bold)
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_MAIN)
           .layoutWeight(1)
 
@@ -262,7 +258,7 @@ export struct EhFilterSheet {
               }
               .width('100%')
               .padding(3)
-              .borderRadius(12)
+              .borderRadius(16)
               .backgroundColor(SUB_CARD)
             }
             .alignItems(HorizontalAlign.Start)
@@ -318,7 +314,7 @@ export struct EhFilterSheet {
               }
               .width('100%')
               .padding(3)
-              .borderRadius(12)
+              .borderRadius(16)
               .backgroundColor(SUB_CARD)
             }
             .alignItems(HorizontalAlign.Start)
@@ -334,9 +330,8 @@ export struct EhFilterSheet {
                 TextInput({ text: this.draft.pageFrom, placeholder: '最少页数' })
                   .type(InputType.Number)
                   .height(36)
-                  .fontSize(13)
+                  .fontSize(14)
                   .layoutWeight(1)
-                  .borderRadius(10)
                   .backgroundColor(SUB_CARD)
                   .fontColor(TEXT_MAIN)
                   .placeholderColor(TEXT_SUB)
@@ -349,9 +344,8 @@ export struct EhFilterSheet {
                 TextInput({ text: this.draft.pageTo, placeholder: '最多页数' })
                   .type(InputType.Number)
                   .height(36)
-                  .fontSize(13)
+                  .fontSize(14)
                   .layoutWeight(1)
-                  .borderRadius(10)
                   .backgroundColor(SUB_CARD)
                   .fontColor(TEXT_MAIN)
                   .placeholderColor(TEXT_SUB)
@@ -374,11 +368,11 @@ export struct EhFilterSheet {
               Row() {
                 Column({ space: 2 }) {
                   Text('高级搜索条件 (AdvSearch)')
-                    .fontSize(13)
+                    .fontSize(14)
                     .fontWeight(FontWeight.Medium)
                     .fontColor(TEXT_MAIN)
                   Text('细化检索范围、已删除图库与低评分内容')
-                    .fontSize(11)
+                    .fontSize(12)
                     .fontColor(TEXT_SUB)
                 }
                 .alignItems(HorizontalAlign.Start)
@@ -402,7 +396,7 @@ export struct EhFilterSheet {
                 .width('100%')
                 .padding({ left: 12, right: 12, top: 4, bottom: 4 })
                 .margin({ top: 6 })
-                .borderRadius(12)
+                .borderRadius(16)
                 .backgroundColor(SUB_CARD)
               }
             }
@@ -427,11 +421,7 @@ export struct EhFilterSheet {
       Row({ space: 12 }) {
         Button('重置', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
           .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(TEXT_MAIN)
-          .backgroundColor(SUB_CARD)
           .layoutWeight(1)
-          .height(40)
           .enabled(!this.saving)
           .onClick(() => {
             this.draft = new EhSearchFilter();

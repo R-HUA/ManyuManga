@@ -7,7 +7,7 @@
 import common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { MainShell } from './MainShell';
-import { PRIMARY, PRIMARY_SOFT, BG, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
+import { PRIMARY, SUB_CARD, BG, TEXT_MAIN, TEXT_SUB } from '../common/Theme';
 import { Prefs, getAppContext } from '../util/Prefs';
 import { APP_IN_BACKGROUND_KEY } from '../entryability/EntryAbility';
 import { NAV_STACK_DEPTH_KEY } from '../common/Route';
@@ -138,14 +138,14 @@ struct Index {
       .width(76)
       .height(76)
       .borderRadius(38)
-      .backgroundColor(PRIMARY_SOFT)
+      .backgroundColor(SUB_CARD)
 
       Text('应用已锁定')
         .fontSize(20)
-        .fontWeight(FontWeight.Bold)
+        .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
       Text(this.lockMsg !== '' ? this.lockMsg : '请验证人脸、指纹或锁屏密码以继续')
-        .fontSize(13)
+        .fontSize(14)
         .fontColor(TEXT_SUB)
         .textAlign(TextAlign.Center)
         .maxLines(3)

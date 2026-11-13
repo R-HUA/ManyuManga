@@ -209,10 +209,11 @@ export struct SuwayomiLibraryPage {
 
   @Builder
   private CategoryChip(label: ResourceStr, id: number) {
-    Button(label, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-      .height(32).fontSize(13).fontWeight(this.categoryId === id ? FontWeight.Medium : FontWeight.Regular)
+    Text(label)
+      .height(32).fontSize(14).fontWeight(this.categoryId === id ? FontWeight.Medium : FontWeight.Regular)
       .fontColor(this.categoryId === id ? PRIMARY : TEXT_SUB)
       .backgroundColor(this.categoryId === id ? PRIMARY_SOFT : SUB_CARD)
+      .borderRadius(16)
       .padding({ left: 12, right: 12 })
       .responseRegion({ x: 0, y: -4, width: '100%', height: 40 })
       .onClick(() => { if (this.categoryId !== id) { this.categoryId = id; this.reload(); } })

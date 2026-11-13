@@ -7,7 +7,7 @@ import { DownloadedPane } from './downloads/DownloadedPane';
 import { BasicDataSource } from '../common/DataSource';
 import { DownloadTaskCard, chapterStatusText } from './downloads/DownloadTaskCard';
 import { DownloadSummary } from './downloads/DownloadSummary';
-import { ON_PRIMARY, PRIMARY, BG, CARD, SUB_CARD, DANGER, DANGER_SOFT, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK, NEUTRAL_PROGRESS } from '../common/Theme';
+import { ON_PRIMARY, PRIMARY, BG, CARD, SUB_CARD, DANGER, COVER_R, CHIP_R, TEXT_MAIN, TEXT_SUB, DIVIDER, MASK_DARK, NEUTRAL_PROGRESS } from '../common/Theme';
 import { IconCircleButton } from '../common/Components';
 import { EmptyView } from '../common/Components';
 import { errorMessage } from '../models/Models';
@@ -498,13 +498,13 @@ export struct DownloadsPage {
       Column({ space: 4 }) {
         Row({ space: 8 }) {
           Text(c.title)
-            .fontSize(13)
+            .fontSize(14)
             .fontColor(c.state === 'done' ? TEXT_SUB : TEXT_MAIN)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
           Text(chapterStatusText(c, t.state))
-            .fontSize(11)
+            .fontSize(12)
             .fontColor(c.state === 'failed' ? DANGER : TEXT_SUB)
             .maxLines(1)
             .constraintSize({ maxWidth: '50%' })
@@ -539,12 +539,12 @@ export struct DownloadsPage {
     Column() {
       Column({ space: 16 }) {
         Text('删除下载任务')
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_MAIN)
         Column({ space: 10 }) {
           Text(`将删除 ${this.pendingDeleteIds.length} 个任务记录${this.pendingHasActive() ? '（进行中的任务会被终止，临时文件将一并清理）' : '。'}`)
-            .fontSize(13)
+            .fontSize(14)
             .fontColor(TEXT_SUB)
             .lineHeight(19)
           Row({ space: 8 }) {
@@ -567,28 +567,14 @@ export struct DownloadsPage {
         .width('100%')
         .alignItems(HorizontalAlign.Start)
 
-        Row({ space: 10 }) {
-          Text('取消')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(TEXT_MAIN)
-            .textAlign(TextAlign.Center)
+        Row({ space: 12 }) {
+          Button('取消', { buttonStyle: ButtonStyleMode.NORMAL })
             .layoutWeight(1)
-            .padding({ top: 11, bottom: 11 })
-            .borderRadius(20)
-            .backgroundColor(SUB_CARD)
             .onClick(() => {
               this.pendingDeleteIds = [];
             })
-          Text('确认删除')
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(ON_PRIMARY)
-            .textAlign(TextAlign.Center)
+          Button('确认删除', { buttonStyle: ButtonStyleMode.EMPHASIZED, role: ButtonRole.ERROR })
             .layoutWeight(1)
-            .padding({ top: 11, bottom: 11 })
-            .borderRadius(20)
-            .backgroundColor(DANGER)
             .onClick(() => {
               this.doDelete();
             })
@@ -596,10 +582,9 @@ export struct DownloadsPage {
         .width('100%')
       }
       .width('86%')
-      .padding(22)
-      .borderRadius(22)
+      .padding(24)
+      .borderRadius(16)
       .backgroundColor(CARD)
-      .border({ width: 0.5, color: DIVIDER })
     }
     .width('100%')
     .height('100%')

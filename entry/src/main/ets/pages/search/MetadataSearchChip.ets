@@ -1,8 +1,8 @@
 import { MetadataTerm } from '../../models/Models';
 import { MangaRouteParams, ROUTE_SEARCH, SearchField, SearchScope, SearchSelection } from '../../common/Route';
-import { CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, DIVIDER } from '../../common/Theme';
+import { CHIP_R, SUB_CARD, TEXT_MAIN } from '../../common/Theme';
 
-/** capsule：带底色胶囊（标签）；plain：纯文字（详情页作者行），无背景、边框。 */
+/** capsule：中性底小胶囊（标签）；plain：普通文字色（详情页作者行），无背景、边框。 */
 export type MetadataChipStyle = 'capsule' | 'plain';
 
 @Component
@@ -33,8 +33,8 @@ export struct MetadataSearchChip {
   build() {
     if (this.chipStyle === 'plain') {
       Text(this.term.label)
-        .fontSize(13)
-        .fontColor(PRIMARY)
+        .fontSize(14)
+        .fontColor(TEXT_MAIN)
         .constraintSize({ minWidth: 40, minHeight: 40 })
         .accessibilityText(this.term.label)
         .onClick(() => this.search('source'))
@@ -44,20 +44,22 @@ export struct MetadataSearchChip {
     }
   }
 
+  /** 标签：中性底、高 28、字号 12；热区向上下扩展到 40vp。 */
   @Builder
   private Capsule() {
-    Button({ type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL }) {
-      Text(this.term.label).fontSize(12).fontColor(this.field === 'author' ? PRIMARY : TEXT_MAIN)
-        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-      .height(40)
-      .width('auto')
+    Text(this.term.label)
+      .fontSize(12)
+      .fontColor(TEXT_MAIN)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .height(28)
       .constraintSize({ maxWidth: '100%' })
-      .padding({ left: 12, right: 12 })
-      .margin({ right: 8, bottom: 8 })
-      .backgroundColor(this.field === 'author' ? PRIMARY_SOFT : CARD)
-      .borderRadius(14)
-      .border({ width: 0.5, color: DIVIDER })
+      .padding({ left: 10, right: 10 })
+      .margin({ right: 8, top: 6, bottom: 6 })
+      .backgroundColor(SUB_CARD)
+      .borderRadius(CHIP_R)
+      .responseRegion({ x: 0, y: -6, width: '100%', height: 40 })
+      .accessibilityText(this.term.label)
       .onClick(() => this.search('source'))
       .bindContextMenu(this.Actions, ResponseType.LongPress)
   }

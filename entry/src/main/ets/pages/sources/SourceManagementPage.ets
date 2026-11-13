@@ -217,7 +217,7 @@ export struct SourceManagementPage {
           }
           .padding(12)
           .margin({ left: 16, right: 16, bottom: 8 })
-          .borderRadius(14)
+          .borderRadius(16)
           .backgroundColor(CARD)
         }
 

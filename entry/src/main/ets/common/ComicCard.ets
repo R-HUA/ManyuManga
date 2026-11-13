@@ -112,7 +112,6 @@ export struct ComicCard {
       .aspectRatio(COVER_ASPECT_RATIO)
       .borderRadius(COVER_R)
       .clip(true)
-      .border({ width: 0.5, color: DIVIDER })
 
       if (this.loading) {
         Column()
@@ -132,7 +131,7 @@ export struct ComicCard {
           .opacity(this.skelAlpha)
       } else {
         Text(this.title)
-          .fontSize(13)
+          .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_MAIN)
           .maxLines(2)
@@ -140,7 +139,7 @@ export struct ComicCard {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
           Text(this.author)
-            .fontSize(11)
+            .fontSize(12)
             .fontColor(TEXT_SUB)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })

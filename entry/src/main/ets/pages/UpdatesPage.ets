@@ -1,5 +1,6 @@
 import { EmptyView } from '../common/Components';
-import { BottomBuilderShowType, HdsNavigation, HdsNavigationTitleMode, HideMode, TitleSize } from '@kit.UIDesignKit';
+import { BottomBuilderShowType, HdsNavigation, HdsNavigationTitleMode, TitleSize } from '@kit.UIDesignKit';
+import { SegmentButton, SegmentButtonOptions, SegmentButtonTextItem, ItemRestriction } from '@kit.ArkUI';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import promptAction from '@ohos.promptAction';
 import { library, LibraryWork } from '../data/Library';
@@ -8,14 +9,8 @@ import { sourceApi } from '../data/SourceApi';
 import { readProgressStore, historyStore } from '../data/Stores';
 import { ReadingProgress, HistoryItem, Album, errorMessage } from '../models/Models';
 import { SourceCover } from '../common/SourceCover';
-import { BG, SUB_CARD, TEXT_MAIN, TEXT_SUB, PRIMARY, PRIMARY_SOFT, DANGER, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
+import { BG, TEXT_MAIN, TEXT_SUB, DANGER, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
-
-interface UpdatesSegmentOptions {
-  label: string;
-  count: number;
-  index: number;
-}
 
 @Component
 export struct UpdatesPage {
@@ -32,6 +27,10 @@ export struct UpdatesPage {
   @State errors: Array<string> = [];
   @State busy: boolean = false;
   @State section: number = 0;
+  @State @Watch('segmentChanged') segmentIndexes: number[] = [0];
+  @State segmentOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
+    buttons: [{ text: '更新' }, { text: '阅读历史' }] as ItemRestriction<SegmentButtonTextItem>
+  });
 
   private scroller: Scroller = new Scroller();
   private generation: number = 0;
@@ -44,6 +43,10 @@ export struct UpdatesPage {
   aboutToDisappear(): void {
     this.generation++;
     this.loadGeneration++;
+  }
+
+  private segmentChanged(): void {
+    this.section = this.segmentIndexes.length > 0 ? this.segmentIndexes[0] : 0;
   }
 
   private tabChanged(): void {
@@ -129,68 +132,61 @@ export struct UpdatesPage {
     return progress === undefined ? '' : `第 ${progress.page + 1} / ${progress.totalPages} 页`;
   }
 
-  @Builder
-  private SegmentPill($$: UpdatesSegmentOptions) {
-    Button({ type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL }) {
-      Row({ space: 6 }) {
-        Text($$.label).fontSize(13).fontWeight(this.section === $$.index ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.section === $$.index ? PRIMARY : TEXT_SUB)
-        if ($$.count > 0) {
-          Text(`${$$.count}`).fontSize(10).fontWeight(FontWeight.Bold).fontColor(this.section === $$.index ? PRIMARY : TEXT_SUB)
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 }).borderRadius(8)
-            .backgroundColor(this.section === $$.index ? PRIMARY_SOFT : SUB_CARD)
-        }
-      }.justifyContent(FlexAlign.Center)
-    }
-    .layoutWeight(1).height(36)
-    .backgroundColor(this.section === $$.index ? BG : Color.Transparent)
-    .onClick(() => { this.section = $$.index; })
-  }
-
+  /** 分段固定在标题栏下方，不随滚动隐藏。 */
   @Builder
   private SectionHeader() {
-    Row({ space: 4 }) {
-      this.SegmentPill({ label: '更新', count: this.updatedWorks().length, index: 0 })
-      this.SegmentPill({ label: '阅读历史', count: this.history.length, index: 1 })
-    }.padding(3).borderRadius(21).backgroundColor(SUB_CARD)
-    .border({ width: 0.5, color: DIVIDER }).margin({ left: 16, right: 16, bottom: 12 })
+    Column() {
+      SegmentButton({ options: this.segmentOptions, selectedIndexes: $segmentIndexes })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 4, bottom: 8 })
   }
 
+  /** 列表行：标题 16 两行、副文字 12；整行点按进入详情，历史行尾保留文字按钮「继续阅读」。 */
   @Builder
   private Entry(title: string, cover: string, subtitle: string, key: string, reading: boolean) {
-    Row({ space: 14 }) {
-      Row({ space: 14 }) {
-      Column() { SourceCover({ url: cover, sourceKey: key, radius: 10 }) }.width(56).aspectRatio(0.75)
-      Column({ space: 6 }) {
-        Text(title).fontColor(TEXT_MAIN).fontSize(15).fontWeight(FontWeight.Bold)
+    Row({ space: 12 }) {
+      Column() { SourceCover({ url: cover, sourceKey: key, radius: 8 }) }.width(56).aspectRatio(0.75)
+      Column({ space: 4 }) {
+        Text(title).fontColor(TEXT_MAIN).fontSize(16)
           .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
-        Text(subtitle).fontColor(TEXT_SUB).fontSize(12).maxLines(1).width('100%')
+        if (subtitle !== '') {
+          Text(subtitle).fontColor(TEXT_SUB).fontSize(12).maxLines(1).width('100%')
+        }
       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-      }.layoutWeight(1)
-      .onClick(() => this.stack.pushPathByName(ROUTE_ALBUM, { aid: key } as MangaRouteParams))
       if (reading) {
-        Button('继续阅读', { buttonStyle: ButtonStyleMode.NORMAL }).fontSize(13).fontColor(PRIMARY).backgroundColor(PRIMARY_SOFT)
+        Button('继续阅读', { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
           .onClick((): void => {
             this.stack.pushPathByName(ROUTE_READER, { aid: key } as MangaRouteParams);
           })
       }
-    }.padding({ top: 12, bottom: 12 }).width('100%')
+    }
+    .padding({ top: 12, bottom: 12 }).width('100%')
+    .onClick(() => this.stack.pushPathByName(ROUTE_ALBUM, { aid: key } as MangaRouteParams))
+  }
+
+  @Builder
+  private RowDivider() {
+    // 分隔线从封面右侧起：封面 56 + 间距 12。
+    Divider().strokeWidth('1px').color(DIVIDER).margin({ left: 68 })
   }
 
   build() {
     HdsNavigation() {
       Column() {
         Scroll(this.scroller) {
-          Column({ space: 8 }) {
-            if (this.busy) { Text('正在检查更新').fontSize(13).fontColor(TEXT_SUB) }
-            ForEach(this.errors, (error: string) => { Text(error).fontSize(13).fontColor(DANGER).width('100%') }, (error: string) => error)
+          Column() {
+            if (this.busy) { Text('正在检查更新').fontSize(14).fontColor(TEXT_SUB).padding({ top: 8, bottom: 8 }) }
+            ForEach(this.errors, (error: string) => { Text(error).fontSize(14).fontColor(DANGER).width('100%') }, (error: string) => error)
             if (this.section === 0) {
-              ForEach(this.updatedWorks(), (work: LibraryWork) => {
+              ForEach(this.updatedWorks(), (work: LibraryWork, index: number) => {
+                if (index > 0) { this.RowDivider() }
                 this.Entry(work.title, work.cover, `发现 ${work.newChapters} 个新章节`, work.activeKey, false)
               }, (work: LibraryWork) => work.id)
               if (this.updatedWorks().length === 0) { EmptyView({ quiet: true, message: '暂无新章节', showRetry: false }) }
             } else {
-              ForEach(this.history, (item: HistoryItem) => {
+              ForEach(this.history, (item: HistoryItem, index: number) => {
+                if (index > 0) { this.RowDivider() }
                 this.Entry(item.title, item.coverUrl, this.historySubtitle(item), item.id, true)
               }, (item: HistoryItem) => item.id)
               if (this.history.length === 0) { EmptyView({ quiet: true, message: '暂无阅读历史', showRetry: false }) }
@@ -201,21 +197,15 @@ export struct UpdatesPage {
       }.width('100%').height('100%').alignItems(HorizontalAlign.Start)
     }
     .titleBar({ content: { title: { mainTitle: '动态', mainTitleSize: TitleSize.TITLE_ML },
-      bottomBuilder: { builder: (): void => this.SectionHeader(), height: 54, showType: BottomBuilderShowType.DIRECTLY_SHOW },
-      menu: { value: [
-      { content: { icon: $r('sys.symbol.arrow_clockwise'), label: '检查更新', action: (): void => { this.refresh(); } } },
+      bottomBuilder: { builder: (): void => this.SectionHeader(), height: 52, showType: BottomBuilderShowType.DIRECTLY_SHOW },
+      // 标题栏只露出「检查更新」，其余收进 HDS 自动生成的「更多」菜单。
+      menu: { maxCount: 2, value: [
+      { content: { icon: $r('sys.symbol.arrow_clockwise'), label: '检查更新', isEnabled: !this.busy, action: (): void => { this.refresh(); } } },
       { content: { icon: $r('sys.symbol.arrow_down_circle'), label: '下载', action: (): void => { this.stack.pushPathByName(ROUTE_DOWNLOADS, {} as MangaRouteParams); } } },
-      { content: { icon: $r('sys.symbol.trash'), label: '清空阅读历史', action: (): void => this.clearHistory() } }
+      { content: { icon: $r('sys.symbol.trash'), label: '清空阅读历史', isEnabled: this.section === 1 && this.history.length > 0,
+        action: (): void => this.clearHistory() } }
     ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
     .titleMode(HdsNavigationTitleMode.MINI)
-    .dynamicHideTitleBar({
-      hideTitleArea: false,
-      hideBottomBuilder: true,
-      hideStatusBar: false,
-      mode: HideMode.SCROLL_UP_TO,
-      hideOffset: 0,
-      hideRatio: 2
-    })
     .mode(NavigationMode.Stack).hideBackButton(true).bindToScrollable([this.scroller]).width('100%').height('100%').backgroundColor(BG)
   }
 }

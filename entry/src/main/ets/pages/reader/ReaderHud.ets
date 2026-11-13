@@ -208,8 +208,8 @@ export struct ReaderHud {
         .width(92)
         .height(128)
       Text(`${clampPage(Math.round(this.sliderValue) - 1, this.pages.length) + 1}`)
-        .fontSize(11)
-        .fontWeight(FontWeight.Bold)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
         .fontColor($r('sys.color.font_primary'))
     }
     .padding(6)

@@ -118,7 +118,7 @@ function environment() {
       '@ohos.arkui.uiMaterial': { Material: { empty: {} }, ImmersiveMaterial: class { constructor() {} }, ImmersiveStyle: { ULTRA_THIN: 0, THIN: 1, REGULAR: 2, ULTRA_THICK: 3 } },
       '@ohos.arkui.modifier': { SymbolGlyphModifier: class {} },
       '@ohos.display': { getDefaultDisplaySync: () => ({ width: 1080 }) }, '@kit.ArkUI': { window: {},
-        SegmentButtonOptions: { capsule: options => options }, ToolBarOptions: class extends Array {} },
+        SegmentButtonOptions: { capsule: options => options, tab: options => options }, ToolBarOptions: class extends Array {} },
       '@ohos.app.ability.ConfigurationConstant': {}, '@ohos.promptAction': { showToast: () => {} },
       '@ohos.window': { findWindow: name => {
         state.privacyWindows ??= []; state.privacyWindows.push(name);

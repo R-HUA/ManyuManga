@@ -5,7 +5,7 @@
 import web_webview from '@ohos.web.webview';
 import { EhSettings } from '../../data/eh/EhSettings';
 import { GallerySite } from '../../data/eh/EhNative';
-import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, DANGER_SOFT, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER, ON_PRIMARY } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, STATUS_OK, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../../common/Route';
 
@@ -102,15 +102,15 @@ export struct EhSiteSheet {
   @Builder
   private SitePill(label: string, mode: string) {
     Text(label)
-      .fontSize(13)
-      .fontWeight(this.siteMode === mode ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.siteMode === mode ? ON_PRIMARY : TEXT_MAIN)
+      .fontSize(14)
+      .fontWeight(this.siteMode === mode ? FontWeight.Medium : FontWeight.Regular)
+      .fontColor(this.siteMode === mode ? PRIMARY : TEXT_MAIN)
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 9, bottom: 9 })
       .constraintSize({ minWidth: 40, minHeight: 40 })
       .borderRadius(16)
-      .backgroundColor(this.siteMode === mode ? PRIMARY : SUB_CARD)
+      .backgroundColor(this.siteMode === mode ? PRIMARY_SOFT : SUB_CARD)
       .onClick(() => {
         this.pickSite(mode);
       })
@@ -118,14 +118,8 @@ export struct EhSiteSheet {
 
   @Builder
   private WebLinkButton(label: string, url: string) {
-    Button(label, { buttonStyle: ButtonStyleMode.TEXTUAL })
-      .fontSize(12)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(PRIMARY)
-      .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+    Button(label, { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
       .constraintSize({ minWidth: 40, minHeight: 40 })
-      .borderRadius(14)
-      .backgroundColor(PRIMARY_SOFT)
       .onClick(() => {
         this.webUrl = url;
       })
@@ -137,7 +131,7 @@ export struct EhSiteSheet {
         if (!this.embedded) {
           Text('E-Hentai 站点与账号')
             .fontSize(20)
-            .fontWeight(FontWeight.Bold)
+            .fontWeight(FontWeight.Medium)
             .fontColor(TEXT_MAIN)
             .width('100%')
         }
@@ -156,29 +150,16 @@ export struct EhSiteSheet {
 
         if (this.siteMode === GallerySite.EX && EhSettings.exDowngraded()) {
           Text('里站需要账号 Cookie（含 igneous），未登录时自动回退表站以避免 Sad Panda 空响应。')
-            .fontSize(11)
+            .fontSize(12)
             .fontColor(TEXT_SUB)
             .width('100%')
         }
 
         // ── 内置 WebView 登录（按需展开） ──
         if (!this.showWebLogin) {
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.website'))
-              .fontSize(16)
-              .fontColor([PRIMARY])
-            Text('打开内置网页登录（Cookie 自动同步）')
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(PRIMARY)
-          }
-          .width('100%')
-          .height(44)
-          .justifyContent(FlexAlign.Center)
-          .borderRadius(14)
-          .backgroundColor(PRIMARY_SOFT)
-          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
-          .onClick(() => {
+          Button('打开内置网页登录（Cookie 自动同步）', { buttonStyle: ButtonStyleMode.NORMAL })
+            .width('100%')
+            .onClick(() => {
             this.showWebLogin = true;
           })
         } else {
@@ -190,13 +171,8 @@ export struct EhSiteSheet {
                 .layoutWeight(1)
               this.WebLinkButton('登录页', FORUMS_LOGIN_URL)
               this.WebLinkButton('论坛首页', FORUMS_HOME_URL)
-              Button('收起', { buttonStyle: ButtonStyleMode.TEXTUAL })
-                .fontSize(12)
-                .fontColor(TEXT_SUB)
-                .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              Button('收起', { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
                 .constraintSize({ minWidth: 40, minHeight: 40 })
-                .borderRadius(8)
-                .backgroundColor(SUB_CARD)
                 .onClick(() => {
                   this.showWebLogin = false;
                 })
@@ -205,7 +181,7 @@ export struct EhSiteSheet {
             Web({ src: this.webUrl, controller: this.controller })
               .height(360)
               .width('100%')
-              .borderRadius(14)
+              .borderRadius(16)
               .backgroundColor(SUB_CARD)
               .javaScriptAccess(true)
               .domStorageAccess(true)
@@ -231,7 +207,7 @@ export struct EhSiteSheet {
             .width('100%')
           TextArea({ text: this.cookieInput, placeholder: 'ipb_member_id=…; ipb_pass_hash=…; igneous=…' })
             .height(88)
-            .borderRadius(14)
+            .borderRadius(16)
             .backgroundColor(SUB_CARD)
             .fontColor(TEXT_MAIN)
             .placeholderColor(TEXT_SUB)
@@ -247,15 +223,8 @@ export struct EhSiteSheet {
                   this.saveCookie();
                 }
               })
-            Text('退出登录')
-              .fontSize(13)
-              .fontWeight(FontWeight.Bold)
+            Button('退出登录', { buttonStyle: ButtonStyleMode.TEXTUAL })
               .fontColor(DANGER)
-              .textAlign(TextAlign.Center)
-              .padding({ left: 20, right: 20 })
-              .height(38)
-              .borderRadius(19)
-              .backgroundColor(DANGER_SOFT)
               .onClick(() => {
                 if (!this.busy) {
                   this.logout();
@@ -275,7 +244,7 @@ export struct EhSiteSheet {
             .fontSize(12)
             .fontColor(TEXT_SUB)
           Text(this.tagLabel)
-            .fontSize(11)
+            .fontSize(12)
             .fontColor(TEXT_SUB)
             .width('100%')
             .lineHeight(16)
@@ -296,13 +265,17 @@ export struct EhSiteSheet {
             .width('100%')
         }
 
-        Button('本源屏蔽规则', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(PRIMARY)
-          .backgroundColor(PRIMARY_SOFT)
+        Row({ space: 12 }) {
+          Text('本源屏蔽规则')
+            .fontSize(16)
+            .fontColor(TEXT_MAIN)
+            .layoutWeight(1)
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(16)
+            .fontColor([TEXT_SUB])
+        }
           .width('100%')
-          .height(40)
+          .constraintSize({ minHeight: 48 })
           .onClick(() => {
             if (!this.embedded) {
               this.close();
@@ -311,15 +284,8 @@ export struct EhSiteSheet {
           })
 
         if (!this.embedded) {
-          Text('收起')
-            .fontSize(14)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(TEXT_MAIN)
-            .textAlign(TextAlign.Center)
+          Button('收起', { buttonStyle: ButtonStyleMode.NORMAL })
             .width('100%')
-            .height(42)
-            .borderRadius(21)
-            .backgroundColor(SUB_CARD)
             .onClick(() => {
               this.close();
             })

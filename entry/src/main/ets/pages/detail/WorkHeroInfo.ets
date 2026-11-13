@@ -8,7 +8,7 @@ import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
-import { BG, ON_PRIMARY, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { ON_PRIMARY, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 
 const TITLE_MAX_LINES: number = 3;
 const DESC_MAX_LINES: number = 3;
@@ -179,10 +179,10 @@ export struct WorkHeroInfo {
   @Builder
   private AuthorRow() {
     Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
-      Text('作者').fontSize(13).fontColor(TEXT_SUB).margin({ right: 8 })
+      Text('作者').fontSize(14).fontColor(TEXT_SUB).margin({ right: 8 })
       ForEach(this.authorNames(), (author: MetadataTerm, index: number) => {
         if (index > 0) {
-          Text('、').fontSize(13).fontColor(TEXT_SUB)
+          Text('、').fontSize(14).fontColor(TEXT_SUB)
         }
         MetadataSearchChip({ term: author, field: 'author', sourceId: sourceId(this.aid),
           sourceName: this.sourceName, chipStyle: 'plain' })
@@ -200,7 +200,7 @@ export struct WorkHeroInfo {
             SourceCover({
               url: this.album.coverUrl,
               sourceKey: this.aid,
-              radius: 14
+              radius: 8
             })
           }
           .width(this.breakpoint === 'sm' ? 118 : 148)
@@ -241,7 +241,7 @@ export struct WorkHeroInfo {
 
             if (this.fromLibrary) {
               Text(this.sourceBadge())
-                .fontSize(13)
+                .fontSize(14)
                 .fontColor(TEXT_SUB)
                 .constraintSize({ minWidth: 40, minHeight: 40 })
                 .accessibilityText(`当前来源 ${this.sourceBadge()}，点按换源`)
@@ -250,7 +250,7 @@ export struct WorkHeroInfo {
                 })
             } else {
               Text(this.sourceBadge())
-                .fontSize(13)
+                .fontSize(14)
                 .fontColor(TEXT_SUB)
             }
           }
@@ -323,33 +323,6 @@ export struct WorkHeroInfo {
       .padding({ left: 16, right: 16, top: this.topInset + 12, bottom: 16 })
       .alignItems(HorizontalAlign.Start)
       .width('100%')
-      .background(this.HeroBackdrop(), { align: Alignment.Top })
-    }
-  }
-
-  /** 沉浸式头部背景：封面高斯模糊铺满标题栏下方，再以渐变过渡到页面底色。 */
-  @Builder
-  HeroBackdrop() {
-    if (this.album !== null) {
-      Stack({ alignContent: Alignment.Top }) {
-        Column() {
-          SourceCover({ url: this.album.coverUrl, sourceKey: this.aid, radius: 0 })
-        }
-        .width('100%')
-        .blur(40)
-        .opacity(0.55)
-
-        Column()
-          .width('100%')
-          .height('100%')
-          .linearGradient({
-            direction: GradientDirection.Bottom,
-            colors: [['rgba(0,0,0,0)', 0.0], [BG, 0.92]]
-          })
-      }
-      .width('100%')
-      .height(this.topInset + 240)
-      .clip(true)
     }
   }
 }

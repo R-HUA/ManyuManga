@@ -249,7 +249,7 @@ export struct LibraryPage {
             }
             .padding(12)
             .margin({ left: 16, right: 16 })
-            .borderRadius(14)
+            .borderRadius(16)
             .backgroundColor(CARD)
           }
 
@@ -267,7 +267,7 @@ export struct LibraryPage {
 
               Text(this.works.length === 0 ? '书架还没有收藏漫画' : '没有符合当前筛选的漫画')
                 .fontSize(16)
-                .fontWeight(FontWeight.Bold)
+                .fontWeight(FontWeight.Medium)
                 .fontColor(TEXT_MAIN)
               Text(this.works.length === 0 ? '在图源中找到作品后可加入书架' : '请调整筛选条件')
                 .fontSize(12)
@@ -284,7 +284,7 @@ export struct LibraryPage {
               if (this.works.length > 0) {
                 Button('重置筛选', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
                   .height(40)
-                  .fontSize(13)
+                  .fontSize(14)
                   .fontWeight(FontWeight.Medium)
                   .padding({ left: 20, right: 20 })
                   .onClick(() => {

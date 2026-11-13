@@ -1,4 +1,4 @@
-import { CARD, CHIP_BG, CHIP_R, FONT_BODY, PRIMARY, TEXT_MAIN, TEXT_SUB, ON_PRIMARY } from '../../common/Theme';
+import { CARD, FONT_BODY, PRIMARY, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { customCatStore } from '../../data/Stores';
 
 @CustomDialog
@@ -28,7 +28,7 @@ export struct AddCatDialog {
     Column({ space: 12 }) {
       Text('添加自定义分类 / tag')
         .fontSize(16)
-        .fontWeight(FontWeight.Bold)
+        .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
       TextInput({ text: this.input, placeholder: '名称 / 关键词' })
         .fontSize(FONT_BODY)
@@ -38,24 +38,18 @@ export struct AddCatDialog {
           this.err = '';
         })
       Text(`${this.cpCount()} / 16 字符`)
-        .fontSize(11)
+        .fontSize(12)
         .fontColor(TEXT_SUB)
         .width('100%')
       if (this.err !== '') {
         Text(this.err)
-          .fontSize(11)
+          .fontSize(12)
           .fontColor(PRIMARY)
           .width('100%')
       }
       Row({ space: 12 }) {
-        Text('取消')
-          .fontSize(FONT_BODY)
-          .fontColor(TEXT_SUB)
+        Button('取消', { buttonStyle: ButtonStyleMode.NORMAL })
           .layoutWeight(1)
-          .textAlign(TextAlign.Center)
-          .padding({ top: 9, bottom: 9 })
-          .backgroundColor(CHIP_BG)
-          .borderRadius(CHIP_R)
           .onClick(() => {
             if (this.controller) {
               this.controller.close();

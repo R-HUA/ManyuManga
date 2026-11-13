@@ -161,10 +161,8 @@ export struct BlockRuleEditor {
             .fontSize(14)
             .fontColor(TEXT_MAIN)
             .width('100%')
-          Button('删除', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-            .fontSize(12)
+          Button('删除', { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
             .fontColor(DANGER)
-            .height(32)
             .onClick(() => {
               blockTagsStore.removeRule(rule.id).then((): void => {
                 this.reload();
@@ -175,7 +173,7 @@ export struct BlockRuleEditor {
         }
         .width('100%')
         .padding(12)
-        .borderRadius(14)
+        .borderRadius(16)
         .backgroundColor(CARD)
       }, (rule: BlockRule) => `${rule.id}_${rule.enabled}_${rule.value}`)
     }

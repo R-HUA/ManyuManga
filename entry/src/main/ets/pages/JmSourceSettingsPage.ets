@@ -4,19 +4,8 @@ import promptAction from '@ohos.promptAction';
 import { jmApi } from '../data/JmApi';
 import { DomainSpeed } from '../models/Models';
 import { MangaRouteParams, ROUTE_BLOCK_RULES } from '../common/Route';
-import { EmptyView } from '../common/Components';
-import {
-  BG,
-  CARD,
-  SUB_CARD,
-  PRIMARY,
-  STATUS_OK,
-  DANGER,
-  DANGER_SOFT,
-  TEXT_MAIN,
-  TEXT_SUB,
-  DIVIDER
-} from '../common/Theme';
+import { BG, CARD, PRIMARY, STATUS_OK, DANGER, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../common/Theme';
+import { SettingsActionRow, settingsRowRadius } from './settings/SettingsRows';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -29,6 +18,7 @@ export struct JmSourceSettingsPage {
   @State currentDomain: string = '';
   @State domainSpeeds: Array<DomainSpeed> = [];
   @State testingSpeed: boolean = false;
+  private scroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     this.loadData();
@@ -71,119 +61,114 @@ export struct JmSourceSettingsPage {
     }
   }
 
+  @Builder
+  private DomainRow(domain: string) {
+    Row({ space: 12 }) {
+      Text(domain)
+        .fontSize(16)
+        .fontColor(TEXT_MAIN)
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      if (this.speedFor(domain) !== undefined) {
+        Text(this.speedFor(domain)!.ok ? `${this.speedFor(domain)!.ms} ms` : '不可达')
+          .fontSize(12)
+          .fontColor(this.speedFor(domain)!.ok ? STATUS_OK : DANGER)
+      }
+      Row() {
+        if (domain === this.currentDomain) {
+          SymbolGlyph($r('sys.symbol.checkmark'))
+            .fontSize(20)
+            .fontColor([PRIMARY])
+            .accessibilityText('当前线路')
+        }
+      }
+      .width(24)
+      .justifyContent(FlexAlign.Center)
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 56 })
+    .padding({ left: 12, right: 12 })
+    .alignItems(VerticalAlign.Center)
+  }
+
   build() {
     HdsNavDestination() {
-      Column() {
-        Scroll() {
-          Column({ space: 16 }) {
-            // 1. 镜像节点测速与切换
-            Column({ space: 14 }) {
-              Row() {
-                Column({ space: 2 }) {
-                  Text('镜像节点与线路')
-                    .fontSize(16)
-                    .fontColor(TEXT_MAIN)
-                    .fontWeight(FontWeight.Bold)
-                  Text(`当前线路：${this.currentDomain || '默认线路'}`)
-                    .fontSize(12)
-                    .fontColor(TEXT_SUB)
-                }
-                .alignItems(HorizontalAlign.Start)
-                .layoutWeight(1)
-
-                Button(this.testingSpeed ? '测速中…' : '并发测速', {
-                  type: ButtonType.Capsule,
-                  buttonStyle: ButtonStyleMode.NORMAL
-                })
-                  .fontSize(12)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor(PRIMARY)
-                  .backgroundColor(SUB_CARD)
-                  .height(32)
-                  .enabled(!this.testingSpeed)
-                  .onClick(() => {
-                    this.runSpeedTest();
-                  })
-              }
-              .width('100%')
-
-              Column({ space: 8 }) {
-                ForEach(this.domains, (domain: string) => {
-                  Row({ space: 10 }) {
-                    Circle({ width: 7, height: 7 })
-                      .fill(domain === this.currentDomain ? STATUS_OK : TEXT_SUB)
-
-                    Text(domain)
-                      .fontSize(13)
-                      .fontWeight(domain === this.currentDomain ? FontWeight.Bold : FontWeight.Medium)
-                      .fontColor(domain === this.currentDomain ? PRIMARY : TEXT_MAIN)
-                      .layoutWeight(1)
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-                    if (this.speedFor(domain) !== undefined) {
-                      Text(this.speedFor(domain)!.ok ? `${this.speedFor(domain)!.ms} ms` : '不可达')
-                        .fontSize(11)
-                        .fontWeight(FontWeight.Bold)
-                        .fontColor(this.speedFor(domain)!.ok ? STATUS_OK : DANGER)
-                        .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-                        .borderRadius(8)
-                        .backgroundColor(CARD)
-                    }
-
-                    Button(domain === this.currentDomain ? '当前' : '切换', {
-                      type: ButtonType.Capsule,
-                      buttonStyle: ButtonStyleMode.NORMAL
-                    })
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor(domain === this.currentDomain ? TEXT_SUB : PRIMARY)
-                      .backgroundColor(SUB_CARD)
-                      .height(30)
-                      .onClick(() => {
-                        if (domain !== this.currentDomain) {
-                          this.selectDomain(domain);
-                        }
-                      })
-                  }
-                  .padding({ left: 12, right: 10, top: 9, bottom: 9 })
-                  .borderRadius(14)
-                  .backgroundColor(SUB_CARD)
-                  .width('100%')
-                }, (domain: string) => `${domain}_${domain === this.currentDomain}_${this.speedFor(domain)?.ms ?? -1}`)
-              }
-              .width('100%')
+      List({ scroller: this.scroller }) {
+        // 线路：整行点按切换，当前线路行尾打勾；测速结果显示在行尾。
+        ListItemGroup({ header: this.GroupHeader('镜像线路'), footer: this.GroupFooter() }) {
+          ForEach(this.domains, (domain: string, index: number) => {
+            ListItem() {
+              this.DomainRow(domain)
             }
-            .padding(18)
-            .width('100%')
             .backgroundColor(CARD)
-            .borderRadius(20)
-            .border({ width: 0.5, color: DIVIDER })
-
-            Button('本源屏蔽规则', { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-              .fontSize(14)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(PRIMARY)
-              .backgroundColor(SUB_CARD)
-              .width('100%')
-              .height(40)
-              .onClick(() => {
-                this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: 'jm' } as MangaRouteParams);
-              })
-          }
-          .padding({ left: 16, right: 16, top: 16, bottom: 28 + this.bottomInset })
-          .width('100%')
+            .borderRadius(settingsRowRadius(index, this.domains.length))
+            .onClick(() => {
+              if (domain !== this.currentDomain) {
+                this.selectDomain(domain);
+              }
+            })
+          }, (domain: string) => `${domain}_${domain === this.currentDomain}_${this.speedFor(domain)?.ms ?? -1}_${this.speedFor(domain)?.ok ?? false}`)
         }
-        .layoutWeight(1)
-        .width('100%')
-        .scrollBar(BarState.Off)
-        .align(Alignment.TopStart)
+        .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 12, endMargin: 12 })
+
+        ListItemGroup({ header: this.GroupHeader('过滤') }) {
+          ListItem() {
+            SettingsActionRow({
+              title: '本源屏蔽规则',
+              onTap: (): void => {
+                this.stack.pushPathByName(ROUTE_BLOCK_RULES, { sourceId: 'jm' } as MangaRouteParams);
+              }
+            })
+          }
+          .backgroundColor(CARD)
+          .borderRadius(settingsRowRadius(0, 1))
+        }
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(BG)
+      .padding({ left: 16, right: 16 })
+      .contentEndOffset(28 + this.bottomInset)
+      .scrollBar(BarState.Off)
+      .clip(false)
     }
-    .titleBar({ content: { title: { mainTitle: '节点与过滤设置' } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true })
+    .titleBar({
+      content: {
+        title: { mainTitle: '节点与过滤设置' },
+        menu: {
+          value: [{
+            content: {
+              icon: $r('sys.symbol.arrow_clockwise'),
+              label: this.testingSpeed ? '测速中' : '并发测速',
+              isEnabled: !this.testingSpeed,
+              action: (): void => { this.runSpeedTest(); }
+            }
+          }]
+        }
+      },
+      style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: true
+    })
     .titleMode(HdsNavDestinationTitleMode.MINI)
+    .bindToScrollable([this.scroller])
+    .backgroundColor(BG)
+  }
+
+  @Builder
+  private GroupHeader(title: string) {
+    Text(title)
+      .fontSize(14)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(TEXT_SUB)
+      .width('100%')
+      .padding({ left: 12, top: 16, bottom: 8 })
+  }
+
+  @Builder
+  private GroupFooter() {
+    Text(this.testingSpeed ? '正在测速…' : `当前线路：${this.currentDomain || '默认线路'}`)
+      .fontSize(12)
+      .fontColor(TEXT_SUB)
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 8 })
   }
 }

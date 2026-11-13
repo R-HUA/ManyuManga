@@ -155,7 +155,7 @@ export struct EhGalleryPane {
         Button(this.failedMode === 'more' ? '加载失败，点按重试' : '刷新失败，点按重试', { buttonStyle: ButtonStyleMode.TEXTUAL })
           .constraintSize({ minWidth: 40, minHeight: 40 })
           .fontSize(12)
-          .fontWeight(FontWeight.Bold)
+          .fontWeight(FontWeight.Medium)
           .fontColor(PRIMARY)
           .onClick(() => {
             this.load(this.failedMode);
@@ -175,7 +175,7 @@ export struct EhGalleryPane {
         Column({ space: 10 }) {
           LoadingProgress().width(28).height(28).color(PRIMARY)
           Text('正在连接画廊广场…')
-            .fontSize(13)
+            .fontSize(14)
             .fontColor(TEXT_SUB)
         }
         .width('100%')
@@ -184,7 +184,7 @@ export struct EhGalleryPane {
       } else if (this.error !== '' && this.items.length === 0) {
         Column({ space: 12 }) {
           Text(this.error)
-            .fontSize(13)
+            .fontSize(14)
             .fontColor(TEXT_SUB)
             .textAlign(TextAlign.Center)
             .padding({ left: 24, right: 24 })
@@ -201,7 +201,7 @@ export struct EhGalleryPane {
         Column() {
           Text(this.galleryIndex === 2 ? '关注订阅为空：登录后在我的标签页添加关注标签' :
             (this.galleryIndex === 3 ? '云端收藏为空：登录账号后可查看 E-Hentai 收藏夹' : '暂无画廊'))
-            .fontSize(13)
+            .fontSize(14)
             .fontColor(TEXT_SUB)
             .textAlign(TextAlign.Center)
             .padding({ left: 24, right: 24 })

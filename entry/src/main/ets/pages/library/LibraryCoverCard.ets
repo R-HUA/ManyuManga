@@ -29,7 +29,7 @@ export struct LibraryCoverCard {
         } })
       if (this.selected.length > 0) {
         Stack() {
-          if (this.selected.includes(this.work.id)) { SymbolGlyph($r('sys.symbol.checkmark')).fontSize(13).fontColor([ON_PRIMARY]) }
+          if (this.selected.includes(this.work.id)) { SymbolGlyph($r('sys.symbol.checkmark')).fontSize(14).fontColor([ON_PRIMARY]) }
         }.width(24).height(24).borderRadius(12).margin(7)
         .backgroundColor(this.selected.includes(this.work.id) ? PRIMARY : OVERLAY_SCRIM)
         .hitTestBehavior(HitTestMode.None)

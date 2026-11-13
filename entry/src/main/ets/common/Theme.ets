@@ -1,14 +1,14 @@
 /**
  * 全局中性深浅色主题。
  */
-export const PRIMARY: Resource = $r('app.color.primary');
+/** 品牌强调色：只用于每页至多一个主按钮、选中或当前项、文字链接。 */
+export const PRIMARY: Resource = $r('sys.color.brand');
+/** 仅用于选中态底色。 */
 export const PRIMARY_SOFT: Resource = $r('app.color.primary_soft');
-export const ACCENT: Resource = $r('app.color.accent');
-export const ACCENT_SOFT: Resource = $r('app.color.accent_soft');
 
-export const BG: Resource = $r('app.color.bg');
-export const CARD: Resource = $r('app.color.card');
-export const SUB_CARD: Resource = $r('app.color.sub_card');
+export const BG: Resource = $r('sys.color.background_secondary');
+export const CARD: Resource = $r('sys.color.comp_background_list_card');
+export const SUB_CARD: Resource = $r('sys.color.comp_background_tertiary');
 /** 半模态卡片底：约 55% 不透明度，避免遮挡宿主材质滤镜。 */
 export const SHEET_CARD: Resource = $r('app.color.sheet_card');
 /** 强调色（PRIMARY）底上的文字/图标：系统 onPrimary token，仅用于强调底色之上。 */
@@ -20,19 +20,20 @@ export const ON_OVERLAY: Resource = $r('app.color.on_overlay');
 export const WARNING: Resource = $r('sys.color.warning');
 export const READER_BG: string = '#080A10';
 
-export const TEXT_MAIN: Resource = $r('app.color.text_main');
-export const TEXT_SUB: Resource = $r('app.color.text_sub');
+export const TEXT_MAIN: Resource = $r('sys.color.font_primary');
+export const TEXT_SUB: Resource = $r('sys.color.font_secondary');
 
-export const CHIP_BG: Resource = $r('app.color.chip_bg');
-export const DIVIDER: Resource = $r('app.color.divider');
-export const TAB_INACTIVE: Resource = $r('app.color.tab_inactive');
-export const BAR_LIGHT: Resource = $r('app.color.bar_surface');
+export const CHIP_BG: Resource = $r('sys.color.comp_background_tertiary');
+export const DIVIDER: Resource = $r('sys.color.comp_divider');
 
 export const STATUS_OK: Resource = $r('app.color.status_ok');
 export const DANGER: Resource = $r('app.color.danger');
 export const DANGER_SOFT: Resource = $r('app.color.danger_soft');
 
-export const COVER_R: number = 12;
+/** 圆角三档：封面与缩略图 8，卡片与分组 16，角标 4；高 28 的标签胶囊取半高 14。 */
+export const COVER_R: number = 8;
+export const CARD_R: number = 16;
+export const BADGE_R: number = 4;
 export const CHIP_R: number = 14;
 
 export const COVER_ASPECT_RATIO: number = 0.75;

@@ -2,7 +2,7 @@ import { EmptyView } from '../common/Components';
 import { ComicGrid } from '../common/ComicGrid';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SOURCE_BROWSE } from '../common/Route';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
-import { PRIMARY, TEXT_MAIN, TEXT_SUB, DANGER, TAB_BAR_HEIGHT } from '../common/Theme';
+import { PRIMARY, TEXT_MAIN, DANGER, TAB_BAR_HEIGHT } from '../common/Theme';
 import { EMPTY_MATERIAL } from '../common/ImmersiveMaterials';
 import { AlbumLite, errorMessage } from '../models/Models';
 import { sourceApi } from '../data/SourceApi';
@@ -88,7 +88,7 @@ export struct ExplorePage {
       Row({ space: 8 }) {
         Text($$.title)
           .fontSize(20)
-          .fontWeight(FontWeight.Bold)
+          .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_MAIN)
         if ($$.section === 'ranking') {
           Select(this.labels.map((label: string): SelectOption => { return { value: label }; }))
@@ -105,7 +105,7 @@ export struct ExplorePage {
         }
         Blank()
         Button($$.section === 'random' ? '换一批' : '查看全部', { buttonStyle: ButtonStyleMode.TEXTUAL })
-          .fontSize(13)
+          .fontSize(14)
           .fontColor(PRIMARY)
           .enabled(!$$.loading)
           .onClick(() => {
@@ -120,7 +120,7 @@ export struct ExplorePage {
       .alignItems(VerticalAlign.Center)
 
       if ($$.error !== '') {
-        Text($$.error).fontSize(13).fontColor(DANGER).width('100%')
+        Text($$.error).fontSize(14).fontColor(DANGER).width('100%')
         Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.fetchSection($$.section))
       }
       if ($$.loading && $$.items.length === 0) { LoadingProgress().width(28).height(28) }

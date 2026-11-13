@@ -1,4 +1,4 @@
-import { SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, ON_PRIMARY } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, PRIMARY_SOFT, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -13,13 +13,12 @@ export struct LibraryCategorySheet {
     Column({ space: 18 }) {
       Text('设置作品分类')
         .fontSize(20)
-        .fontWeight(FontWeight.Bold)
+        .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .width('100%')
 
       TextInput({ text: this.categoryName, placeholder: '输入新分类名称（留空则移出分类）' })
         .height(44)
-        .borderRadius(14)
         .backgroundColor(SUB_CARD)
         .fontColor(TEXT_MAIN)
         .placeholderColor(TEXT_SUB)
@@ -35,12 +34,12 @@ export struct LibraryCategorySheet {
           Flex({ wrap: FlexWrap.Wrap }) {
             ForEach(this.categories, (cat: string) => {
               Text(cat)
-                .fontSize(13)
-                .fontColor(this.categoryName === cat ? ON_PRIMARY : TEXT_MAIN)
+                .fontSize(14)
+                .fontColor(this.categoryName === cat ? PRIMARY : TEXT_MAIN)
                 .padding({ left: 14, right: 14, top: 7, bottom: 7 })
                 .margin({ right: 8, bottom: 8 })
                 .borderRadius(16)
-                .backgroundColor(this.categoryName === cat ? PRIMARY : SUB_CARD)
+                .backgroundColor(this.categoryName === cat ? PRIMARY_SOFT : SUB_CARD)
                 .onClick(() => {
                   this.categoryName = cat;
                 })

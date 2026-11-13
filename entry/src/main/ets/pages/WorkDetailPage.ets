@@ -553,48 +553,26 @@ export struct WorkDetailPage {
     if (this.album === null) {
       return [];
     }
-    return [
+    // 书架、下载常驻标题栏；其余次要操作交给 HDS 自动生成的「更多」菜单（系统菜单，不是弹框或半模态）。
+    const items: Array<HdsNavigationMenuItemOptions> = [
       { content: { icon: this.work !== null ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
         label: this.work !== null ? '移出书架' : '加入书架', action: (): void => { this.toggleShelf(); } } },
       { content: { icon: $r('sys.symbol.arrow_down_circle'), label: '下载',
-        action: (): void => { this.download(); } } },
-      { content: { icon: $r('sys.symbol.dot_grid_2x2'), label: '更多',
-        action: (): void => { this.showMoreMenu(); } } }
+        action: (): void => { this.download(); } } }
     ];
-  }
-
-  /**
-   * 标题栏「更多」：HDS 菜单项只有 action 回调、没有自定义菜单槽位，因此点按后用 showActionMenu 列出次要操作。
-   * showActionMenu 的 buttons 是 1～6 项的元组，按实际条目数构造。
-   */
-  private async showMoreMenu(): Promise<void> {
-    const labels: Array<promptAction.Button> = [];
-    const actions: Array<() => void> = [];
-    const normal: ResourceColor = $r('sys.color.font_primary');
     if (this.fromLibrary) {
-      labels.push({ text: this.sourceMenuLabel(), color: normal });
-      actions.push((): void => { this.sourceSheet = true; });
+      items.push({ content: { icon: $r('sys.symbol.square_grid_2x2'), label: this.sourceMenuLabel(),
+        action: (): void => { this.sourceSheet = true; } } });
     }
     if (this.remoteAvailable) {
-      const enabled: boolean = this.remoteReady && !this.remoteBusy;
-      labels.push({ text: this.remoteMenuLabel(), color: enabled ? normal : $r('sys.color.font_tertiary') });
-      actions.push((): void => { this.toggleRemoteShelf(); });
+      items.push({ content: { icon: $r('sys.symbol.books_vertical_fill'), label: this.remoteMenuLabel(),
+        isEnabled: this.remoteReady && !this.remoteBusy, action: (): void => { this.toggleRemoteShelf(); } } });
     }
-    labels.push({ text: '多选章节', color: normal });
-    actions.push((): void => { this.startSelecting(); });
-    labels.push({ text: '刷新', color: normal });
-    actions.push((): void => { this.refresh(); });
-    try {
-      const picked: promptAction.ActionMenuSuccessResponse = await this.getUIContext().getPromptAction().showActionMenu({
-        buttons: labels.length >= 4 ? [labels[0], labels[1], labels[2], labels[3]] :
-          labels.length === 3 ? [labels[0], labels[1], labels[2]] : [labels[0], labels[1]]
-      });
-      if (picked.index >= 0 && picked.index < actions.length) {
-        actions[picked.index]();
-      }
-    } catch (e) {
-      // 用户取消菜单不提示。
-    }
+    items.push({ content: { icon: $r('sys.symbol.checkmark_square_on_square'), label: '多选章节',
+      action: (): void => { this.startSelecting(); } } });
+    items.push({ content: { icon: $r('sys.symbol.arrow_clockwise'), label: '刷新',
+      action: (): void => { this.refresh(); } } });
+    return items;
   }
 
   @Builder
@@ -661,7 +639,7 @@ export struct WorkDetailPage {
   private ToolAction(icon: Resource, label: string, enabled: boolean, action: () => void) {
     Column({ space: 2 }) {
       SymbolGlyph(icon).fontSize(20).fontColor([enabled ? TEXT_MAIN : TEXT_SUB])
-      Text(label).fontSize(11).fontColor(enabled ? TEXT_MAIN : TEXT_SUB)
+      Text(label).fontSize(12).fontColor(enabled ? TEXT_MAIN : TEXT_SUB)
     }
     .layoutWeight(1)
     .height(56)
@@ -713,7 +691,7 @@ export struct WorkDetailPage {
           Column({ space: 12 }) {
             LoadingProgress().width(40).height(40).color(PRIMARY)
             Text('正在解析作品详情与章节列表…')
-              .fontSize(13)
+              .fontSize(14)
               .fontColor(TEXT_SUB)
           }
           .layoutWeight(1)
@@ -768,7 +746,7 @@ export struct WorkDetailPage {
         systemMaterial: IMMERSIVE_SHEET_MATERIAL
       })
     }
-    .titleBar({ content: { title: { mainTitle: this.titleText() }, menu: { value: this.titleMenu() } },
+    .titleBar({ content: { title: { mainTitle: this.titleText() }, menu: { maxCount: 3, value: this.titleMenu() } },
       style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: false })
     .titleMode(HdsNavDestinationTitleMode.MINI)
     .bindToScrollable([this.mainScroller, this.chaptersScroller])

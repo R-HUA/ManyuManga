@@ -5,7 +5,7 @@ import { ReaderZoneOverlay } from './reader/ReaderZoneOverlay';
 import { ReaderImageItem } from './reader/ReaderImageItem';
 import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { EmptyView } from '../common/Components';
-import { READER_BG, PRIMARY, ACCENT, CHIP_R, eyeComfortTint, readerHudPalette } from '../common/Theme';
+import { READER_BG, PRIMARY, eyeComfortTint, readerHudPalette } from '../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode, asNumber, asRecord, asString } from '../models/Models';
 import { ReaderOptions, ReaderSheetKind } from '../data/ReaderOptions';
 import { MangaRouteParams, ROUTE_SEARCH } from '../common/Route';
@@ -81,27 +81,17 @@ export struct ReaderPage {
       ListItem() {
         Column({ space: 14 }) {
           Text('本章完')
-            .fontSize(13)
+            .fontSize(14)
             .fontColor(readerHudPalette(this.bgPaper).textSub)
           Row({ space: 12 }) {
             if (this.chapterIndex > 0) {
-              Text('上一章')
-                .fontSize(14)
-                .fontColor(readerHudPalette(this.bgPaper).text)
-                .padding({ left: 22, right: 22, top: 9, bottom: 9 })
-                .borderRadius(CHIP_R)
-                .backgroundColor(readerHudPalette(this.bgPaper).capsule)
+              Button('上一章', { buttonStyle: ButtonStyleMode.NORMAL, controlSize: ControlSize.NORMAL })
                 .onClick(() => {
                   this.controller.goChapter(-1);
                 })
             }
             if (this.chapterIndex < this.chapters.length - 1) {
-              Text('下一章')
-                .fontSize(14)
-                .fontColor(Color.White)
-                .padding({ left: 22, right: 22, top: 9, bottom: 9 })
-                .borderRadius(CHIP_R)
-                .backgroundColor(ACCENT)
+              Button('下一章', { buttonStyle: ButtonStyleMode.EMPHASIZED, controlSize: ControlSize.NORMAL })
                 .onClick(() => {
                   this.controller.goChapter(1);
                 })
@@ -194,7 +184,7 @@ export struct ReaderPage {
     Column({ space: 14 }) {
       LoadingProgress().width(38).height(38).color(PRIMARY)
       Text('正在加载章节…')
-        .fontSize(13)
+        .fontSize(14)
         .fontColor(readerHudPalette(this.bgPaper).textSub)
     }
     .width('100%')
@@ -305,8 +295,7 @@ export struct ReaderPage {
   private PagePill() {
     Column() {
       Text(`${this.controller.chapterTitle()} P.${Math.min(this.currentPage + 1, this.pages.length)}/${this.pages.length}`)
-        .fontSize(10)
-        .fontWeight(FontWeight.Medium)
+        .fontSize(12)
         .fontColor(readerHudPalette(this.bgPaper).text)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })

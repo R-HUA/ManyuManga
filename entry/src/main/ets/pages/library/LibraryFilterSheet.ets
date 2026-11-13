@@ -34,8 +34,8 @@ export struct LibraryFilterSheet {
   build() {
     Column({ space: 18 }) {
       Text('筛选与排序')
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .width('100%')
 

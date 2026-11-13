@@ -2,14 +2,9 @@ import { formatCount } from '../../common/ComicBadge';
 import { IMMERSIVE_SHEET_MATERIAL, EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
 import { LengthMetrics } from '@kit.ArkUI';
 import {
-  BAR_LIGHT,
   DIVIDER,
-  SUB_CARD,
-  CHIP_R,
-  FONT_CAPTION,
   PRIMARY,
   SPACE_L,
-  SPACE_S,
   TEXT_MAIN,
   TEXT_SUB
 } from '../../common/Theme';

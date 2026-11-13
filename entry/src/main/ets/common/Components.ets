@@ -19,7 +19,7 @@ export struct IconCircleButton {
   onTap: () => void = () => {};
 
   build() {
-    Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+    Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
       Row() {
         SymbolGlyph(this.symbol ?? this.glyph)
           .fontSize(this.iconSize)
@@ -136,7 +136,7 @@ export struct EmptyView {
       if (this.showRetry) {
         Button(this.retryText, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
           .height(40)
-          .fontSize(13)
+          .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .padding({ left: 24, right: 24 })
           .onClick(() => {
@@ -163,8 +163,7 @@ export struct TagChip {
   build() {
     Text(this.label)
       .fontSize(12)
-      .fontWeight(this.selected ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.selected ? PRIMARY : TEXT_MAIN)
+            .fontColor(this.selected ? PRIMARY : TEXT_MAIN)
       .maxLines(1)
       .padding({ left: 12, right: 12, top: 6, bottom: 6 })
       .constraintSize({ minWidth: 40, minHeight: 40 })

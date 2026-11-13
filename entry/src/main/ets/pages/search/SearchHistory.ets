@@ -1,7 +1,7 @@
 import { searchHistoryStore } from '../../data/stores/FilterStores';
 import { errorMessage } from '../../models/Models';
 import { IconCircleButton } from '../../common/Components';
-import { SUB_CARD, TEXT_MAIN, TEXT_SUB, DANGER } from '../../common/Theme';
+import { SUB_CARD, TEXT_MAIN, DANGER } from '../../common/Theme';
 
 @Component
 export struct SearchHistory {
@@ -39,15 +39,16 @@ export struct SearchHistory {
     Column({ space: 20 }) {
       if (this.items.length > 0) {
         Row() {
-          Text('搜索历史').fontSize(16).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN).layoutWeight(1)
+          Text('搜索历史').fontSize(16).fontWeight(FontWeight.Medium).fontColor(TEXT_MAIN).layoutWeight(1)
           IconCircleButton({ glyph: $r('sys.symbol.trash'), onTap: (): void => this.confirmClear() })
         }.width('100%')
         Row({ space: 12 }) {
           Scroll() {
             Flex({ wrap: FlexWrap.Wrap }) {
               ForEach(this.items, (item: string) => {
-                Button(item, { type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL })
-                  .fontSize(15).fontColor(TEXT_MAIN).backgroundColor(SUB_CARD).height(36)
+                Text(item)
+                  .fontSize(14).fontColor(TEXT_MAIN).backgroundColor(SUB_CARD).height(36).borderRadius(18)
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   .padding({ left: 14, right: 14 }).margin({ right: 8, bottom: 8 })
                   .constraintSize({ maxWidth: '100%' }).onClick(() => this.onSubmit(item))
               }, (item: string) => item)
@@ -61,7 +62,7 @@ export struct SearchHistory {
           }
         }.alignItems(VerticalAlign.Top).width('100%')
       }
-      if (this.error !== '') { Text(this.error).fontSize(13).fontColor(DANGER).width('100%') }
+      if (this.error !== '') { Text(this.error).fontSize(14).fontColor(DANGER).width('100%') }
     }.width('100%').alignItems(HorizontalAlign.Start).padding({ top: 12 })
   }
 }

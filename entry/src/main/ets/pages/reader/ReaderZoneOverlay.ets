@@ -5,8 +5,14 @@
  */
 import { DEFAULT_TAPS, ReaderOptions, TAP_ACTIONS } from '../../data/ReaderOptions';
 import {
-  HUD_BORDER, HUD_CAPSULE, HUD_TEXT, HUD_TEXT_SUB,
-  PRIMARY, ZONE_MENU, ZONE_NEXT, ZONE_IDLE, ZONE_PREV
+  HUD_CAPSULE,
+  HUD_TEXT,
+  HUD_TEXT_SUB,
+  PRIMARY,
+  ZONE_MENU,
+  ZONE_NEXT,
+  ZONE_IDLE,
+  ZONE_PREV
 } from '../../common/Theme';
 
 @Component
@@ -21,11 +27,11 @@ export struct ReaderZoneOverlay {
       Row({ space: 10 }) {
         Column({ space: 2 }) {
           Text('触控热区')
-            .fontSize(15)
-            .fontWeight(FontWeight.Bold)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
             .fontColor(HUD_TEXT)
           Text('点按格子切换该区域动作')
-            .fontSize(11)
+            .fontSize(12)
             .fontColor(HUD_TEXT_SUB)
         }
         .alignItems(HorizontalAlign.Start)
@@ -36,7 +42,6 @@ export struct ReaderZoneOverlay {
           .fontWeight(FontWeight.Medium)
           .fontColor(HUD_TEXT)
           .backgroundColor(HUD_CAPSULE)
-          .border({ width: 0.5, color: HUD_BORDER })
           .height(32)
           .onClick(() => {
             this.options.taps = DEFAULT_TAPS.slice();
@@ -44,7 +49,7 @@ export struct ReaderZoneOverlay {
           })
         Button('完成', { type: ButtonType.Capsule, stateEffect: true })
           .fontSize(12)
-          .fontWeight(FontWeight.Bold)
+          .fontWeight(FontWeight.Medium)
           .fontColor(Color.White)
           .backgroundColor(PRIMARY)
           .height(32)
@@ -57,7 +62,6 @@ export struct ReaderZoneOverlay {
       .padding({ left: 16, right: 16, top: 10, bottom: 10 })
       .borderRadius(20)
       .backgroundColor(HUD_CAPSULE)
-      .border({ width: 0.5, color: HUD_BORDER })
       .alignItems(VerticalAlign.Center)
 
       Grid() {
@@ -66,7 +70,7 @@ export struct ReaderZoneOverlay {
             Column({ space: 3 }) {
               Text(TAP_ACTIONS[this.actionAt(index)])
                 .fontSize(12)
-                .fontWeight(FontWeight.Bold)
+                .fontWeight(FontWeight.Medium)
                 .fontColor(HUD_TEXT)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -80,7 +84,6 @@ export struct ReaderZoneOverlay {
             .height('100%')
             .backgroundColor(this.zoneColor(this.actionAt(index)))
             .borderRadius(10)
-            .border({ width: 0.5, color: HUD_BORDER })
             .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
             .onClick(() => {
               const taps: Array<number> = this.options.taps.slice();

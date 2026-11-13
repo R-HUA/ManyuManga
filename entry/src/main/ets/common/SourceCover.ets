@@ -2,7 +2,7 @@ import image from '@ohos.multimedia.image';
 import { sourceApi } from '../data/SourceApi';
 import { memoryKey, takeFromMemory, publishIntoMemory, releasePagePixelMap } from '../data/PageCachePool';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
-import { SUB_CARD, TEXT_SUB, DIVIDER } from './Theme';
+import { SUB_CARD, TEXT_SUB } from './Theme';
 
 @Component
 export struct SourceCover {
@@ -118,6 +118,5 @@ export struct SourceCover {
     .backgroundColor(SUB_CARD)
     .borderRadius(this.radius)
     .clip(true)
-    .border({ width: 0.5, color: DIVIDER })
   }
 }

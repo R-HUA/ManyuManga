@@ -26,11 +26,10 @@ export struct ProfilePage {
   private NavRow(icon: Resource, title: string, onTap: () => void) {
     Row({ space: 16 }) {
       SymbolGlyph(icon)
-        .fontSize(24).fontWeight(FontWeight.Medium)
+        .fontSize(24)
         .fontColor([TEXT_SUB])
       Text(title)
         .fontSize(16)
-        .fontWeight(FontWeight.Medium)
         .fontColor(TEXT_MAIN)
         .layoutWeight(1)
       SymbolGlyph($r('sys.symbol.chevron_right'))
@@ -66,7 +65,6 @@ export struct ProfilePage {
           .width('100%')
           .backgroundColor(CARD)
           .borderRadius(16)
-          .border({ width: 0.5, color: DIVIDER })
 
           Column() {
             this.NavRow($r('sys.symbol.book_pages'), '阅读设置', () => {
@@ -89,7 +87,6 @@ export struct ProfilePage {
           .width('100%')
           .backgroundColor(CARD)
           .borderRadius(16)
-          .border({ width: 0.5, color: DIVIDER })
 
           Column() {
             this.NavRow($r('sys.symbol.lock_fill'), '隐私与安全', () => {
@@ -104,15 +101,14 @@ export struct ProfilePage {
           .width('100%')
           .backgroundColor(CARD)
           .borderRadius(16)
-          .border({ width: 0.5, color: DIVIDER })
 
           Column({ space: 4 }) {
             Text('漫屿')
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
               .fontColor(TEXT_MAIN)
             Text('Manyu Manga v1.0.0')
-              .fontSize(11)
+              .fontSize(12)
               .fontColor(TEXT_SUB)
           }
           .padding({ top: 8, bottom: 12 })

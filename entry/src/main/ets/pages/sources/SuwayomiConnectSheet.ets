@@ -1,4 +1,4 @@
-import { SUB_CARD, PRIMARY, DANGER, TEXT_MAIN, TEXT_SUB, ON_PRIMARY } from '../../common/Theme';
+import { SUB_CARD, PRIMARY, PRIMARY_SOFT, DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 @Component
@@ -23,7 +23,6 @@ export struct SuwayomiConnectSheet {
             .fontColor(TEXT_SUB)
           TextInput({ text: this.name, placeholder: '例如：家庭 NAS 书源库' })
             .height(44)
-            .borderRadius(14)
             .backgroundColor(SUB_CARD)
             .fontColor(TEXT_MAIN)
             .placeholderColor(TEXT_SUB)
@@ -40,7 +39,6 @@ export struct SuwayomiConnectSheet {
             .fontColor(TEXT_SUB)
           TextInput({ text: this.endpoint, placeholder: '如 http://192.168.1.10:4567' })
             .height(44)
-            .borderRadius(14)
             .backgroundColor(SUB_CARD)
             .fontColor(TEXT_MAIN)
             .placeholderColor(TEXT_SUB)
@@ -68,7 +66,6 @@ export struct SuwayomiConnectSheet {
         if (this.authIndex > 0) {
           TextInput({ text: this.user, placeholder: '认证用户名' })
             .height(44)
-            .borderRadius(14)
             .backgroundColor(SUB_CARD)
             .fontColor(TEXT_MAIN)
             .placeholderColor(TEXT_SUB)
@@ -77,7 +74,6 @@ export struct SuwayomiConnectSheet {
             })
           TextInput({ text: this.password, placeholder: '认证密码' })
             .height(44)
-            .borderRadius(14)
             .backgroundColor(SUB_CARD)
             .fontColor(TEXT_MAIN)
             .placeholderColor(TEXT_SUB)
@@ -113,14 +109,14 @@ export struct SuwayomiConnectSheet {
   @Builder
   private AuthModePill(label: string, index: number) {
     Text(label)
-      .fontSize(13)
-      .fontWeight(this.authIndex === index ? FontWeight.Bold : FontWeight.Medium)
-      .fontColor(this.authIndex === index ? ON_PRIMARY : TEXT_MAIN)
+      .fontSize(14)
+      .fontWeight(this.authIndex === index ? FontWeight.Medium : FontWeight.Regular)
+      .fontColor(this.authIndex === index ? PRIMARY : TEXT_MAIN)
       .textAlign(TextAlign.Center)
       .layoutWeight(1)
       .padding({ top: 9, bottom: 9 })
       .borderRadius(16)
-      .backgroundColor(this.authIndex === index ? PRIMARY : SUB_CARD)
+      .backgroundColor(this.authIndex === index ? PRIMARY_SOFT : SUB_CARD)
       .onClick(() => {
         this.authIndex = index;
       })

@@ -40,7 +40,7 @@ export struct ChipOption {
   build() {
     Text(this.label)
       .fontSize(12)
-      .fontWeight(this.selected ? FontWeight.Bold : FontWeight.Medium)
+      .fontWeight(this.selected ? FontWeight.Medium : FontWeight.Regular)
       .fontColor(this.selected ? Color.White : 'rgba(255,255,255,0.78)')
       .padding({ left: 14, right: 14, top: 7, bottom: 7 })
       .borderRadius(16)

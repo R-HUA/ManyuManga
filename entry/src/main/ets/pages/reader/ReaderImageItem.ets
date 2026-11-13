@@ -253,7 +253,7 @@ export struct ReaderImageItem {
       if (this.fitScreen) {
         Column({ space: 8 }) {
           Text('加载失败').fontSize(14).fontColor('rgba(255,255,255,0.85)')
-          Text('点按重试（自动切换线路）').fontSize(11).fontColor('rgba(255,255,255,0.5)')
+          Text('点按重试（自动切换线路）').fontSize(12).fontColor('rgba(255,255,255,0.5)')
         }
         .width('100%')
         .height('100%')
@@ -265,7 +265,7 @@ export struct ReaderImageItem {
       } else {
         Column({ space: 8 }) {
           Text('加载失败').fontSize(14).fontColor('rgba(255,255,255,0.85)')
-          Text('点按重试（自动切换线路）').fontSize(11).fontColor('rgba(255,255,255,0.5)')
+          Text('点按重试（自动切换线路）').fontSize(12).fontColor('rgba(255,255,255,0.5)')
         }
         .width('100%')
         .aspectRatio(this.aspect)

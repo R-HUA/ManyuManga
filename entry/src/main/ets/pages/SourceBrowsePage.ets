@@ -2,7 +2,7 @@ import { EmptyView } from '../common/Components';
 import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
 import { BasicDataSource } from '../common/DataSource';
 import { ComicCard } from '../common/ComicCard';
-import { comicColumns, BG, TEXT_SUB, DANGER, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
+import { comicColumns, BG, DANGER, HDS_TITLE_BAR_HEIGHT } from '../common/Theme';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import { MangaRouteParams, ROUTE_ALBUM, ROUTE_SEARCH } from '../common/Route';
 import { sourceApi } from '../data/SourceApi';
@@ -75,7 +75,7 @@ export struct SourceBrowsePage {
     Column({ space: 8 }) {
       if (this.loading) { LoadingProgress().width(28).height(28) }
       else if (this.error !== '') {
-        Text(this.error).fontSize(13).fontColor(DANGER)
+        Text(this.error).fontSize(14).fontColor(DANGER)
         Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(() => this.load(this.page === 0))
       } else if (!this.more && this.items.length === 0) { EmptyView({ quiet: true, message: '暂无内容', showRetry: false }) } else if (!this.more) { Text('没有更多了').fontSize($r('sys.float.Body_S')).fontColor($r('sys.color.font_tertiary')).width('100%').textAlign(TextAlign.Center).padding(12) }
     }.width('100%').padding({ top: 20, bottom: 28 + this.bottom })

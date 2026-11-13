@@ -1,6 +1,6 @@
 import { BasicDataSource } from '../../common/DataSource';
 import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
-import { CARD, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB, DIVIDER } from '../../common/Theme';
+import { CARD, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 import { SearchSelection } from '../../common/Route';
 import { MetadataTerm, errorMessage } from '../../models/Models';
 import { SearchSuggestion, suggestLocal } from '../../data/SearchSuggest';
@@ -107,7 +107,7 @@ export struct SearchSuggestField {
               .fontSize(14)
               .fontColor([item.kind === 'history' ? TEXT_SUB : PRIMARY])
             Text(item.label)
-              .fontSize(13)
+              .fontSize(14)
               .fontWeight(FontWeight.Medium)
               .fontColor(TEXT_MAIN)
               .maxLines(1)
@@ -115,17 +115,17 @@ export struct SearchSuggestField {
               .layoutWeight(1)
             if (item.namespace !== '') {
               Text(item.namespace)
-                .fontSize(10)
+                .fontSize(12)
                 .fontColor(TEXT_SUB)
                 .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-                .borderRadius(6)
+                .borderRadius(4)
                 .backgroundColor(SUB_CARD)
             }
           }
           .width('100%')
           .height(38)
           .padding({ left: 12, right: 12 })
-          .borderRadius(10)
+          .borderRadius(16)
           .backgroundColor(CARD)
           .onClick(() => this.choose(item))
         }
@@ -143,7 +143,6 @@ export struct SearchSuggestField {
       .height(40)
       .fontColor($r('sys.color.font_primary'))
       .backgroundColor(CARD)
-      .border({ width: 0.5, color: DIVIDER })
       .searchButton(this.showSearchButton ? '搜索' : '', { autoDisable: true })
       .cancelButton({ style: CancelButtonStyle.INPUT })
       .onChange((value: string) => {

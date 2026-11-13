@@ -95,7 +95,7 @@ export struct ReaderCatalogPanel {
               Button(`第${bookmark.chapterIndex + 1}话 P.${bookmark.page + 1}`,
                 { buttonStyle: ButtonStyleMode.TEXTUAL })
                 .fontSize(12)
-                .fontWeight(FontWeight.Bold)
+                .fontWeight(FontWeight.Medium)
                 .fontColor(PRIMARY)
                 .backgroundColor(PRIMARY_SOFT)
                 .height(40)
@@ -120,13 +120,13 @@ export struct ReaderCatalogPanel {
           ListItem() {
             Row({ space: 10 }) {
               Text(`${(index === undefined ? 0 : index) + 1}`)
-                .fontSize(13)
+                .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(index === this.chapterIndex ? PRIMARY : TEXT_SUB)
                 .width(32)
               Text(ch.title !== '' ? ch.title : `第 ${(index === undefined ? 0 : index) + 1} 話`)
                 .fontSize(14)
-                .fontWeight(index === this.chapterIndex ? FontWeight.Bold : FontWeight.Medium)
+                .fontWeight(index === this.chapterIndex ? FontWeight.Medium : FontWeight.Regular)
                 .fontColor(index === this.chapterIndex ? PRIMARY : TEXT_MAIN)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -157,7 +157,7 @@ export struct ReaderCatalogPanel {
     Column() {
       if (this.pages.length === 0) {
         Text('本章暂无页面')
-          .fontSize(13)
+          .fontSize(14)
           .fontColor(TEXT_SUB)
       } else {
         List({ scroller: this.thumbScroller, space: 8, initialIndex: Math.max(0, this.currentPage - 1) }) {
@@ -175,8 +175,8 @@ export struct ReaderCatalogPanel {
                   .clip(true)
                   .border({ width: index === this.currentPage ? 2 : 0, color: PRIMARY, radius: 8 })
                 Text(`${index + 1}`)
-                  .fontSize(11)
-                  .fontWeight(index === this.currentPage ? FontWeight.Bold : FontWeight.Medium)
+                  .fontSize(12)
+                  .fontWeight(index === this.currentPage ? FontWeight.Medium : FontWeight.Regular)
                   .fontColor(index === this.currentPage ? PRIMARY : TEXT_SUB)
               }
               .onClick(() => {

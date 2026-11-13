@@ -107,13 +107,13 @@ export struct MainShell {
         .fontSize(21)
         .fontColor([this.tab === index ? PRIMARY : TEXT_SUB])
       Text(title)
-        .fontSize(11)
-        .fontWeight(this.tab === index ? FontWeight.Bold : FontWeight.Medium)
+        .fontSize(12)
+        .fontWeight(this.tab === index ? FontWeight.Medium : FontWeight.Regular)
         .fontColor(this.tab === index ? PRIMARY : TEXT_SUB)
     }
     .width('100%')
     .padding({ top: 12, bottom: 12 })
-    .borderRadius(14)
+    .borderRadius(16)
     .onClick(() => {
       this.tab = index;
     })

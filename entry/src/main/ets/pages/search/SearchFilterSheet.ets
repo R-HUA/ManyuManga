@@ -52,8 +52,8 @@ export struct SearchFilterSheet {
       // 标题栏
       Row() {
         Text('搜索筛选')
-          .fontSize(19)
-          .fontWeight(FontWeight.Bold)
+          .fontSize(20)
+          .fontWeight(FontWeight.Medium)
           .fontColor(TEXT_MAIN)
           .layoutWeight(1)
 

@@ -29,7 +29,7 @@ export struct SearchGroupResults {
   build() {
     Column({ space: 12 }) {
       Row({ space: 4 }) {
-        Text(this.group.source.name).fontSize(18).fontWeight(FontWeight.Bold).fontColor(TEXT_MAIN)
+        Text(this.group.source.name).fontSize(16).fontWeight(FontWeight.Medium).fontColor(TEXT_MAIN)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).flexShrink(1)
         if (this.summary && this.group.items.length > 0) {
           SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(18).fontColor([TEXT_SUB])
@@ -45,10 +45,10 @@ export struct SearchGroupResults {
         }
       })
       if (this.group.error !== '') {
-        Text(this.group.error).fontColor(DANGER).fontSize(13).width('100%')
+        Text(this.group.error).fontColor(DANGER).fontSize(14).width('100%')
         Button('重试', { buttonStyle: ButtonStyleMode.NORMAL }).onClick(this.onRetry)
       } else if (!this.group.loading && this.group.items.length === 0) {
-        Text('没有搜索结果').fontColor(TEXT_SUB).fontSize(13).width('100%')
+        Text('没有搜索结果').fontColor(TEXT_SUB).fontSize(14).width('100%')
       }
       ComicGrid({ items: this.group.items, rows: this.summary ? 2 : 0, onOpen: this.onOpen })
     }.width('100%').alignItems(HorizontalAlign.Start)
