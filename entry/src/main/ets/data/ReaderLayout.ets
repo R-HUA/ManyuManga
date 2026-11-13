@@ -24,3 +24,13 @@ export function clampPage(page: number, total: number): number {
   if (total <= 0) { return 0; }
   return Math.max(0, Math.min(page, total - 1));
 }
+
+/** 目录行高与书签行高，宿主据此按章节数计算面板高度。 */
+export const CATALOG_ROW_HEIGHT: number = 48;
+export const CATALOG_BOOKMARK_HEIGHT: number = 46;
+
+/** 按章节数收缩的目录高度，不超过 limit。 */
+export function catalogPanelHeight(chapterCount: number, bookmarkCount: number, limit: number): number {
+  const content: number = Math.max(1, chapterCount) * CATALOG_ROW_HEIGHT + (bookmarkCount > 0 ? CATALOG_BOOKMARK_HEIGHT : 0) + 12;
+  return Math.max(CATALOG_ROW_HEIGHT + 12, Math.min(limit, content));
+}

@@ -13,7 +13,6 @@
     { "name": "previous_page", "value": "上一页" },
     { "name": "next_page", "value": "下一页" },
     { "name": "preview_page_number", "value": "第 %d / %d 页" },
-    { "name": "reader_preview_tab", "value": "预览" },
     { "name": "switch_chapter_title", "value": "切换章节" },
     { "name": "switch_chapter_message", "value": "切换到“%s”？" },
     { "name": "switch_chapter_action", "value": "切换" },

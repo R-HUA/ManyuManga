@@ -27,3 +27,19 @@ export const IMMERSIVE_REGULAR_MATERIAL: uiMaterial.ImmersiveMaterial =
   new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR });
 export const IMMERSIVE_SHEET_MATERIAL: uiMaterial.ImmersiveMaterial =
   new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK });
+
+/**
+ * 阅读器上下栏：固定深色半透明的沉浸光感。宿主用 WithTheme(DARK) 包住两栏，材质再叠一层深色着色，
+ * 不跟随系统浅色主题；不支持沉浸材质的设备由 readerBarBackground() 的深色底兜底。
+ */
+export const READER_BAR_MATERIAL: uiMaterial.ImmersiveMaterial =
+  new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR, materialColor: $r('app.color.reader_bar_tint') });
+
+/** 支持沉浸材质时栏底透明，交给材质；不支持时用深色兜底底色，保证栏上文字可读。 */
+export function readerBarBackground(): ResourceColor {
+  try {
+    return uiMaterial.isImmersiveMaterialSupported() ? Color.Transparent : $r('app.color.reader_bar_fallback');
+  } catch (e) {
+    return $r('app.color.reader_bar_fallback');
+  }
+}

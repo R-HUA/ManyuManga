@@ -1143,7 +1143,7 @@ export async function interfaceTests(test) {
     const card = read('pages/downloads/DownloadTaskCard.ets');
     assert.match(card, /NEUTRAL_PROGRESS/);
   });
-  await test('阅读器目录改为 HUD 上方浮层：不再弹半模态，进度卡用图标切话与中性滑杆，未放大隐藏复位缩放', async env => {
+  await test('阅读器上下栏贴边固定深色光感：底栏两行四入口、目录只列章节、模式循环切换、未放大隐藏复位缩放', async env => {
     const { host, controller } = reader(env);
     controller.openSheet('index');
     assert.equal(host.panel, 'index'); assert.equal(host.hudVisible, true); assert.equal(host.sheetVisible, false);
@@ -1156,15 +1156,25 @@ export async function interfaceTests(test) {
     const page = read('pages/ReaderPage.ets');
     assert.doesNotMatch(page, /bindSheet|ReaderChapterSheet/);
     assert.doesNotMatch(page, /isEnabled: this\.zoomScale/);
-    assert.match(page, /menu: \{ value: this\.zoomScale > 1 \? \[/);
+    assert.doesNotMatch(page, /bindPopup\(/, '上下栏贴边固定，不再挂在 1x1 锚点气泡上');
+    assert.match(page, /WithTheme\(\{ colorMode: ThemeColorMode\.DARK \}\)/);
+    assert.match(page, /\.hideTitleBar\(true\)/);
+    assert.match(page, /if \(this\.zoomScale > 1\) \{\s*this\.BarIcon\(\$r\('sys\.symbol\.arrow_counterclockwise'\)/);
     const hud = read('pages/reader/ReaderHud.ets');
     assert.match(hud, /ReaderCatalogPanel\(/);
     assert.match(hud, /sys\.symbol\.chevron_left/); assert.match(hud, /sys\.symbol\.chevron_right/);
     assert.doesNotMatch(hud, /Button\('上一话'|Button\('下一话'/);
     assert.match(hud, /selectedColor\(NEUTRAL_PROGRESS\)/);
     const panel = read('pages/reader/ReaderCatalogPanel.ets');
-    assert.match(panel, /Tabs\(/); assert.match(panel, /'目录'/); assert.match(panel, /reader_preview_tab/);
-    assert.match(panel, /listDirection\(Axis\.Horizontal\)/);
+    assert.doesNotMatch(panel, /Tabs\(|reader_preview_tab|listDirection\(Axis\.Horizontal\)/, '目录只放章节，不含预览');
+    for (const label of ["label: '目录'", "label: '进度'", "label: '模式'", "label: '设置'"]) assert.ok(hud.includes(label), label);
+    assert.match(hud, /symbol: readerModeIcon\(this\.mode\)/);
+    const { catalogPanelHeight } = env.load('data/ReaderLayout');
+    assert.ok(catalogPanelHeight(2, 0, 420) < catalogPanelHeight(20, 0, 420), '目录高度随章节数收缩');
+    assert.equal(catalogPanelHeight(200, 1, 420), 420);
+    const { nextReaderMode } = env.load('data/ReaderModeCycle');
+    assert.deepEqual(['vertical', 'pagedVertical', 'horizontal', 'rtl', 'double'].map(nextReaderMode),
+      ['pagedVertical', 'horizontal', 'rtl', 'double', 'vertical']);
     assert.match(panel, /initialIndex: Math\.max\(0, this\.chapterIndex/);
   });
   await test('点按判定：滑动、多指、长按、滚动/翻页动画及其余波都不触发热区，左右 25% 翻页不跨话', async env => {

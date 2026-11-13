@@ -3,7 +3,7 @@ import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 import { ReaderHud, ReaderPanelKind } from './reader/ReaderHud';
 import { ReaderZoneOverlay } from './reader/ReaderZoneOverlay';
 import { ReaderImageItem } from './reader/ReaderImageItem';
-import { HDS_TITLE_STYLE, IMMERSIVE_REGULAR_MATERIAL } from '../common/ImmersiveMaterials';
+import { HDS_TITLE_STYLE, READER_BAR_MATERIAL, readerBarBackground } from '../common/ImmersiveMaterials';
 import { EmptyView } from '../common/Components';
 import { READER_BG, PRIMARY, eyeComfortTint, readerHudPalette } from '../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode, asNumber, asRecord, asString } from '../models/Models';
@@ -13,10 +13,9 @@ import { MangaRouteParams, ROUTE_SEARCH } from '../common/Route';
 const SCRAMBLE_DEFAULT: number = 220980;
 /** 护眼米黄背景 */
 const PAPER_BG: string = '#F5EFE2';
-
-interface ReaderPopupState {
-  isVisible: boolean;
-}
+/** 自绘顶栏与底栏入口行的高度 */
+const READER_TOP_BAR_HEIGHT: number = 56;
+const READER_ENTRY_ROW_HEIGHT: number = 56;
 
 @Component
 export struct ReaderPage {
@@ -231,7 +230,9 @@ export struct ReaderPage {
       panel: this.$panel,
       pages: this.$pages,
       currentPage: this.$currentPage,
-      maxPanelHeight: Math.max(80, this.canvasHeightVp - this.topSafeVp - this.bottomSafeVp - 156),
+      maxPanelHeight: Math.max(120, this.canvasHeightVp - this.topSafeVp - this.bottomSafeVp -
+        READER_TOP_BAR_HEIGHT - READER_ENTRY_ROW_HEIGHT - 24),
+      bottomInset: this.bottomSafeVp,
       sliderDragging: this.$sliderDragging,
       sliderValue: this.$sliderValue,
       scrambleId: this.$scrambleId,
@@ -241,6 +242,7 @@ export struct ReaderPage {
       jumpToPage: (page: number): void => this.controller.jumpToPage(page),
       chapters: this.$chapters,
       switchMode: (m: ReaderMode): void => this.controller.switchMode(m),
+      cycleMode: (): void => this.controller.cycleMode(),
       openSheet: (kind: ReaderSheetKind): void => this.controller.openSheet(kind),
       options: this.$options,
       brightnessValue: this.$brightnessValue,
@@ -264,7 +266,76 @@ export struct ReaderPage {
   }
 
   private onHudIdle(): void {
+    if (!this.hudVisible && (this.panel !== 'none' || this.sliderDragging)) {
+      this.panel = 'none';
+      this.sliderDragging = false;
+      this.controller.onHudTouch(false);
+    }
     this.controller.syncHudTimer();
+    this.controller.syncStatusBar();
+  }
+
+  private onCurrentBookmark(): boolean {
+    return this.bookmarks.some((item: ReadingProgress): boolean =>
+      item.chapterId === this.controller.currentChapterId() && item.page === this.currentPage);
+  }
+
+  @Builder
+  private BarIcon(symbol: Resource, label: string, onTap: () => void) {
+    Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
+      SymbolGlyph(symbol).fontSize(22).fontColor([$r('sys.color.icon_primary')])
+    }
+    .width(40)
+    .height(40)
+    .accessibilityText(label)
+    .onClick(() => { onTap(); })
+  }
+
+  /**
+   * 自绘顶栏：固定贴顶，深色沉浸光感，顶部按状态栏高度避让。
+   * 取代 HDS 标题栏，使上下两栏共用同一材质与深色配色。
+   */
+  @Builder
+  private TopBar() {
+    Column() {
+      Row({ space: 4 }) {
+        this.BarIcon($r('sys.symbol.chevron_left'), '返回', (): void => {
+          this.controller.flushProgress();
+          this.pageStack.pop();
+        })
+        Text(this.chapters[this.chapterIndex]?.title || this.albumTitle)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        if (this.zoomScale > 1) {
+          this.BarIcon($r('sys.symbol.arrow_counterclockwise'), '复位缩放', (): void => {
+            this.controller.resetZoom(true);
+          })
+        }
+        this.BarIcon(this.onCurrentBookmark() ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'), '书签',
+          (): void => { this.controller.toggleBookmark(); })
+      }
+      .width('100%')
+      .height(READER_TOP_BAR_HEIGHT)
+      .padding({ left: 8, right: 8 })
+    }
+    .width('100%')
+    .padding({ top: this.topSafeVp })
+    .backgroundColor(readerBarBackground())
+    .systemMaterial(READER_BAR_MATERIAL)
+    .onClick(() => {
+      // 阻断顶栏点击穿透到画布
+    })
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.controller.onHudTouch(true);
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.controller.onHudTouch(false);
+      }
+    })
   }
 
   /** 记录每段触摸的位移、指数与时长，供点按判定排除滑动、捏合与长按。 */
@@ -407,30 +478,31 @@ export struct ReaderPage {
         if (this.hudVisible) {
           Column().width('100%').height('100%').hitTestBehavior(HitTestMode.Block)
             .onClick(() => {
-              // 目录/缩略图浮层打开时，点击面板外只收起浮层，保留 HUD。
+              // 目录浮层打开时，点击面板外只收起浮层，保留上下栏。
               if (this.panel === 'index') { this.panel = 'none'; } else { this.panel = 'none'; this.hudVisible = false; }
             })
         }
-        // HUD 锚点：Stack 默认居中对齐，align/margin 无法把它移到底部，必须用 position 绝对定位到底部中线。
-        Row().width(1).height(1)
-          .position({ left: '50%', bottom: this.bottomSafeVp + 12 })
-          .bindPopup(this.hudVisible, {
-            builder: this.HudLayer,
-            width: Math.max(240, this.canvasWidthVp - 32),
-            placement: Placement.Top, targetSpace: 0, enableArrow: false,
-            radius: 28, mask: false, autoCancel: false,
-            systemMaterial: IMMERSIVE_REGULAR_MATERIAL,
-            onStateChange: (event: ReaderPopupState): void => {
-              if (!event.isVisible) { this.hudVisible = false; this.sliderDragging = false; this.controller.onHudTouch(false); }
-            },
-            onWillDismiss: (action: DismissPopupAction): void => {
-              if (action.reason === DismissReason.PRESS_BACK && this.panel !== 'none') {
-                this.panel = 'none';
-              } else {
-                this.panel = 'none'; this.hudVisible = false; action.dismiss();
-              }
+        // 上下栏固定贴边：外层 WithTheme(DARK) 让栏内系统色恒为深色，阅读画布本身不受影响。
+        if (this.hudVisible) {
+          Column() {
+            WithTheme({ colorMode: ThemeColorMode.DARK }) {
+              this.TopBar()
             }
-          })
+          }
+          .width('100%')
+          .position({ left: 0, top: 0 })
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.move(TransitionEdge.TOP))
+            .animation({ duration: 200, curve: Curve.FastOutSlowIn }))
+          Column() {
+            WithTheme({ colorMode: ThemeColorMode.DARK }) {
+              this.HudLayer()
+            }
+          }
+          .width('100%')
+          .position({ left: 0, bottom: 0 })
+          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.move(TransitionEdge.BOTTOM))
+            .animation({ duration: 200, curve: Curve.FastOutSlowIn }))
+        }
         if (this.zoneEditorVisible) {
           ReaderZoneOverlay({
             options: this.$options,
@@ -457,23 +529,10 @@ export struct ReaderPage {
         }
       })
     }
-    .titleBar({ content: { title: { mainTitle: this.chapters[this.chapterIndex]?.title || this.albumTitle },
-      // 未放大时隐藏复位缩放，整组菜单按三元数组切换。
-      menu: { value: this.zoomScale > 1 ? [
-        { content: { icon: this.bookmarks.some((item: ReadingProgress): boolean =>
-            item.chapterId === this.controller.currentChapterId() && item.page === this.currentPage)
-            ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
-          label: '书签', action: (): void => { this.controller.toggleBookmark(); } } },
-        { content: { icon: $r('sys.symbol.arrow_counterclockwise'), label: '复位缩放',
-          action: (): void => { this.controller.resetZoom(true); } } }
-      ] : [
-        { content: { icon: this.bookmarks.some((item: ReadingProgress): boolean =>
-            item.chapterId === this.controller.currentChapterId() && item.page === this.currentPage)
-            ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
-          label: '书签', action: (): void => { this.controller.toggleBookmark(); } } }
-      ] } }, style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: false })
+    .titleBar({ content: { title: { mainTitle: this.chapters[this.chapterIndex]?.title || this.albumTitle } },
+      style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: false })
     .titleMode(HdsNavDestinationTitleMode.MINI)
-    .hideTitleBar(!this.hudVisible)
+    .hideTitleBar(true)
     .backgroundColor(this.bgPaper ? PAPER_BG : READER_BG)
     .onReady((ctx: NavDestinationContext) => {
       if (this.controller.paramReady) {
@@ -496,8 +555,7 @@ export struct ReaderPage {
       this.controller.readerVisible = true;
       this.readerActive = true;
       if (this.controller.paramReady && this.controller.readingResolved && this.loadState === 'loading') { this.controller.retryLoad(); }
-      this.controller.applySystemBarDarkText(this.bgPaper).catch((_e: Error): void => {
-      });
+      this.controller.syncStatusBar(true);
     })
     .onHidden(() => {
       this.hudVisible = false;

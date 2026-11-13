@@ -18,6 +18,7 @@ import { IS_DARK_MODE_KEY } from '../../entryability/EntryAbility';
 import { ROUTE_PREVIEW, MangaRouteParams } from '../../common/Route';
 import { ReaderPanelKind } from './ReaderHud';
 import { ReaderTapGuard, tapZoneAction } from '../../data/ReaderTapGuard';
+import { nextReaderMode, readerModeLabel } from '../../data/ReaderModeCycle';
 
 /** 默认乱序参数 */
 const SCRAMBLE_DEFAULT: number = 220980;
@@ -73,6 +74,7 @@ export class ReaderController {
   private widePages: Set<string> = new Set();
   private switchingSource: boolean = false;
   activitySince: number = 0;
+  private statusBarDarkText: boolean | null = null;
   private visiblePages: Set<string> = new Set();
   private displayedProgress: ReadingProgress | null = null;
   private activityPage: string = '';
@@ -259,8 +261,7 @@ export class ReaderController {
       this.buildSpreads();
       this.host.preloadCount = this.clampPreload(this.host.options.preload);
       this.host.bgPaper = this.host.options.paper;
-      this.applySystemBarDarkText(this.host.bgPaper).catch((_e: Error): void => {
-      });
+      this.syncStatusBar(true);
       this.host.brightnessValue = brightness >= 0 && brightness <= 100 ? brightness : 100;
       this.autoCacheOn = autoCache;
     } catch (e) {
@@ -297,6 +298,7 @@ export class ReaderController {
   }
 
   restoreSystemBarToTheme(): void {
+    this.statusBarDarkText = null;
     const isDark: boolean = AppStorage.get<boolean>(IS_DARK_MODE_KEY) ?? false;
     this.applySystemBarDarkText(!isDark).catch((_e: Error): void => {
     });
@@ -930,6 +932,24 @@ export class ReaderController {
     }, 120);
   }
 
+  /** 底栏「模式」：按固定顺序切到下一种模式，HUD 保持打开，并用 Toast 告知新模式名。 */
+  cycleMode(): void {
+    const next: ReaderMode = nextReaderMode(this.host.mode);
+    this.switchMode(next);
+    this.toastMsg(readerModeLabel(next));
+  }
+
+  /** 上下栏固定深色：HUD 显示时状态栏文字用浅色，收起后按画布底色恢复。 */
+  syncStatusBar(force: boolean = false): void {
+    const darkText: boolean = this.host.bgPaper && !this.host.hudVisible;
+    if (!force && darkText === this.statusBarDarkText) {
+      return;
+    }
+    this.statusBarDarkText = darkText;
+    this.applySystemBarDarkText(darkText).catch((_e: Error): void => {
+    });
+  }
+
   setPreload(n: number): void {
     this.host.preloadCount = n;
     this.persistOptions();
@@ -941,8 +961,7 @@ export class ReaderController {
     }
     this.host.bgPaper = paper;
     this.persistOptions();
-    this.applySystemBarDarkText(paper).catch((_e: Error): void => {
-    });
+    this.syncStatusBar();
   }
 
   goChapter(delta: number): void {

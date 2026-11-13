@@ -2,7 +2,7 @@
  * entry/src/main/ets/pages/reader/ReaderPrefsSheet.ets
  * 阅读器底部「设置」浮卡内容：自适应高度，不使用固定行高的 ListItemStyle.CARD，消除内容截断与压叠错位。
  */
-import { PRIMARY, SUB_CARD, TEXT_SUB } from '../../common/Theme';
+import { PRIMARY, PRIMARY_SOFT, SUB_CARD } from '../../common/Theme';
 import { LengthMetrics } from '@kit.ArkUI';
 import { PRELOAD_LEVELS, ReaderOptions } from '../../data/ReaderOptions';
 import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
@@ -38,16 +38,18 @@ export struct ReaderPrefsSheet {
 
       Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(8), cross: LengthMetrics.vp(8) } }) {
         ForEach(PRELOAD_LEVELS, (count: number) => {
-          Button(`${count}页`, { type: ButtonType.Capsule, buttonStyle: this.preloadCount === count ? ButtonStyleMode.EMPHASIZED : ButtonStyleMode.NORMAL })
-            .height(40).fontSize(14)
-            .backgroundColor(this.preloadCount === count ? PRIMARY : SUB_CARD)
-            .fontColor(this.preloadCount === count ? Color.White : TEXT_SUB)
+          Text(`${count}页`)
+            .height(36).fontSize(14)
+            .padding({ left: 14, right: 14 })
+            .borderRadius(18)
+            .fontColor(this.preloadCount === count ? PRIMARY : $r('sys.color.font_secondary'))
+            .backgroundColor(this.preloadCount === count ? PRIMARY_SOFT : SUB_CARD)
             .onClick(() => this.setPreload(count))
         }, (count: number): string => `${count}`)
       }.width('100%')
 
       Divider()
-        .strokeWidth(0.5)
+        .strokeWidth('1px')
         .color($r('sys.color.comp_divider'))
 
       Row({ space: 12 }) {

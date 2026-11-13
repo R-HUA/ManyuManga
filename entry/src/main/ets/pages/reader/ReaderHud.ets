@@ -1,6 +1,6 @@
-import { clampPage } from '../../data/ReaderLayout';
+import { catalogPanelHeight, clampPage } from '../../data/ReaderLayout';
 import { ReaderOptions, ReaderSheetKind } from '../../data/ReaderOptions';
-import { ReaderModePanel } from './ReaderModePanel';
+import { ReaderModePanel, readerModeIcon } from './ReaderModePanel';
 import { ReaderPictureSheet } from './ReaderPictureSheet';
 import { ReaderPrefsSheet } from './ReaderPrefsSheet';
 import { HudButton } from './ReaderControls';
@@ -8,13 +8,16 @@ import { PageThumbItem } from './ReaderImageItem';
 import { NEUTRAL_PROGRESS } from '../../common/Theme';
 import { ReaderCatalogPanel } from './ReaderCatalogPanel';
 import { BasicDataSource } from '../../common/DataSource';
-import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
+import { EMPTY_MATERIAL, READER_BAR_MATERIAL, readerBarBackground } from '../../common/ImmersiveMaterials';
+import { readerModeLabel } from '../../data/ReaderModeCycle';
 import { Chapter, ReaderMode, ReadingProgress } from '../../models/Models';
 
 export type ReaderPanelKind = 'none' | 'progress' | 'index' | 'mode' | 'picture' | 'prefs';
 
 /**
- * 原生气泡只在宿主设置材质，内部工具与面板不再叠加模糊背板。
+ * 阅读器底栏：贴底固定，两行结构——上行为当前入口的内容（目录 / 进度 / 设置），下行为带文字的入口。
+ * 整栏一层沉浸光感材质，配色由宿主外层 WithTheme(DARK) 固定为深色；内部面板不再叠加材质或模糊背板。
+ * 「模式」不展开面板，点按即按固定顺序循环切换，图标随当前模式变化。
  */
 @Component
 export struct ReaderHud {
@@ -22,6 +25,7 @@ export struct ReaderHud {
   @Link pages: Array<string>;
   @Link currentPage: number;
   @Prop maxPanelHeight: number = 360;
+  @Prop bottomInset: number = 0;
   @Link sliderDragging: boolean;
   @Link sliderValue: number;
   @Link scrambleId: number;
@@ -42,6 +46,7 @@ export struct ReaderHud {
   goChapter: (delta: number) => void = (delta: number): void => {};
   jumpToPage: (page: number) => void = (page: number): void => {};
   switchMode: (m: ReaderMode) => void = (m: ReaderMode): void => {};
+  cycleMode: () => void = (): void => {};
   openSheet: (kind: ReaderSheetKind) => void = (kind: ReaderSheetKind): void => {};
   onHudTouch: (down: boolean) => void = (down: boolean): void => {};
   buildSpreads: () => void = (): void => {};
@@ -68,6 +73,9 @@ export struct ReaderHud {
       this.BottomHud()
     }
     .width('100%')
+    .padding({ bottom: this.bottomInset })
+    .backgroundColor(readerBarBackground())
+    .systemMaterial(READER_BAR_MATERIAL)
     .onTouch((event: TouchEvent) => {
       if (event.type === TouchType.Down) {
         this.onHudTouch(true);
@@ -75,6 +83,59 @@ export struct ReaderHud {
         this.onHudTouch(false);
       }
     })
+  }
+
+  private settingsOpen(): boolean {
+    return this.panel === 'prefs' || this.panel === 'picture' || this.panel === 'mode';
+  }
+
+  private togglePanel(kind: ReaderPanelKind): void {
+    this.panel = this.panel === kind ? 'none' : kind;
+  }
+
+  @Builder
+  private SectionTitle(title: string) {
+    Text(title)
+      .fontSize(14)
+      .fontWeight(FontWeight.Medium)
+      .fontColor($r('sys.color.font_secondary'))
+      .width('100%')
+      .padding({ top: 4 })
+  }
+
+  /** 设置：阅读模式、画面与阅读偏好集中在一处。 */
+  @Builder
+  private SettingsPanel() {
+    Column({ space: 10 }) {
+      this.SectionTitle('阅读模式')
+      ReaderModePanel({
+        mode: this.$mode,
+        switchMode: (m: ReaderMode): void => this.switchMode(m)
+      })
+      Divider().strokeWidth('1px').color($r('sys.color.comp_divider'))
+      this.SectionTitle('画面')
+      ReaderPictureSheet({
+        options: this.$options,
+        brightnessValue: this.$brightnessValue,
+        bgPaper: this.$bgPaper,
+        currentPage: this.$currentPage,
+        buildSpreads: (): void => this.buildSpreads(),
+        scrollToPageDelayed: (page: number): void => this.scrollToPageDelayed(page),
+        persistOptions: (): Promise<void> => this.persistOptions(),
+        toggleBackground: (paper: boolean): void => this.toggleBackground(paper)
+      })
+      Divider().strokeWidth('1px').color($r('sys.color.comp_divider'))
+      this.SectionTitle('阅读')
+      ReaderPrefsSheet({
+        options: this.$options,
+        preloadCount: this.$preloadCount,
+        setPreload: (n: number): void => this.setPreload(n),
+        tapTurn: this.$tapTurn,
+        setTapTurn: (on: boolean): void => this.setTapTurn(on),
+        openZoneEditor: (): void => this.openZoneEditor()
+      })
+    }
+    .width('100%')
   }
 
   @Builder
@@ -85,54 +146,26 @@ export struct ReaderHud {
           bookmarks: this.$bookmarks,
           chapters: this.$chapters,
           chapterIndex: this.$chapterIndex,
-          pages: this.$pages,
-          currentPage: this.$currentPage,
-          scrambleId: this.$scrambleId,
           chapterSource: this.chapterSource,
-          photoId: this.currentChapterId(),
           loadChapter: (chapterIdx: number, targetPage: number): Promise<void> => this.loadChapter(chapterIdx, targetPage),
-          jumpToPage: (page: number): void => this.jumpToPage(page),
           flushProgress: (): void => this.flushProgress(),
           close: (): void => {
             this.panel = 'none';
           }
         })
           .width('100%')
-          .height(Math.min(this.maxPanelHeight, 420))
+          .height(catalogPanelHeight(this.chapters.length, this.bookmarks.length, Math.min(this.maxPanelHeight, 420)))
           .padding({ left: 12, right: 12, top: 8 })
       } else if (this.panel !== 'none') {
         Scroll() {
           Column({ space: 10 }) {
-          if (this.sliderDragging && this.pages.length > 0) { this.DragPreview() }
-          if (this.panel === 'progress') {
-            this.ProgressCard()
-          } else if (this.panel === 'mode') {
-            ReaderModePanel({
-              mode: this.$mode,
-              switchMode: (m: ReaderMode): void => this.switchMode(m)
-            })
-          } else if (this.panel === 'picture') {
-            ReaderPictureSheet({
-              options: this.$options,
-              brightnessValue: this.$brightnessValue,
-              bgPaper: this.$bgPaper,
-              currentPage: this.$currentPage,
-              buildSpreads: (): void => this.buildSpreads(),
-              scrollToPageDelayed: (page: number): void => this.scrollToPageDelayed(page),
-              persistOptions: (): Promise<void> => this.persistOptions(),
-              toggleBackground: (paper: boolean): void => this.toggleBackground(paper)
-            })
-          } else if (this.panel === 'prefs') {
-            ReaderPrefsSheet({
-              options: this.$options,
-              preloadCount: this.$preloadCount,
-              setPreload: (n: number): void => this.setPreload(n),
-              tapTurn: this.$tapTurn,
-              setTapTurn: (on: boolean): void => this.setTapTurn(on),
-              openZoneEditor: (): void => this.openZoneEditor()
-            })
-          }
-          }.width('100%').padding({ left: 14, right: 14, top: 12, bottom: 8 })
+            if (this.sliderDragging && this.pages.length > 0) { this.DragPreview() }
+            if (this.panel === 'progress') {
+              this.ProgressCard()
+            } else if (this.settingsOpen()) {
+              this.SettingsPanel()
+            }
+          }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
         }
         .width('100%')
         .constraintSize({ maxHeight: this.maxPanelHeight })
@@ -142,48 +175,27 @@ export struct ReaderHud {
       Row() {
         HudButton({
           symbol: $r('sys.symbol.list_bullet'),
-          accessibilityLabel: '目录',
+          label: '目录',
           active: this.panel === 'index',
-          textColor: $r('sys.color.font_primary'),
-          onTap: (): void => {
-            this.panel = this.panel === 'index' ? 'none' : 'index';
-          }
+          onTap: (): void => { this.togglePanel('index'); }
         })
         HudButton({
           symbol: $r('sys.symbol.slider_horizontal_2'),
-          accessibilityLabel: '进度',
+          label: '进度',
           active: this.panel === 'progress',
-          textColor: $r('sys.color.font_primary'),
-          onTap: (): void => {
-            this.panel = this.panel === 'progress' ? 'none' : 'progress';
-          }
+          onTap: (): void => { this.togglePanel('progress'); }
         })
         HudButton({
-          symbol: $r('sys.symbol.rectangle_on_rectangle'),
-          accessibilityLabel: '阅读模式',
-          active: this.panel === 'mode',
-          textColor: $r('sys.color.font_primary'),
-          onTap: (): void => {
-            this.panel = this.panel === 'mode' ? 'none' : 'mode';
-          }
-        })
-        HudButton({
-          symbol: $r('sys.symbol.sun_max'),
-          accessibilityLabel: '画面调节',
-          active: this.panel === 'picture',
-          textColor: $r('sys.color.font_primary'),
-          onTap: (): void => {
-            this.panel = this.panel === 'picture' ? 'none' : 'picture';
-          }
+          symbol: readerModeIcon(this.mode),
+          label: '模式',
+          accessibilityLabel: `阅读模式：${readerModeLabel(this.mode)}，点按切换`,
+          onTap: (): void => { this.cycleMode(); }
         })
         HudButton({
           symbol: $r('sys.symbol.gearshape'),
-          accessibilityLabel: '阅读设置',
-          active: this.panel === 'prefs',
-          textColor: $r('sys.color.font_primary'),
-          onTap: (): void => {
-            this.panel = this.panel === 'prefs' ? 'none' : 'prefs';
-          }
+          label: '设置',
+          active: this.settingsOpen(),
+          onTap: (): void => { this.panel = this.settingsOpen() ? 'none' : 'prefs'; }
         })
       }
       .width('100%')

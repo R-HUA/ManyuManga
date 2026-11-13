@@ -55,7 +55,7 @@ export struct ReaderPictureSheet {
       .padding({ top: 4, bottom: 4 })
 
       Divider()
-        .strokeWidth(0.5)
+        .strokeWidth('1px')
         .color($r('sys.color.comp_divider'))
 
       this.SwitchRow('双页模式封面独占首页', this.options.coverOffset, (value: boolean): void => {
@@ -98,7 +98,7 @@ export struct ReaderPictureSheet {
     .layoutWeight(1)
     .height(40)
     .justifyContent(FlexAlign.Center)
-    .borderRadius(17)
+    .borderRadius(20)
     .backgroundColor(active ? PRIMARY_SOFT : Color.Transparent)
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
     .onClick(() => {

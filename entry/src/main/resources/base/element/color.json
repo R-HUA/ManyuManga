@@ -5,6 +5,8 @@
     { "name": "start_window_background", "value": "#F1F3F5" },
     { "name": "primary_soft", "value": "#1A0A59F7" },
     { "name": "sheet_card", "value": "#8CF1F3F5" },
+    { "name": "reader_bar_tint", "value": "#66000000" },
+    { "name": "reader_bar_fallback", "value": "#E61C1C1E" },
     { "name": "status_ok", "value": "#059669" },
     { "name": "status_warn", "value": "#D97706" },
     { "name": "danger", "value": "#E11D48" },
