@@ -80,7 +80,10 @@ export function metadataTermFromObject(value: Object): MetadataTerm {
 /** 本子详情（对应 Kotlin JmAlbum，Models.kt:22-32；可持久化到本地缓存） */
 export class Album {
   coverUrl: string = '';
+  /** 作品简介：只放来源提供的真实简介，没有就留空。 */
   description: string = '';
+  /** 元信息行（分类、上传者、时间、评分、大小等），由来源适配层拼好，与简介分开显示。 */
+  meta: string = '';
   language: string = '';
   originalUrl: string = '';
   id: string;

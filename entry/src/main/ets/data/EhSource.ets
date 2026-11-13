@@ -317,29 +317,38 @@ export class EhSource {
     const album: Album = new Album(key, detail.titleJpn !== '' ? detail.titleJpn : detail.title);
     album.coverUrl = detail.cover;
     const ratingLabel: string = detail.rating > 0 ? `★${detail.rating.toFixed(2)}` : '暂无评分';
-    album.description = `${detail.categoryLabel} · 上传者 ${detail.uploader === '' ? '未知' : detail.uploader}` +
-      ` · ${detail.posted} · ${ratingLabel} · ${detail.fileSize}`;
+    // E-Hentai 没有作品简介；分类、上传者等放进独立的元信息行，空项不拼接。
+    album.meta = [detail.categoryLabel.trim(), detail.uploader === '' ? '' : `上传者 ${detail.uploader}`,
+      detail.posted.trim(), ratingLabel, detail.fileSize.trim()]
+      .filter((part: string): boolean => part !== '').join(' · ');
     album.language = detail.language;
     album.likes = detail.ratingCount > 0 ? `${detail.ratingCount}` : '';
     album.views = `${detail.pages} 页`;
     album.originalUrl = detail.detailUrl;
 
-    const authors: Array<MetadataTerm> = [];
+    // 作者只取 artist，没有时退回 group；作者行显示译名本身，不带「艺术家:」「团队:」前缀。原值 value / namespace 不变。
+    const artists: Array<MetadataTerm> = [];
+    const groups: Array<MetadataTerm> = [];
     const tags: Array<MetadataTerm> = [];
     for (const group of detail.tagGroups) {
       const nsLabel: string = EhTagTranslator.translateNamespace(group.name);
       for (const tag of group.tags) {
-        const translated: string = `${nsLabel}:${EhTagTranslator.translateTag(group.name, tag)}`;
-        if (group.name === 'artist' || group.name === 'group') {
-          authors.push(new MetadataTerm(tag, translated, group.name));
+        const name: string = EhTagTranslator.translateTag(group.name, tag);
+        if (group.name === 'artist') {
+          artists.push(new MetadataTerm(tag, name, group.name));
+        } else if (group.name === 'group') {
+          groups.push(new MetadataTerm(tag, name, group.name));
         }
-        tags.push(new MetadataTerm(tag, translated, group.name));
+        tags.push(new MetadataTerm(tag, `${nsLabel}:${name}`, group.name));
       }
     }
+    const authors: Array<MetadataTerm> = artists.length > 0 ? artists : groups;
     album.author = authors.length > 0 ? authors :
       (detail.uploader !== '' ? [new MetadataTerm(detail.uploader, detail.uploader, 'uploader')] : []);
     album.tags = tags;
-    album.episodes = [new Chapter(key, `全一册 共 ${detail.pages} 页 (${detail.categoryLabel})`, '1')];
+    const category: string = detail.categoryLabel.trim();
+    album.episodes = [new Chapter(key,
+      category === '' ? `全一册 共 ${detail.pages} 页` : `全一册 共 ${detail.pages} 页 (${category})`, '1')];
     return album;
   }
 

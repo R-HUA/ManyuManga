@@ -1841,7 +1841,7 @@ function mergeDetailHtml(base: NativeGalleryDetail, html: string, site: string):
   const title = extractInnerText(html, /id="gn"[^>]*>([\s\S]*?)<\/h1>/i);
   const titleJpn = extractInnerText(html, /id="gj"[^>]*>([\s\S]*?)<\/h1>/i);
   const coverMatch = /id="gd1"[\s\S]*?url\(([^)]+)\)/i.exec(html);
-  const categoryLabel = extractInnerText(html, /id="gdc"[\s\S]*?<div[^>]*class="(?:cn|cs)"[^>]*>([\s\S]*?)<\/div>/i);
+  const categoryLabel = extractInnerText(html, /id="gdc"[\s\S]*?<div[^>]*class="[^"]*\bc[ns]\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
   const uploader = extractInnerText(html, /id="gdn"[^>]*>([\s\S]*?)<\/div>/i);
   const ratingLabel = extractInnerText(html, /id="rating_label"[^>]*>([\s\S]*?)<\/td>/i);
   const ratingCount = extractInnerText(html, /id="rating_count"[^>]*>([\s\S]*?)<\/span>/i) ||

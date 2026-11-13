@@ -631,6 +631,35 @@ export async function interfaceTests(test) {
     await new Promise(resolve => setImmediate(resolve)); assert.equal(calls.length, count);
   });
 
+  await test('详情简介与元信息分开：禁漫读取 description，E-Hentai 元信息独立且作者只取 artist，空分类不留空括号', async env => {
+    const fsJm = await import('node:fs');
+    const jmSource = fsJm.readFileSync(fileURLToPath(new URL('../entry/src/main/ets/data/JmApi.ets', import.meta.url)), 'utf8');
+    assert.match(jmSource, /result\.description = asString\(o\['description'\]\)\.trim\(\);/);
+    const { ehSource } = env.load('data/EhSource');
+    const detail = { gid: 1, token: 't', title: 'Gallery', titleJpn: '', cover: '', rating: 0, ratingCount: 0, pages: 196,
+      categoryLabel: '', uploader: 'up', posted: '2024-01-01', fileSize: '10 MB', language: '', detailUrl: '',
+      tagGroups: [{ name: 'group', tags: ['circle a'] }, { name: 'artist', tags: ['artist b'] }] };
+    ehSource.detail = async () => detail;
+    let album = await ehSource.album('123456/abcdef1234');
+    assert.equal(album.description, '');
+    assert.equal(album.meta, '上传者 up · 2024-01-01 · 暂无评分 · 10 MB');
+    assert.deepEqual(album.author.map(a => [a.namespace, a.value]), [['artist', 'artist b']]);
+    assert.ok(!album.author[0].label.includes(':'), album.author[0].label);
+    assert.equal(album.episodes[0].title, '全一册 共 196 页');
+    detail.tagGroups = [{ name: 'group', tags: ['circle a'] }]; detail.categoryLabel = 'Doujinshi';
+    album = await ehSource.album('123456/abcdef1234');
+    assert.deepEqual(album.author.map(a => a.namespace), ['group']);
+    assert.equal(album.episodes[0].title, '全一册 共 196 页 (Doujinshi)');
+    assert.ok(album.meta.startsWith('Doujinshi · '));
+    const fs = await import('node:fs');
+    const native = fs.readFileSync(fileURLToPath(new URL('../entry/src/main/ets/data/eh/EhNative.ets', import.meta.url)), 'utf8');
+    const source = /const categoryLabel = extractInnerText\(html, (\/id="gdc".*\/i)\);/.exec(native);
+    assert.ok(source, '分类正则');
+    const pattern = eval(source[1]);
+    assert.equal(pattern.exec('<div id="gdc"><div class="cs ct2" onclick="x">Doujinshi</div></div>')[1], 'Doujinshi');
+    assert.equal(pattern.exec('<div id="gdc"><div class="cn ct3">Manga</div></div>')[1], 'Manga');
+  });
+
   await test('画廊刷新失败保留已加载结果，续页和刷新分别重试原地址', async env => {
     const { EhGalleryPane } = env.load('pages/eh/EhGalleryPane');
     const { ehSource } = env.load('data/EhSource');

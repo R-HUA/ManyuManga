@@ -140,6 +140,12 @@ export function albumFromJson(text: string): Album {
   const album: Album = new Album(asString(rec['id']), asString(rec['name']));
   album.coverUrl = asString(rec['coverUrl']);
   album.description = asString(rec['description']);
+  album.meta = asString(rec['meta']);
+  // 旧版 E-Hentai 快照把元信息行存在 description 里（该源没有简介），读取时迁到 meta。
+  if (typeof rec['meta'] !== 'string' && album.id.startsWith('eh~')) {
+    album.meta = album.description;
+    album.description = '';
+  }
   album.language = asString(rec['language']);
   album.originalUrl = asString(rec['originalUrl']);
   album.likes = asString(rec['likes']);

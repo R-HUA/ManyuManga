@@ -147,6 +147,7 @@ export class JmApi {
       episodes.push(new Chapter(albumId, name, '1'));
     }
     const result: Album = new Album(albumId, name);
+    result.description = asString(o['description']).trim();
     result.likes = asString(o['likes']);
     result.views = asString(o['total_views']);
     const authors: Array<Object> | null = asArray(o['author']);

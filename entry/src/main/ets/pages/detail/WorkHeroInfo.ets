@@ -149,6 +149,14 @@ export struct WorkHeroInfo {
     }
   }
 
+  /** 元信息行：12 号次要色，去掉首尾多余的「·」。 */
+  private metaLine(): string {
+    if (this.album === null) {
+      return '';
+    }
+    return this.album.meta.replace(/^[\s·]+|[\s·]+$/g, '');
+  }
+
   private authorNames(): Array<MetadataTerm> {
     return this.album === null ? [] : this.album.author;
   }
@@ -253,6 +261,15 @@ export struct WorkHeroInfo {
                 .fontSize(14)
                 .fontColor(TEXT_SUB)
             }
+
+            if (this.metaLine() !== '') {
+              Text(this.metaLine())
+                .fontSize(12)
+                .fontColor(TEXT_SUB)
+                .maxLines(3)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+            }
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
@@ -269,9 +286,13 @@ export struct WorkHeroInfo {
         .alignItems(VerticalAlign.Top)
 
         if (this.album.description !== '') {
-          Column({ space: 4 }) {
+          Column({ space: 8 }) {
+            Text('简介')
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(TEXT_MAIN)
             Text(this.album.description)
-              .fontColor(TEXT_SUB)
+              .fontColor(TEXT_MAIN)
               .fontSize($r('sys.float.Body_M'))
               .lineHeight(DESC_LINE_HEIGHT)
               .maxLines(this.descExpanded ? Number.MAX_SAFE_INTEGER : DESC_MAX_LINES)
@@ -302,6 +323,7 @@ export struct WorkHeroInfo {
             }
           }
           .width('100%')
+          .alignItems(HorizontalAlign.Start)
         }
 
         if (this.album.tags.length > 0) {
