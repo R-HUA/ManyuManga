@@ -3,6 +3,17 @@ import { SourceCover } from './SourceCover';
 import { sourceApi } from '../data/SourceApi';
 import { sourceId } from '../data/Sources';
 import { capabilitiesForSourceId } from '../data/source/SourceContracts';
+/** 本次运行中已经显示过的普通封面地址：再次出现（滚动回来、切换页签）时直接显示，不再淡入。 */
+const shownCovers: Set<string> = new Set<string>();
+const SHOWN_COVERS_CAP: number = 600;
+
+function markCoverShown(src: string): void {
+  if (shownCovers.size >= SHOWN_COVERS_CAP) {
+    shownCovers.clear();
+  }
+  shownCovers.add(src);
+}
+
 @Component
 export struct ComicCard {
   @Prop @Watch('onCoverUrl') coverUrl: string = '';
@@ -16,9 +27,29 @@ export struct ComicCard {
 
   @State skelAlpha: number = 1.0;
   @State coverRetry: number = 0;
+  /** 普通封面的透明度：首次加载完成后 200ms 淡入；已显示过的地址直接为 1。 */
+  @State coverOpacity: number = 1;
+
+  aboutToAppear(): void {
+    this.coverOpacity = shownCovers.has(this.coverSrc()) ? 1 : 0;
+  }
 
   private onCoverUrl(): void {
     this.coverRetry = 0;
+    if (!shownCovers.has(this.coverSrc())) {
+      this.coverOpacity = 0;
+    }
+  }
+
+  private coverLoaded(src: string): void {
+    if (shownCovers.has(src)) {
+      this.coverOpacity = 1;
+      return;
+    }
+    markCoverShown(src);
+    this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, () => {
+      this.coverOpacity = 1;
+    });
   }
 
   /** 需要图源身份的封面走 SourceCover。其余图源保留 Image，失败时换镜像。 */
@@ -90,10 +121,15 @@ export struct ComicCard {
             .width('100%')
             .height('100%')
             .objectFit(ImageFit.Cover)
-            .backgroundColor(CHIP_BG)
+            .opacity(this.coverOpacity)
+            .onComplete(() => {
+              this.coverLoaded(this.coverSrc());
+            })
             .onError(() => {
               if (this.coverRetry < 3 && this.aid !== '') {
                 this.coverRetry += 1;
+              } else {
+                this.coverOpacity = 1;
               }
             })
           if (this.badge !== '') {
@@ -110,6 +146,7 @@ export struct ComicCard {
       }
       .width('100%')
       .aspectRatio(COVER_ASPECT_RATIO)
+      .backgroundColor(CHIP_BG)
       .borderRadius(COVER_R)
       .clip(true)
 

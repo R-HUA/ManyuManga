@@ -4,6 +4,14 @@ import { memoryKey, takeFromMemory, publishIntoMemory, releasePagePixelMap } fro
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { SUB_CARD, TEXT_SUB } from './Theme';
 
+/** 封面首次出现：200ms 淡入；消失不做动画，避免淡出期间仍引用已归还的位图。 */
+export function coverFade(): TransitionEffect {
+  return TransitionEffect.asymmetric(
+    TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }),
+    TransitionEffect.IDENTITY
+  );
+}
+
 @Component
 export struct SourceCover {
   @Prop @Watch('reload') url: string = '';
@@ -12,6 +20,8 @@ export struct SourceCover {
   @Prop radius: number = 12;
   onColor: (color: string) => void = (): void => {};
   @State bitmap: image.PixelMap | null = null;
+  /** 只有占位图换成刚加载的新图时淡入；内存命中或封面换封面时直接显示。 */
+  private fadeIn: boolean = false;
   private generation: number = 0;
   private signal: RequestAbortGroup = new RequestAbortGroup();
 
@@ -28,23 +38,31 @@ export struct SourceCover {
     }
   }
 
+  /** 加载失败或地址为空时才回到占位。 */
+  private clearBitmap(): void {
+    const previous: image.PixelMap | null = this.bitmap;
+    this.fadeIn = false;
+    this.bitmap = null;
+    if (previous !== null) {
+      releasePagePixelMap(previous);
+    }
+  }
+
   private async reload(): Promise<void> {
     const ticket: number = ++this.generation;
     this.signal.abortAll();
     this.signal = new RequestAbortGroup();
     const signal: RequestAbortGroup = this.signal;
-    const previous: image.PixelMap | null = this.bitmap;
-    this.bitmap = null;
-    if (previous !== null) {
-      releasePagePixelMap(previous);
-    }
-    if (ticket !== this.generation || this.url === '') {
+    if (this.url === '') {
+      this.clearBitmap();
       return;
     }
     let pending: image.PixelMap | null = null;
+    let fromMemory: boolean = false;
     try {
       const key: string = `cover/${memoryKey(this.sourceKey, this.url, 0, 300)}`;
       pending = await takeFromMemory(key);
+      fromMemory = pending !== null;
       if (pending === null) {
         if (ticket !== this.generation || signal.aborted()) { return; }
         const bytes: ArrayBuffer = await sourceApi.fetchCover(this.sourceKey, this.url, signal);
@@ -84,14 +102,20 @@ export struct SourceCover {
         }
         this.onColor(`rgba(${Math.round(red / count)},${Math.round(green / count)},${Math.round(blue / count)},0.16)`);
       }
+      // 先让新图接替旧图，再归还旧图的缓存引用，避免闪白和 Image 引用已释放的 PixelMap。
+      const previous: image.PixelMap | null = this.bitmap;
+      this.fadeIn = !fromMemory && previous === null;
       this.bitmap = bitmap;
       pending = null;
+      if (previous !== null) {
+        releasePagePixelMap(previous);
+      }
     } catch (_e) {
       if (isRequestCancelled(_e as Error)) {
         return;
       }
       if (ticket === this.generation) {
-        this.bitmap = null;
+        this.clearBitmap();
       }
     } finally {
       if (pending !== null) {
@@ -107,6 +131,7 @@ export struct SourceCover {
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Cover)
+          .transition(this.fadeIn ? coverFade() : TransitionEffect.IDENTITY)
       } else {
         SymbolGlyph($r('sys.symbol.book'))
           .fontSize(26)

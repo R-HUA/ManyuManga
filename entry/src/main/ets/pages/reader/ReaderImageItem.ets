@@ -45,7 +45,6 @@ export struct PageThumbItem {
     this.signal.abortAll();
     this.signal = new RequestAbortGroup();
     const signal: RequestAbortGroup = this.signal;
-    this.releaseMap();
     try {
       const pm: image.PixelMap | null = await loadPagePixelMap(this.photoId, this.filename, this.scrambleId, 240, signal);
       if (t !== this.token) {
@@ -54,12 +53,24 @@ export struct PageThumbItem {
         }
         return;
       }
-      this.pixelMap = pm === null ? undefined : pm;
+      if (pm === null) {
+        this.releaseMap();
+        return;
+      }
+      // 新图先接替，再归还旧图。
+      const previous: image.PixelMap | undefined = this.pixelMap;
+      this.pixelMap = pm;
+      if (previous !== undefined) {
+        releasePagePixelMap(previous);
+      }
     } catch (e) {
       if (isRequestCancelled(e as Error)) {
         return;
       }
-      // 缩略图失败保持占位底色
+      if (t === this.token) {
+        // 缩略图失败回到占位底色
+        this.releaseMap();
+      }
     }
   }
 
@@ -147,7 +158,7 @@ export struct ReaderImageItem {
     const signal: RequestAbortGroup = this.signal;
     this.loading = true;
     this.failed = false;
-    this.releaseMap();
+    // 旧图保留到新图就位后再归还，不在请求开始时提前释放。
     try {
       let map: image.PixelMap | null = await loadPagePixelMap(
         this.photoId, this.filename, this.scrambleId, this.targetWidth, signal);
@@ -158,6 +169,7 @@ export struct ReaderImageItem {
         return;
       }
       if (map === null) {
+        this.releaseMap();
         this.loading = false;
         this.failed = true;
         this.onFailure(this.filename, new Error('页面解码失败'));
@@ -180,13 +192,18 @@ export struct ReaderImageItem {
       }
       this.aspect = info.size.width / info.size.height;
       this.onMeasured(this.filename, this.aspect);
+      const previous: image.PixelMap | undefined = this.pixelMap;
       this.pixelMap = map;
       this.loading = false;
+      if (previous !== undefined) {
+        releasePagePixelMap(previous);
+      }
     } catch (e) {
       if (isRequestCancelled(e as Error)) {
         return;
       }
       if (token === this.loadToken) {
+        this.releaseMap();
         this.loading = false;
         this.failed = true;
         this.onFailure(this.filename, e as Error);
