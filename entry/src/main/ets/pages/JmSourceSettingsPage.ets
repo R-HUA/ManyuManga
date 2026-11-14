@@ -1,4 +1,4 @@
-import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit';
+import { HdsNavDestination, HdsNavDestinationTitleMode, TextStyleMode } from '@kit.UIDesignKit';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
 import promptAction from '@ohos.promptAction';
 import { jmApi } from '../data/JmApi';
@@ -70,7 +70,14 @@ export struct JmSourceSettingsPage {
         .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-      if (this.speedFor(domain) !== undefined) {
+      if (this.testingSpeed) {
+        // 测速进行中：行尾时延位置显示小号加载指示，结果返回后替换为时延。
+        LoadingProgress()
+          .width(20)
+          .height(20)
+          .color(TEXT_SUB)
+          .accessibilityText('测速中')
+      } else if (this.speedFor(domain) !== undefined) {
         Text(this.speedFor(domain)!.ok ? `${this.speedFor(domain)!.ms} ms` : '不可达')
           .fontSize(12)
           .fontColor(this.speedFor(domain)!.ok ? STATUS_OK : DANGER)
@@ -96,7 +103,7 @@ export struct JmSourceSettingsPage {
     HdsNavDestination() {
       List({ scroller: this.scroller }) {
         // 线路：整行点按切换，当前线路行尾打勾；测速结果显示在行尾。
-        ListItemGroup({ header: this.GroupHeader('镜像线路'), footer: this.GroupFooter() }) {
+        ListItemGroup({ header: this.GroupHeader('镜像线路') }) {
           ForEach(this.domains, (domain: string, index: number) => {
             ListItem() {
               this.DomainRow(domain)
@@ -108,7 +115,7 @@ export struct JmSourceSettingsPage {
                 this.selectDomain(domain);
               }
             })
-          }, (domain: string) => `${domain}_${domain === this.currentDomain}_${this.speedFor(domain)?.ms ?? -1}_${this.speedFor(domain)?.ok ?? false}`)
+          }, (domain: string) => `${domain}_${domain === this.currentDomain}_${this.testingSpeed}_${this.speedFor(domain)?.ms ?? -1}_${this.speedFor(domain)?.ok ?? false}`)
         }
         .divider({ strokeWidth: '1px', color: DIVIDER, startMargin: 12, endMargin: 12 })
 
@@ -138,8 +145,9 @@ export struct JmSourceSettingsPage {
         menu: {
           value: [{
             content: {
-              icon: $r('sys.symbol.arrow_clockwise'),
-              label: this.testingSpeed ? '测速中' : '并发测速',
+              // 文字按钮直接说明动作；测速期间置灰，进度显示在各线路行尾。
+              label: '测速',
+              type: TextStyleMode.NORMAL,
               isEnabled: !this.testingSpeed,
               action: (): void => { this.runSpeedTest(); }
             }
@@ -161,14 +169,5 @@ export struct JmSourceSettingsPage {
       .fontColor(TEXT_SUB)
       .width('100%')
       .padding({ left: 12, top: 16, bottom: 8 })
-  }
-
-  @Builder
-  private GroupFooter() {
-    Text(this.testingSpeed ? '正在测速…' : `当前线路：${this.currentDomain || '默认线路'}`)
-      .fontSize(12)
-      .fontColor(TEXT_SUB)
-      .width('100%')
-      .padding({ left: 12, right: 12, top: 8 })
   }
 }
