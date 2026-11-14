@@ -3,9 +3,11 @@ import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 import { ReaderHud, ReaderPanelKind } from './reader/ReaderHud';
 import { ReaderZoneOverlay } from './reader/ReaderZoneOverlay';
 import { ReaderImageItem } from './reader/ReaderImageItem';
-import { HDS_TITLE_STYLE, READER_BAR_BACKING, READER_BAR_MATERIAL } from '../common/ImmersiveMaterials';
+import {
+  READER_BAR_FALLBACK, READER_BAR_MATERIAL, immersiveMaterialAvailable, readerTitleStyle
+} from '../common/ImmersiveMaterials';
 import { EmptyView } from '../common/Components';
-import { READER_BG, PRIMARY, eyeComfortTint, readerHudPalette } from '../common/Theme';
+import { READER_BG, PRIMARY, CARD_R, eyeComfortTint, readerHudPalette } from '../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode, asNumber, asRecord, asString } from '../models/Models';
 import { ReaderOptions, ReaderSheetKind } from '../data/ReaderOptions';
 import { MangaRouteParams, ROUTE_SEARCH } from '../common/Route';
@@ -13,9 +15,15 @@ import { MangaRouteParams, ROUTE_SEARCH } from '../common/Route';
 const SCRAMBLE_DEFAULT: number = 220980;
 /** 护眼米黄背景 */
 const PAPER_BG: string = '#F5EFE2';
-/** 自绘顶栏与底栏入口行的高度 */
+/** HDS MINI 标题栏与底栏入口行的高度 */
 const READER_TOP_BAR_HEIGHT: number = 56;
 const READER_ENTRY_ROW_HEIGHT: number = 56;
+/** 底栏气泡锚点距导航条的间距 */
+const READER_HUD_GAP: number = 12;
+
+interface ReaderPopupState {
+  isVisible: boolean;
+}
 
 @Component
 export struct ReaderPage {
@@ -54,6 +62,8 @@ export struct ReaderPage {
   @State zoomOffsetY: number = 0;
   @State private readerActive: boolean = true;
   private controller: ReaderController = new ReaderController(this);
+  /** 沉浸光感是否可用；不可用时上下栏走官方降级（不透明度更高的深色底 + 系统模糊）。 */
+  private readonly materialOn: boolean = immersiveMaterialAvailable();
 
   aboutToAppear(): void { this.controller.aboutToAppear(); }
   aboutToDisappear(): void { this.controller.aboutToDisappear(); }
@@ -228,13 +238,20 @@ export struct ReaderPage {
 
   @Builder
   private HudLayer() {
+    // 气泡内容另包一层深色主题：气泡的 colorMode 默认跟随锚点，这里再固定一次，保证栏内系统色恒为深色。
+    WithTheme({ colorMode: ThemeColorMode.DARK }) {
+      this.HudContent()
+    }
+  }
+
+  @Builder
+  private HudContent() {
     ReaderHud({
       panel: this.$panel,
       pages: this.$pages,
       currentPage: this.$currentPage,
       maxPanelHeight: Math.max(120, this.canvasHeightVp - this.topSafeVp - this.bottomSafeVp -
-        READER_TOP_BAR_HEIGHT - READER_ENTRY_ROW_HEIGHT - 24),
-      bottomInset: this.bottomSafeVp,
+        READER_TOP_BAR_HEIGHT - READER_ENTRY_ROW_HEIGHT - READER_HUD_GAP * 3),
       sliderDragging: this.$sliderDragging,
       sliderValue: this.$sliderValue,
       scrambleId: this.$scrambleId,
@@ -280,68 +297,6 @@ export struct ReaderPage {
   private onCurrentBookmark(): boolean {
     return this.bookmarks.some((item: ReadingProgress): boolean =>
       item.chapterId === this.controller.currentChapterId() && item.page === this.currentPage);
-  }
-
-  @Builder
-  private BarIcon(symbol: Resource, label: string, onTap: () => void) {
-    Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
-      SymbolGlyph(symbol).fontSize(22).fontColor([$r('sys.color.icon_primary')])
-    }
-    .width(40)
-    .height(40)
-    .accessibilityText(label)
-    .onClick(() => { onTap(); })
-  }
-
-  /**
-   * 自绘顶栏：固定贴顶，深色沉浸光感，顶部按状态栏高度避让。
-   * 取代 HDS 标题栏，使上下两栏共用同一材质与深色配色。
-   */
-  @Builder
-  private TopBar() {
-    // 外层只挂材质；内层垫深色半透明底（含状态栏区域），保证栏和状态栏白字可读。
-    Column() {
-      Column() {
-        Row({ space: 4 }) {
-          this.BarIcon($r('sys.symbol.chevron_left'), '返回', (): void => {
-            this.controller.flushProgress();
-            this.pageStack.pop();
-          })
-          Text(this.chapters[this.chapterIndex]?.title || this.albumTitle)
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          if (this.zoomScale > 1) {
-            this.BarIcon($r('sys.symbol.arrow_counterclockwise'), '复位缩放', (): void => {
-              this.controller.resetZoom(true);
-            })
-          }
-          this.BarIcon(this.onCurrentBookmark() ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'), '书签',
-            (): void => { this.controller.toggleBookmark(); })
-        }
-        .width('100%')
-        .height(READER_TOP_BAR_HEIGHT)
-        .padding({ left: 8, right: 8 })
-      }
-      .width('100%')
-      .padding({ top: this.topSafeVp })
-      .backgroundColor(READER_BAR_BACKING)
-    }
-    .width('100%')
-    .systemMaterial(READER_BAR_MATERIAL)
-    .onClick(() => {
-      // 阻断顶栏点击穿透到画布
-    })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.controller.onHudTouch(true);
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.controller.onHudTouch(false);
-      }
-    })
   }
 
   /** 记录每段触摸的位移、指数与时长，供点按判定排除滑动、捏合与长按。 */
@@ -488,26 +443,36 @@ export struct ReaderPage {
               if (this.panel === 'index') { this.panel = 'none'; } else { this.panel = 'none'; this.hudVisible = false; }
             })
         }
-        // 上下栏固定贴边：外层 WithTheme(DARK) 让栏内系统色恒为深色，阅读画布本身不受影响。
-        if (this.hudVisible) {
+        // 底栏锚点：沉浸光感只在弹出类组件、标题栏、底部 TabBar 等范围内生效，叠在内容区的普通容器上会被忽略，
+        // 所以底栏放进 bindPopup 气泡，由气泡承载材质。Stack 默认居中对齐，align/margin 无法把锚点移到底部，
+        // 必须用 position 绝对定位到底部中线。锚点包在 WithTheme(DARK) 里，气泡（colorMode 默认 FOLLOW_TARGET）随之取深色。
+        // WithTheme 不支持通用属性，外面套一层铺满且不参与命中测试的 Column，锚点的 position 才能相对整屏计算。
+        WithTheme({ colorMode: ThemeColorMode.DARK }) {
           Column() {
-            WithTheme({ colorMode: ThemeColorMode.DARK }) {
-              this.TopBar()
-            }
+            Row().width(1).height(1)
+              .position({ left: '50%', bottom: this.bottomSafeVp + READER_HUD_GAP })
+              .bindPopup(this.hudVisible, {
+                builder: this.HudLayer,
+                width: Math.max(240, this.canvasWidthVp - 32),
+                placement: Placement.Top, targetSpace: 0, enableArrow: false,
+                radius: CARD_R, mask: false, autoCancel: false,
+                systemMaterial: this.materialOn ? READER_BAR_MATERIAL : undefined,
+                popupColor: this.materialOn ? undefined : READER_BAR_FALLBACK,
+                onStateChange: (event: ReaderPopupState): void => {
+                  if (!event.isVisible) { this.hudVisible = false; this.sliderDragging = false; this.controller.onHudTouch(false); }
+                },
+                onWillDismiss: (action: DismissPopupAction): void => {
+                  if (action.reason === DismissReason.PRESS_BACK && this.panel !== 'none') {
+                    this.panel = 'none';
+                  } else {
+                    this.panel = 'none'; this.hudVisible = false; action.dismiss();
+                  }
+                }
+              })
           }
           .width('100%')
-          .position({ left: 0, top: 0 })
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.move(TransitionEdge.TOP))
-            .animation({ duration: 200, curve: Curve.FastOutSlowIn }))
-          Column() {
-            WithTheme({ colorMode: ThemeColorMode.DARK }) {
-              this.HudLayer()
-            }
-          }
-          .width('100%')
-          .position({ left: 0, bottom: 0 })
-          .transition(TransitionEffect.OPACITY.combine(TransitionEffect.move(TransitionEdge.BOTTOM))
-            .animation({ duration: 200, curve: Curve.FastOutSlowIn }))
+          .height('100%')
+          .hitTestBehavior(HitTestMode.None)
         }
         if (this.zoneEditorVisible) {
           ReaderZoneOverlay({
@@ -535,10 +500,20 @@ export struct ReaderPage {
         }
       })
     }
-    .titleBar({ content: { title: { mainTitle: this.chapters[this.chapterIndex]?.title || this.albumTitle } },
-      style: HDS_TITLE_STYLE, avoidLayoutSafeArea: true, enableComponentSafeArea: false })
+    // 顶栏用 HDS 标题栏：标题栏在沉浸光感生效范围内，材质由 HDS systemMaterialEffect 提供。
+    .titleBar({ content: { title: { mainTitle: this.chapters[this.chapterIndex]?.title || this.albumTitle },
+      // 未放大时隐藏复位缩放，整组菜单按三元数组切换。
+      menu: { value: this.zoomScale > 1 ? [
+        { content: { icon: this.onCurrentBookmark() ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
+          label: '书签', action: (): void => { this.controller.toggleBookmark(); } } },
+        { content: { icon: $r('sys.symbol.arrow_counterclockwise'), label: '复位缩放',
+          action: (): void => { this.controller.resetZoom(true); } } }
+      ] : [
+        { content: { icon: this.onCurrentBookmark() ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'),
+          label: '书签', action: (): void => { this.controller.toggleBookmark(); } } }
+      ] } }, style: readerTitleStyle(this.materialOn), avoidLayoutSafeArea: true, enableComponentSafeArea: false })
     .titleMode(HdsNavDestinationTitleMode.MINI)
-    .hideTitleBar(true)
+    .hideTitleBar(!this.hudVisible)
     .backgroundColor(this.bgPaper ? PAPER_BG : READER_BG)
     .onReady((ctx: NavDestinationContext) => {
       if (this.controller.paramReady) {

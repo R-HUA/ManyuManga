@@ -1,5 +1,6 @@
 import uiMaterial from '@ohos.arkui.uiMaterial';
-import { hdsMaterial, ScrollEffectType, SystemMaterialParams, TitleBarStyleOptions } from '@kit.UIDesignKit';
+import { deviceInfo } from '@kit.BasicServicesKit';
+import { hdsMaterial, HdsNavigationTitleBarStyle, ScrollEffectType, SystemMaterialParams, TitleBarStyleOptions } from '@kit.UIDesignKit';
 import { LengthMetrics } from '@kit.ArkUI';
 
 export const HDS_NATIVE_MATERIAL: SystemMaterialParams = {
@@ -28,13 +29,58 @@ export const IMMERSIVE_REGULAR_MATERIAL: uiMaterial.ImmersiveMaterial =
 export const IMMERSIVE_SHEET_MATERIAL: uiMaterial.ImmersiveMaterial =
   new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK });
 
+/** 阅读器上下栏的深色着色（约 50% 不透明），只给材质加色，不遮挡材质。 */
+export const READER_BAR_TINT: Resource = $r('app.color.reader_bar_tint');
+/** 设备不支持沉浸光感时的降级底色（约 88% 不透明），配合系统模糊保证栏上文字可读。 */
+export const READER_BAR_FALLBACK: Resource = $r('app.color.reader_bar_fallback');
+/** 深色栏上的标题与图标色：深浅模式下都是白色。 */
+const READER_BAR_ON: Resource = $r('app.color.on_overlay');
+/** 深色栏上标题栏图标按钮的底色。 */
+const READER_BAR_ICON_BG: Resource = $r('app.color.reader_bar_icon_bg');
+
 /**
- * 阅读器上下栏：沉浸光感材质挂在栏的外层容器上，栏内容再垫一层固定的深色半透明底（READER_BAR_BACKING）。
- * 材质负责光感与阴影；底色保证任何设备、任何材质档位下栏上文字都可读，不依赖材质是否真正渲染。
- * 注意：同一节点上不要再设 backgroundColor —— systemMaterial 会接管该节点的背景色。
+ * 当前设备能否渲染沉浸光感材质。按官方降级方案：先做 26.0.0 版本保护，再查询设备能力；查询异常按不支持处理。
+ */
+export function immersiveMaterialAvailable(): boolean {
+  try {
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      return uiMaterial.isImmersiveMaterialSupported();
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * 阅读器底栏气泡（bindPopup）的材质：REGULAR 加深色着色。
+ * 气泡属于沉浸光感的生效范围；内容层不设背景色，否则会盖住材质。
  */
 export const READER_BAR_MATERIAL: uiMaterial.ImmersiveMaterial =
-  new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR });
+  new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR, materialColor: READER_BAR_TINT });
 
-/** 上下栏内容层的深色半透明底（约 80% 不透明），上下栏共用，确保两栏观感一致。 */
-export const READER_BAR_BACKING: Resource = $r('app.color.reader_bar_backing');
+function readerTitleBarStyle(background: Resource): HdsNavigationTitleBarStyle {
+  return {
+    backgroundStyle: { backgroundColor: background },
+    contentStyle: {
+      titleStyle: { mainTitleColor: READER_BAR_ON, mainTitleShadowColor: Color.Transparent },
+      menuStyle: { backgroundColor: READER_BAR_ICON_BG, iconColor: READER_BAR_ON },
+      backIconStyle: { backgroundColor: READER_BAR_ICON_BG, iconColor: READER_BAR_ON }
+    }
+  };
+}
+
+/**
+ * 阅读器顶栏（HdsNavDestination 标题栏）：沿用全局 GRADIENT_BLUR 与 HDS 材质，
+ * 背景板改为深色着色、标题与图标改为白色，使顶栏不随应用深浅模式变化，和底栏一致。
+ * 26.0.0 起，配置 systemMaterialEffect 时 originalStyle 的 backgroundColor 支持自定义。
+ */
+export function readerTitleStyle(materialOn: boolean): TitleBarStyleOptions {
+  const background: Resource = materialOn ? READER_BAR_TINT : READER_BAR_FALLBACK;
+  return {
+    scrollEffectOpts: HDS_TITLE_STYLE.scrollEffectOpts,
+    originalStyle: readerTitleBarStyle(background),
+    scrollEffectStyle: readerTitleBarStyle(background),
+    systemMaterialEffect: HDS_NATIVE_MATERIAL
+  };
+}

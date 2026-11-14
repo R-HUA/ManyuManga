@@ -1156,7 +1156,7 @@ export async function interfaceTests(test) {
     const card = read('pages/downloads/DownloadTaskCard.ets');
     assert.match(card, /NEUTRAL_PROGRESS/);
   });
-  await test('阅读器上下栏贴边固定深色光感：底栏两行四入口、目录只列章节、模式循环切换、未放大隐藏复位缩放', async env => {
+  await test('阅读器上下栏深色光感（HDS 标题栏 + 气泡）：底栏两行四入口、目录只列章节、模式循环切换、未放大隐藏复位缩放', async env => {
     const { host, controller } = reader(env);
     controller.openSheet('index');
     assert.equal(host.panel, 'index'); assert.equal(host.hudVisible, true); assert.equal(host.sheetVisible, false);
@@ -1169,12 +1169,17 @@ export async function interfaceTests(test) {
     const page = read('pages/ReaderPage.ets');
     assert.doesNotMatch(page, /bindSheet|ReaderChapterSheet/);
     assert.doesNotMatch(page, /isEnabled: this\.zoomScale/);
-    assert.doesNotMatch(page, /bindPopup\(/, '上下栏贴边固定，不再挂在 1x1 锚点气泡上');
+    // 沉浸光感只在标题栏、弹出类组件等范围内生效：顶栏用 HDS 标题栏，底栏挂在 1x1 锚点气泡上。
+    assert.match(page, /\.bindPopup\(this\.hudVisible, \{/, '底栏由气泡承载材质');
+    assert.match(page, /systemMaterial: this\.materialOn \? READER_BAR_MATERIAL : undefined/);
+    assert.match(page, /\.hideTitleBar\(!this\.hudVisible\)/, '顶栏用 HDS 标题栏');
+    assert.match(page, /style: readerTitleStyle\(this\.materialOn\)/);
+    assert.doesNotMatch(page, /private TopBar\(|READER_BAR_BACKING/, '不再自绘顶栏或垫不透明底');
     assert.match(page, /WithTheme\(\{ colorMode: ThemeColorMode\.DARK \}\)/);
-    assert.match(page, /\.hideTitleBar\(true\)/);
-    assert.match(page, /if \(this\.zoomScale > 1\) \{\s*this\.BarIcon\(\$r\('sys\.symbol\.arrow_counterclockwise'\)/);
+    assert.match(page, /menu: \{ value: this\.zoomScale > 1 \? \[/);
     const hud = read('pages/reader/ReaderHud.ets');
     assert.match(hud, /ReaderCatalogPanel\(/);
+    assert.doesNotMatch(hud, /READER_BAR_|\.systemMaterial\(READER/, '气泡内容不叠材质、不垫底色');
     assert.match(hud, /sys\.symbol\.chevron_left/); assert.match(hud, /sys\.symbol\.chevron_right/);
     assert.doesNotMatch(hud, /Button\('上一话'|Button\('下一话'/);
     assert.match(hud, /selectedColor\(NEUTRAL_PROGRESS\)/);

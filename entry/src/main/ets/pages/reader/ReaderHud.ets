@@ -8,16 +8,16 @@ import { PageThumbItem } from './ReaderImageItem';
 import { NEUTRAL_PROGRESS } from '../../common/Theme';
 import { ReaderCatalogPanel } from './ReaderCatalogPanel';
 import { BasicDataSource } from '../../common/DataSource';
-import { EMPTY_MATERIAL, READER_BAR_BACKING, READER_BAR_MATERIAL } from '../../common/ImmersiveMaterials';
+import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
 import { readerModeLabel } from '../../data/ReaderModeCycle';
 import { Chapter, ReaderMode, ReadingProgress } from '../../models/Models';
 
 export type ReaderPanelKind = 'none' | 'progress' | 'index' | 'mode' | 'picture' | 'prefs';
 
 /**
- * 阅读器底栏：贴底固定，两行结构——上行为当前入口的内容（目录 / 进度 / 设置），下行为带文字的入口。
- * 整栏一层沉浸光感材质＋深色半透明底（上行面板与下行入口共用），配色由宿主外层 WithTheme(DARK) 固定为深色；
- * 内部面板不再叠加材质或模糊背板。
+ * 阅读器底栏：两行结构——上行为当前入口的内容（目录 / 进度 / 设置），下行为带文字的入口。
+ * 作为宿主 bindPopup 气泡的内容：沉浸光感材质由气泡（宿主 systemMaterial）提供，配色由宿主 WithTheme(DARK) 固定为深色；
+ * 本组件及内部面板不设背景色、不叠加材质或模糊背板，否则会盖住气泡材质。
  * 「模式」不展开面板，点按即按固定顺序循环切换，图标随当前模式变化。
  */
 @Component
@@ -26,7 +26,6 @@ export struct ReaderHud {
   @Link pages: Array<string>;
   @Link currentPage: number;
   @Prop maxPanelHeight: number = 360;
-  @Prop bottomInset: number = 0;
   @Link sliderDragging: boolean;
   @Link sliderValue: number;
   @Link scrambleId: number;
@@ -70,17 +69,10 @@ export struct ReaderHud {
   }
 
   build() {
-    // 外层只挂材质；内层垫深色半透明底，材质未生效时栏也不会透明。
     Column() {
-      Column() {
-        this.BottomHud()
-      }
-      .width('100%')
-      .padding({ bottom: this.bottomInset })
-      .backgroundColor(READER_BAR_BACKING)
+      this.BottomHud()
     }
     .width('100%')
-    .systemMaterial(READER_BAR_MATERIAL)
     .onTouch((event: TouchEvent) => {
       if (event.type === TouchType.Down) {
         this.onHudTouch(true);
