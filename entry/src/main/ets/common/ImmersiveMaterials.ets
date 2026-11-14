@@ -29,17 +29,12 @@ export const IMMERSIVE_SHEET_MATERIAL: uiMaterial.ImmersiveMaterial =
   new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THICK });
 
 /**
- * 阅读器上下栏：固定深色半透明的沉浸光感。宿主用 WithTheme(DARK) 包住两栏，材质再叠一层深色着色，
- * 不跟随系统浅色主题；不支持沉浸材质的设备由 readerBarBackground() 的深色底兜底。
+ * 阅读器上下栏：沉浸光感材质挂在栏的外层容器上，栏内容再垫一层固定的深色半透明底（READER_BAR_BACKING）。
+ * 材质负责光感与阴影；底色保证任何设备、任何材质档位下栏上文字都可读，不依赖材质是否真正渲染。
+ * 注意：同一节点上不要再设 backgroundColor —— systemMaterial 会接管该节点的背景色。
  */
 export const READER_BAR_MATERIAL: uiMaterial.ImmersiveMaterial =
-  new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR, materialColor: $r('app.color.reader_bar_tint') });
+  new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR });
 
-/** 支持沉浸材质时栏底透明，交给材质；不支持时用深色兜底底色，保证栏上文字可读。 */
-export function readerBarBackground(): ResourceColor {
-  try {
-    return uiMaterial.isImmersiveMaterialSupported() ? Color.Transparent : $r('app.color.reader_bar_fallback');
-  } catch (e) {
-    return $r('app.color.reader_bar_fallback');
-  }
-}
+/** 上下栏内容层的深色半透明底（约 80% 不透明），上下栏共用，确保两栏观感一致。 */
+export const READER_BAR_BACKING: Resource = $r('app.color.reader_bar_backing');

@@ -3,7 +3,7 @@ import { HdsNavDestination, HdsNavDestinationTitleMode } from '@kit.UIDesignKit'
 import { ReaderHud, ReaderPanelKind } from './reader/ReaderHud';
 import { ReaderZoneOverlay } from './reader/ReaderZoneOverlay';
 import { ReaderImageItem } from './reader/ReaderImageItem';
-import { HDS_TITLE_STYLE, READER_BAR_MATERIAL, readerBarBackground } from '../common/ImmersiveMaterials';
+import { HDS_TITLE_STYLE, READER_BAR_BACKING, READER_BAR_MATERIAL } from '../common/ImmersiveMaterials';
 import { EmptyView } from '../common/Components';
 import { READER_BG, PRIMARY, eyeComfortTint, readerHudPalette } from '../common/Theme';
 import { Chapter, ReadingProgress, ReaderMode, asNumber, asRecord, asString } from '../models/Models';
@@ -299,34 +299,38 @@ export struct ReaderPage {
    */
   @Builder
   private TopBar() {
+    // 外层只挂材质；内层垫深色半透明底（含状态栏区域），保证栏和状态栏白字可读。
     Column() {
-      Row({ space: 4 }) {
-        this.BarIcon($r('sys.symbol.chevron_left'), '返回', (): void => {
-          this.controller.flushProgress();
-          this.pageStack.pop();
-        })
-        Text(this.chapters[this.chapterIndex]?.title || this.albumTitle)
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-        if (this.zoomScale > 1) {
-          this.BarIcon($r('sys.symbol.arrow_counterclockwise'), '复位缩放', (): void => {
-            this.controller.resetZoom(true);
+      Column() {
+        Row({ space: 4 }) {
+          this.BarIcon($r('sys.symbol.chevron_left'), '返回', (): void => {
+            this.controller.flushProgress();
+            this.pageStack.pop();
           })
+          Text(this.chapters[this.chapterIndex]?.title || this.albumTitle)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.font_primary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          if (this.zoomScale > 1) {
+            this.BarIcon($r('sys.symbol.arrow_counterclockwise'), '复位缩放', (): void => {
+              this.controller.resetZoom(true);
+            })
+          }
+          this.BarIcon(this.onCurrentBookmark() ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'), '书签',
+            (): void => { this.controller.toggleBookmark(); })
         }
-        this.BarIcon(this.onCurrentBookmark() ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'), '书签',
-          (): void => { this.controller.toggleBookmark(); })
+        .width('100%')
+        .height(READER_TOP_BAR_HEIGHT)
+        .padding({ left: 8, right: 8 })
       }
       .width('100%')
-      .height(READER_TOP_BAR_HEIGHT)
-      .padding({ left: 8, right: 8 })
+      .padding({ top: this.topSafeVp })
+      .backgroundColor(READER_BAR_BACKING)
     }
     .width('100%')
-    .padding({ top: this.topSafeVp })
-    .backgroundColor(readerBarBackground())
     .systemMaterial(READER_BAR_MATERIAL)
     .onClick(() => {
       // 阻断顶栏点击穿透到画布
