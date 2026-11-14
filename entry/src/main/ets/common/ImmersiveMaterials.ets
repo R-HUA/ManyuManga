@@ -1,7 +1,6 @@
-import uiMaterial from '@ohos.arkui.uiMaterial';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { hdsMaterial, HdsNavigationTitleBarStyle, ScrollEffectType, SystemMaterialParams, TitleBarStyleOptions } from '@kit.UIDesignKit';
-import { LengthMetrics } from '@kit.ArkUI';
+import { LengthMetrics, uiMaterial } from '@kit.ArkUI';
 
 export const HDS_NATIVE_MATERIAL: SystemMaterialParams = {
   materialType: hdsMaterial.MaterialType.ADAPTIVE, materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
@@ -42,6 +41,7 @@ const READER_BAR_ICON_BG: Resource = $r('app.color.reader_bar_icon_bg');
  * 当前设备能否渲染沉浸光感材质。按官方降级方案：先做 26.0.0 版本保护，再查询设备能力；查询异常按不支持处理。
  */
 export function immersiveMaterialAvailable(): boolean {
+  // deviceInfo.apiAvailable 本身 26.0.0 起才有，旧系统上调用可能抛异常，所以整段包在 try/catch 里。
   try {
     if (deviceInfo.apiAvailable('26.0.0')) {
       return uiMaterial.isImmersiveMaterialSupported();

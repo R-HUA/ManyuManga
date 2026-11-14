@@ -15,9 +15,10 @@ import { MangaRouteParams, ROUTE_SEARCH } from '../common/Route';
 const SCRAMBLE_DEFAULT: number = 220980;
 /** 护眼米黄背景 */
 const PAPER_BG: string = '#F5EFE2';
-/** HDS MINI 标题栏与底栏入口行的高度 */
-const READER_TOP_BAR_HEIGHT: number = 56;
+/** 底栏入口行高度，与 ReaderHud 入口 Row 的 height(56) 一致 */
 const READER_ENTRY_ROW_HEIGHT: number = 56;
+/** Popup 文档：气泡最大高度 = 窗口高度 − 上下安全区 − 80vp */
+const POPUP_HEIGHT_RESERVE: number = 80;
 /** 底栏气泡锚点距导航条的间距 */
 const READER_HUD_GAP: number = 12;
 
@@ -250,8 +251,11 @@ export struct ReaderPage {
       panel: this.$panel,
       pages: this.$pages,
       currentPage: this.$currentPage,
+      // 气泡上限 = 窗口高 − 上下安全区 − 80vp；气泡内只有上行面板和入口行，入口行固定 56vp，
+      // 面板的内边距都在面板自身高度内（目录 height、Scroll maxHeight 均含 padding），余下全给面板。
+      // 气泡顶端最高到 topSafe + 80 − 12（锚点间距），仍在 56vp 标题栏之下。目录另有 420vp 上限（ReaderHud 内）。
       maxPanelHeight: Math.max(120, this.canvasHeightVp - this.topSafeVp - this.bottomSafeVp -
-        READER_TOP_BAR_HEIGHT - READER_ENTRY_ROW_HEIGHT - READER_HUD_GAP * 3),
+        POPUP_HEIGHT_RESERVE - READER_ENTRY_ROW_HEIGHT),
       sliderDragging: this.$sliderDragging,
       sliderValue: this.$sliderValue,
       scrambleId: this.$scrambleId,
@@ -513,7 +517,7 @@ export struct ReaderPage {
           label: '书签', action: (): void => { this.controller.toggleBookmark(); } } }
       ] } }, style: readerTitleStyle(this.materialOn), avoidLayoutSafeArea: true, enableComponentSafeArea: false })
     .titleMode(HdsNavDestinationTitleMode.MINI)
-    .hideTitleBar(!this.hudVisible)
+    .hideTitleBar(!this.hudVisible, true)
     .backgroundColor(this.bgPaper ? PAPER_BG : READER_BG)
     .onReady((ctx: NavDestinationContext) => {
       if (this.controller.paramReady) {

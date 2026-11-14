@@ -1172,7 +1172,7 @@ export async function interfaceTests(test) {
     // 沉浸光感只在标题栏、弹出类组件等范围内生效：顶栏用 HDS 标题栏，底栏挂在 1x1 锚点气泡上。
     assert.match(page, /\.bindPopup\(this\.hudVisible, \{/, '底栏由气泡承载材质');
     assert.match(page, /systemMaterial: this\.materialOn \? READER_BAR_MATERIAL : undefined/);
-    assert.match(page, /\.hideTitleBar\(!this\.hudVisible\)/, '顶栏用 HDS 标题栏');
+    assert.match(page, /\.hideTitleBar\(!this\.hudVisible, true\)/, '顶栏用 HDS 标题栏');
     assert.match(page, /style: readerTitleStyle\(this\.materialOn\)/);
     assert.doesNotMatch(page, /private TopBar\(|READER_BAR_BACKING/, '不再自绘顶栏或垫不透明底');
     assert.match(page, /WithTheme\(\{ colorMode: ThemeColorMode\.DARK \}\)/);
