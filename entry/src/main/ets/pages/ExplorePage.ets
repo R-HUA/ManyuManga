@@ -37,12 +37,20 @@ export struct ExplorePage {
   @State latestError: string = '';
   @State refreshing: boolean = false;
   private generation: number = 0;
+  /** 每个分区独立代次：同一分区的新请求作废旧请求，旧请求连 loading 也不能改。 */
   private rankGeneration: number = 0;
+  private randomGeneration: number = 0;
+  private latestGeneration: number = 0;
   private readonly orders: Array<string> = ['mv_t', 'mv_w', 'mv_m', 'mv'];
   private readonly labels: Array<string> = ['日榜', '周榜', '月榜', '总榜'];
 
   aboutToAppear(): void { this.refresh(); }
-  aboutToDisappear(): void { this.generation++; this.rankGeneration++; }
+  aboutToDisappear(): void {
+    this.generation++;
+    this.rankGeneration++;
+    this.randomGeneration++;
+    this.latestGeneration++;
+  }
 
   private async refresh(): Promise<void> {
     const ticket: number = ++this.generation;
@@ -51,29 +59,42 @@ export struct ExplorePage {
     this.refreshing = false;
   }
 
+  private nextSectionTicket(section: HomeSection): number {
+    if (section === 'ranking') { return ++this.rankGeneration; }
+    if (section === 'random') { return ++this.randomGeneration; }
+    return ++this.latestGeneration;
+  }
+
+  private sectionTicket(section: HomeSection): number {
+    if (section === 'ranking') { return this.rankGeneration; }
+    if (section === 'random') { return this.randomGeneration; }
+    return this.latestGeneration;
+  }
+
   async fetchSection(section: HomeSection): Promise<void> {
     const ticket: number = this.generation;
-    const rankTicket: number = section === 'ranking' ? ++this.rankGeneration : this.rankGeneration;
+    const sectionTicket: number = this.nextSectionTicket(section);
+    const current = (): boolean => ticket === this.generation && sectionTicket === this.sectionTicket(section);
     if (section === 'ranking') { this.rankLoading = true; this.rankError = ''; }
     else if (section === 'random') { this.randomLoading = true; this.randomError = ''; }
     else { this.latestLoading = true; this.latestError = ''; }
     try {
       const items: Array<AlbumLite> = section === 'ranking' ? await sourceApi.ranking(this.sourceIdValue, '', this.currentRank, 1) : section === 'random' ? await sourceApi.random(this.sourceIdValue) : await sourceApi.latest(this.sourceIdValue, 1);
-      if (ticket !== this.generation || (section === 'ranking' && rankTicket !== this.rankGeneration)) { return; }
+      if (!current()) { return; }
       if (section === 'ranking') { this.rankItems = items; }
       else if (section === 'random') { this.randomItems = items; }
       else { this.latestItems = items; }
     } catch (e) {
-      if (ticket !== this.generation || (section === 'ranking' && rankTicket !== this.rankGeneration)) { return; }
+      if (!current()) { return; }
       const message: string = errorMessage(e as Error);
       if (section === 'ranking') { this.rankError = message; }
       else if (section === 'random') { this.randomError = message; }
       else { this.latestError = message; }
     } finally {
-      if (ticket === this.generation) {
-        if (section === 'ranking' && rankTicket === this.rankGeneration) { this.rankLoading = false; }
+      if (current()) {
+        if (section === 'ranking') { this.rankLoading = false; }
         else if (section === 'random') { this.randomLoading = false; }
-        else if (section === 'latest') { this.latestLoading = false; }
+        else { this.latestLoading = false; }
       }
     }
   }

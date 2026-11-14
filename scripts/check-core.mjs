@@ -76,6 +76,7 @@ function environment() {
   globalThis.SwiperController = class { changeIndex() {} };
   globalThis.Curve = { EaseOut: 'easeOut', Friction: 'friction' };
   globalThis.ClickEffectLevel = { LIGHT: 0, MIDDLE: 1, HEAVY: 2 };
+  globalThis.Observed = target => target;
   const relational = makeRelationalStore(state);
   function load(file) {
     file = path.resolve(file);
@@ -128,6 +129,8 @@ function environment() {
         if (state.privacyFailure) throw new Error('系统隐私保护设置失败');
       } }; } },
       '@kit.AbilityKit': {},
+      '@kit.ArkTS': { taskpool: { Task: class { constructor(run, ...args) { this.run = run; this.args = args; } setTransferList() {} },
+        execute: async task => task.run(...task.args) } },
       '@ohos.net.connection': {},
       '@ohos.url': require('node:url'),
       '@ohos.web.webview': { WebviewController: class {}, WebCookieManager: { fetchCookieSync: () => '', configCookieSync: () => {}, saveCookieSync: () => {} } },

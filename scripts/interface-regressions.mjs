@@ -545,6 +545,13 @@ export async function interfaceTests(test) {
     const old = page.fetchSection('ranking'); page.currentRank = 'mv_w'; const current = page.fetchSection('ranking');
     second.resolve([{ id: '周榜' }]); await current; first.resolve([{ id: '日榜' }]); await old;
     assert.equal(page.rankItems[0].id, '周榜');
+    const slow = deferred(), fast = deferred(); let batches = 0;
+    api.random = async () => (++batches === 1 ? slow.promise : fast.promise);
+    const stale = page.fetchSection('random'); const fresh = page.fetchSection('random');
+    slow.resolve([{ id: '旧随机' }]); await stale;
+    assert.equal(page.randomLoading, true); assert.deepEqual(page.randomItems.map(item => item.id), ['新批次']);
+    fast.resolve([{ id: '新随机' }]); await fresh;
+    assert.equal(page.randomLoading, false); assert.deepEqual(page.randomItems.map(item => item.id), ['新随机']);
     const late = deferred(); api.latest = async () => late.promise;
     const pending = page.fetchSection('latest'); page.aboutToDisappear(); late.resolve([{ id: '迟到' }]); await pending;
     assert.deepEqual(page.latestItems, []);
@@ -1083,7 +1090,7 @@ export async function interfaceTests(test) {
     const finished = new ReadingProgress('jm~1', 'b', 1, 9, 10);
     assert.equal(buildChapterRows(album, finished, '', true, true, new Map()).length, 1);
     assert.deepEqual(buildChapterRows(null, null, '', false, true, new Map()), []);
-    assert.notEqual(rows[0].key(), buildChapterRows(album, null, '', false, true, new Map())[0].key());
+    assert.equal(rows[0].key(), buildChapterRows(album, null, '', false, true, new Map())[0].key());
     const source = new ChapterDataSource();
     let reloaded = 0;
     const listener = { onDataReloaded: () => { reloaded++; } };
@@ -1093,9 +1100,15 @@ export async function interfaceTests(test) {
     assert.equal(reloaded, 1);
     assert.equal(source.totalCount(), 3);
     assert.equal(source.getData(1).chapter.id, 'b');
+    assert.deepEqual(rows.map(row => [row.first, row.last]), [[true, false], [false, false], [false, true]]);
+    const shown = source.getData(2);
+    source.setRows(buildChapterRows(album, progress, '', false, true, new Map([['c', new ChapterDownloadInfo('running', 3, 5)]])));
+    assert.equal(reloaded, 1); assert.equal(source.getData(2), shown); assert.equal(shown.download.done, 3);
+    source.setRows(buildChapterRows(album, progress, '第2', false, true, new Map()));
+    assert.equal(reloaded, 2); assert.equal(source.getData(0).first && source.getData(0).last, true);
     source.unregisterDataChangeListener(listener);
     source.setRows([]);
-    assert.equal(reloaded, 1);
+    assert.equal(reloaded, 2);
   });
 
   await test('详情页沉浸式单列表：章节预览入口、换源进标题菜单、速览独立分页', async () => {

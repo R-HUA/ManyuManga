@@ -1,6 +1,7 @@
 import { DecodeSemaphore, semFor, memoryKey, takeFromMemory, publishIntoMemory, releasePagePixelMap, isPixelMapValid } from './PageCachePool';
 import { fileExists, ensureDir, parentDir, readFileBytes, writeFileBytes, rmTree } from '../util/FileUtil';
 import image from '@ohos.multimedia.image';
+import { taskpool } from '@kit.ArkTS';
 import fs from '@ohos.file.fs';
 import { md5Hex } from './JmApi';
 import { sourceApi } from './SourceApi';
@@ -394,7 +395,32 @@ export async function fetchPageBytes(photoId: string, filename: string,
   throw lastError;
 }
 
-/** 白边裁剪使用独立位图，避免改变由多个页面共享的缓存。 */
+/**
+ * 在 TaskPool 线程里扫描整页像素，找出非白色内容的边界 [left, top, right, bottom]；
+ * 没有内容时 right < left。只使用参数，满足 @Concurrent 的约束。
+ */
+@Concurrent
+function findContentBounds(buffer: ArrayBuffer, width: number, height: number): Array<number> {
+  const pixels: Uint8Array = new Uint8Array(buffer);
+  let left: number = width; let right: number = -1; let top: number = height; let bottom: number = -1;
+  for (let y: number = 0; y < height; y++) {
+    for (let x: number = 0; x < width; x++) {
+      const offset: number = (y * width + x) * 4;
+      if (pixels[offset + 3] > 20 && (pixels[offset] < 245 || pixels[offset + 1] < 245 || pixels[offset + 2] < 245)) {
+        if (x < left) { left = x; }
+        if (x > right) { right = x; }
+        if (y < top) { top = y; }
+        if (y > bottom) { bottom = y; }
+      }
+    }
+  }
+  return [left, top, right, bottom];
+}
+
+/**
+ * 白边裁剪使用独立位图，避免改变由多个页面共享的缓存。
+ * 像素扫描是 CPU 密集任务，放进 TaskPool 执行（缓冲区转移所有权，不拷贝），UI 线程只做读取和建图。
+ */
 export async function cropPageWhitespace(original: image.PixelMap): Promise<image.PixelMap> {
   if (!isPixelMapValid(original)) {
     throw new Error('图像尺寸无效');
@@ -405,21 +431,36 @@ export async function cropPageWhitespace(original: image.PixelMap): Promise<imag
   }
   const width: number = info.size.width;
   const height: number = info.size.height;
-  const buffer: ArrayBuffer = new ArrayBuffer(width * height * 4);
-  await original.readPixelsToBuffer(buffer);
-  const pixels: Uint8Array = new Uint8Array(buffer);
-  let left: number = width; let right: number = -1; let top: number = height; let bottom: number = -1;
-  for (let y: number = 0; y < height; y++) {
-    for (let x: number = 0; x < width; x++) {
-      const offset: number = (y * width + x) * 4;
-      if (pixels[offset + 3] > 20 && (pixels[offset] < 245 || pixels[offset + 1] < 245 || pixels[offset + 2] < 245)) {
-        left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
-      }
-    }
+  const scan: ArrayBuffer = new ArrayBuffer(width * height * 4);
+  await original.readPixelsToBuffer(scan);
+  let bounds: Array<number> = [];
+  try {
+    const task: taskpool.Task = new taskpool.Task(findContentBounds, scan, width, height);
+    task.setTransferList([scan]);
+    bounds = await taskpool.execute(task) as Array<number>;
+  } catch (e) {
+    // 任务派发失败时不裁剪，保持整页显示。
+    bounds = [];
   }
-  const copy: image.PixelMap = await image.createPixelMap(buffer, { size: info.size, pixelFormat: image.PixelMapFormat.RGBA_8888, editable: true });
-  if (right >= left && bottom >= top) { await copy.crop({ x: left, y: top, size: { width: right - left + 1, height: bottom - top + 1 } }); }
-  return copy;
+  let x: number = 0;
+  let y: number = 0;
+  let cropWidth: number = width;
+  let cropHeight: number = height;
+  if (bounds.length === 4 && bounds[2] >= bounds[0] && bounds[3] >= bounds[1]) {
+    x = bounds[0];
+    y = bounds[1];
+    cropWidth = bounds[2] - bounds[0] + 1;
+    cropHeight = bounds[3] - bounds[1] + 1;
+  }
+  // 只读回内容区域，直接生成裁好的独立位图。
+  const region: ArrayBuffer = new ArrayBuffer(cropWidth * cropHeight * 4);
+  await original.readPixels({
+    pixels: region, offset: 0, stride: cropWidth * 4,
+    region: { size: { width: cropWidth, height: cropHeight }, x: x, y: y }
+  });
+  return await image.createPixelMap(region, {
+    size: { width: cropWidth, height: cropHeight }, pixelFormat: image.PixelMapFormat.RGBA_8888, editable: true
+  });
 }
 
 /** 清空页缓存（设置页"缓存清理"用） */

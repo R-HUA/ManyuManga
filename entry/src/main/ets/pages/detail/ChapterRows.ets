@@ -3,7 +3,11 @@ import { ChapterDownloadInfo } from '../../data/DownloadTypes';
 
 export { ChapterDownloadInfo };
 
-/** 章节列表行的展示模型：已读、当前在读与下载状态都在这里一次算好，LazyForEach 只负责渲染。 */
+/**
+ * 章节列表行的展示模型：已读、当前在读与下载状态都在这里一次算好。
+ * 行对象按章节 id 复用，状态变化只改属性（@Observed），LazyForEach 的键不随状态变化，避免每下载一页就重建一行。
+ */
+@Observed
 export class ChapterRow {
   chapter: Chapter = new Chapter();
   index: number = 0;
@@ -13,9 +17,30 @@ export class ChapterRow {
   /** 多选模式：selecting 表示处于多选，selected 表示本行已勾选。 */
   selecting: boolean = false;
   selected: boolean = false;
+  /** 在当前可见列表里是否为首行 / 末行，用于分组圆角。 */
+  first: boolean = false;
+  last: boolean = false;
 
+  /** 键只含业务身份。多选模式切换会改变行的滑动操作，所以单独作为前缀。 */
   key(): string {
-    return `${this.chapter.id}_${this.read}_${this.current}_${this.download.state}_${this.download.done}_${this.selecting}_${this.selected}`;
+    return `${this.selecting ? 'select' : 'read'}|${this.chapter.id}`;
+  }
+
+  /** 把新算出的状态写进已显示的行，只在值变化时赋值。 */
+  assign(next: ChapterRow): void {
+    if (this.chapter !== next.chapter) { this.chapter = next.chapter; }
+    if (this.index !== next.index) { this.index = next.index; }
+    if (this.read !== next.read) { this.read = next.read; }
+    if (this.current !== next.current) { this.current = next.current; }
+    if (this.selecting !== next.selecting) { this.selecting = next.selecting; }
+    if (this.selected !== next.selected) { this.selected = next.selected; }
+    if (this.first !== next.first) { this.first = next.first; }
+    if (this.last !== next.last) { this.last = next.last; }
+    const a: ChapterDownloadInfo = this.download;
+    const b: ChapterDownloadInfo = next.download;
+    if (a.state !== b.state || a.done !== b.done || a.total !== b.total) {
+      this.download = new ChapterDownloadInfo(b.state, b.done, b.total);
+    }
   }
 }
 
@@ -74,8 +99,34 @@ export class ChapterDataSource implements IDataSource {
     return this.rows;
   }
 
+  /** 按键复用已显示的行对象：键不变的行只更新属性，增删或换序时才通知重载。 */
   setRows(rows: Array<ChapterRow>): void {
-    this.rows = rows;
+    const previous: Map<string, ChapterRow> = new Map<string, ChapterRow>();
+    for (const row of this.rows) {
+      previous.set(row.key(), row);
+    }
+    let structural: boolean = rows.length !== this.rows.length;
+    const next: Array<ChapterRow> = [];
+    for (let i = 0; i < rows.length; i++) {
+      const fresh: ChapterRow = rows[i];
+      fresh.first = i === 0;
+      fresh.last = i === rows.length - 1;
+      const kept: ChapterRow | undefined = previous.get(fresh.key());
+      if (kept === undefined) {
+        next.push(fresh);
+        structural = true;
+        continue;
+      }
+      if (!structural && this.rows[i] !== kept) {
+        structural = true;
+      }
+      kept.assign(fresh);
+      next.push(kept);
+    }
+    this.rows = next;
+    if (!structural) {
+      return;
+    }
     for (const listener of this.listeners) {
       listener.onDataReloaded();
     }

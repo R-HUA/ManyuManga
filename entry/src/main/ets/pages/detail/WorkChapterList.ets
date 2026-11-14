@@ -5,9 +5,8 @@ import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { IconCircleButton, EmptyView } from '../../common/Components';
 import { IMMERSIVE_SHEET_MATERIAL } from '../../common/ImmersiveMaterials';
 import {
-  CARD, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY
+  CARD, CARD_R, DANGER, DIVIDER, NEUTRAL_PROGRESS, PRIMARY, SUB_CARD, TEXT_MAIN, TEXT_SUB, TEXT_TERTIARY
 } from '../../common/Theme';
-import { settingsRowRadius } from '../settings/SettingsRows';
 import {
   ChapterDataSource, ChapterDownloadInfo, ChapterRow, buildChapterRows, chapterLabel
 } from './ChapterRows';
@@ -131,72 +130,6 @@ export struct WorkChapterList {
   }
 
   @Builder
-  private DownloadMark(row: ChapterRow) {
-    if (row.download.state === 'done') {
-      SymbolGlyph($r('sys.symbol.checkmark')).fontSize(16).fontColor([TEXT_SUB])
-        .accessibilityText('已下载')
-    } else if (row.download.state === 'running') {
-      Progress({ value: row.download.done, total: Math.max(1, row.download.total), type: ProgressType.Ring })
-        .width(20).height(20).color(NEUTRAL_PROGRESS)
-        .style({ strokeWidth: 2.5 })
-    } else if (row.download.state === 'queued') {
-      SymbolGlyph($r('sys.symbol.clock')).fontSize(16).fontColor([TEXT_SUB])
-        .accessibilityText('排队中')
-    } else if (row.download.state === 'failed') {
-      IconCircleButton({
-        glyph: $r('sys.symbol.exclamationmark_circle'), btnSize: 40, iconSize: 18, bg: Color.Transparent,
-        iconColor: DANGER, onTap: (): void => { this.downloadChapter(row.chapter); }
-      })
-        .accessibilityText('下载失败，点按重试')
-    } else if (this.chapterDownloads) {
-      IconCircleButton({
-        glyph: $r('sys.symbol.arrow_down_circle'), btnSize: 40, iconSize: 18, bg: Color.Transparent,
-        iconColor: TEXT_SUB, onTap: (): void => { this.downloadChapter(row.chapter); }
-      })
-        .accessibilityText('下载本章')
-    }
-  }
-
-  @Builder
-  private ChapterLine(row: ChapterRow) {
-    Row({ space: 8 }) {
-      Text(chapterLabel(row.chapter))
-        .fontColor(row.current ? PRIMARY : (row.read ? TEXT_TERTIARY : TEXT_MAIN))
-        .fontSize(16)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-
-      if (row.current) {
-        Text('上次读到')
-          .fontSize(12)
-          .fontColor(PRIMARY)
-      }
-
-      Row() {
-        if (row.selecting) {
-          Checkbox({ name: row.chapter.id })
-            .select(row.selected)
-            .selectedColor(PRIMARY)
-            .width(20)
-            .height(20)
-            .hitTestBehavior(HitTestMode.None)
-        } else {
-          this.DownloadMark(row)
-        }
-      }
-      .width(40)
-      .height(40)
-      .justifyContent(FlexAlign.Center)
-
-    }
-    .width('100%')
-    .constraintSize({ minHeight: 56 })
-    .padding({ left: 12, right: 4 })
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder
   private ChaptersHeader() {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
@@ -315,13 +248,14 @@ export struct WorkChapterList {
       }
 
       ListItemGroup({ header: this.ChaptersHeader() }) {
-        LazyForEach(this.source, (row: ChapterRow, index: number) => {
+        LazyForEach(this.source, (row: ChapterRow) => {
           ListItem() {
-            this.ChapterLine(row)
+            ChapterRowView({
+              row: row,
+              chapterDownloads: this.chapterDownloads,
+              downloadChapter: (chapter: Chapter): void => this.downloadChapter(chapter)
+            })
           }
-          .backgroundColor(CARD)
-          .borderRadius(settingsRowRadius(index, this.rowCount))
-          .clip(true)
           .swipeAction(row.selecting ? {} : { end: { builder: (): void => { this.PreviewAction(row.chapter); } } })
           .onClick(() => {
             if (row.selecting) {
@@ -396,5 +330,92 @@ export struct WorkChapterList {
     .onScrollIndex((start: number) => {
       this.onHeroVisible(start === 0);
     })
+  }
+}
+
+/**
+ * 单个章节行：通过 @ObjectLink 观察复用的行对象，已读、当前章、下载进度和勾选变化只刷新本行。
+ * 分组圆角由行对象的 first / last 决定，筛选后不会沿用旧位置。
+ */
+@Component
+struct ChapterRowView {
+  @ObjectLink row: ChapterRow;
+  @Prop chapterDownloads: boolean = false;
+  downloadChapter: (chapter: Chapter) => void = (_chapter: Chapter): void => {};
+
+  private radius(): BorderRadiuses {
+    const r: number = CARD_R;
+    return {
+      topLeft: this.row.first ? r : 0,
+      topRight: this.row.first ? r : 0,
+      bottomLeft: this.row.last ? r : 0,
+      bottomRight: this.row.last ? r : 0
+    };
+  }
+
+  @Builder
+  private DownloadMark() {
+    if (this.row.download.state === 'done') {
+      SymbolGlyph($r('sys.symbol.checkmark')).fontSize(16).fontColor([TEXT_SUB])
+        .accessibilityText('已下载')
+    } else if (this.row.download.state === 'running') {
+      Progress({ value: this.row.download.done, total: Math.max(1, this.row.download.total), type: ProgressType.Ring })
+        .width(20).height(20).color(NEUTRAL_PROGRESS)
+        .style({ strokeWidth: 2.5 })
+    } else if (this.row.download.state === 'queued') {
+      SymbolGlyph($r('sys.symbol.clock')).fontSize(16).fontColor([TEXT_SUB])
+        .accessibilityText('排队中')
+    } else if (this.row.download.state === 'failed') {
+      IconCircleButton({
+        glyph: $r('sys.symbol.exclamationmark_circle'), btnSize: 40, iconSize: 18, bg: Color.Transparent,
+        iconColor: DANGER, onTap: (): void => { this.downloadChapter(this.row.chapter); }
+      })
+        .accessibilityText('下载失败，点按重试')
+    } else if (this.chapterDownloads) {
+      IconCircleButton({
+        glyph: $r('sys.symbol.arrow_down_circle'), btnSize: 40, iconSize: 18, bg: Color.Transparent,
+        iconColor: TEXT_SUB, onTap: (): void => { this.downloadChapter(this.row.chapter); }
+      })
+        .accessibilityText('下载本章')
+    }
+  }
+
+  build() {
+    Row({ space: 8 }) {
+      Text(chapterLabel(this.row.chapter))
+        .fontColor(this.row.current ? PRIMARY : (this.row.read ? TEXT_TERTIARY : TEXT_MAIN))
+        .fontSize(16)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+
+      if (this.row.current) {
+        Text('上次读到')
+          .fontSize(12)
+          .fontColor(PRIMARY)
+      }
+
+      Row() {
+        if (this.row.selecting) {
+          Checkbox({ name: this.row.chapter.id })
+            .select(this.row.selected)
+            .selectedColor(PRIMARY)
+            .width(20)
+            .height(20)
+            .hitTestBehavior(HitTestMode.None)
+        } else {
+          this.DownloadMark()
+        }
+      }
+      .width(40)
+      .height(40)
+      .justifyContent(FlexAlign.Center)
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 56 })
+    .padding({ left: 12, right: 4 })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(CARD)
+    .borderRadius(this.radius())
   }
 }

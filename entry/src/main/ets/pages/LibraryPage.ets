@@ -301,11 +301,12 @@ export struct LibraryPage {
             .padding({ bottom: TAB_BAR_HEIGHT + this.bottomInset })
           } else {
             Grid(this.scroller) {
+              // 选中状态由卡片内的 @Link selected 刷新，不进键，勾选时不重建整张卡片。
               ForEach(this.filtered(), (work: LibraryWork) => {
                 GridItem() {
                   this.Cover(work)
                 }
-              }, (work: LibraryWork) => `${work.id}_${this.selected.includes(work.id)}_${work.newChapters}_${work.read}`)
+              }, (work: LibraryWork) => `${work.id}_${work.newChapters}_${work.read}`)
             }
             .columnsTemplate(`repeat(${comicColumns(this.contentWidth)}, 1fr)`)
             .columnsGap(12)
