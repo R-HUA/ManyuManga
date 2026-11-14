@@ -75,6 +75,7 @@ function environment() {
   globalThis.Scroller = class { scrollTo() {} scrollEdge() {} };
   globalThis.SwiperController = class { changeIndex() {} };
   globalThis.Curve = { EaseOut: 'easeOut', Friction: 'friction' };
+  globalThis.ClickEffectLevel = { LIGHT: 0, MIDDLE: 1, HEAVY: 2 };
   const relational = makeRelationalStore(state);
   function load(file) {
     file = path.resolve(file);

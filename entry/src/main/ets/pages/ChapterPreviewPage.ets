@@ -6,7 +6,7 @@ import { sourceApi } from '../data/SourceApi';
 import { isRequestCancelled, RequestAbortGroup } from '../util/RequestAbort';
 import { PagePreview } from '../common/PagePreview';
 import { EmptyView } from '../common/Components';
-import { BG, CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R, ON_OVERLAY, OVERLAY_SCRIM } from '../common/Theme';
+import { BG, CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, COVER_R, ON_OVERLAY, OVERLAY_SCRIM, PRESS_SURFACE } from '../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -195,7 +195,7 @@ export struct ChapterPreviewPage {
                     .backgroundColor(SUB_CARD)
                   }
                   .width('100%')
-                  .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+                  .clickEffect(PRESS_SURFACE)
                 }
               }, (filename: string, idx: number) => `${this.previewPage * this.pageSize() + idx}_${filename}`)
             }

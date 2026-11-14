@@ -5,7 +5,7 @@ import { errorMessage } from '../models/Models';
 import { SourceEntryCard } from './sources/SourceEntryCard';
 import { SOURCE_SECTIONS, presentationFor } from '../data/source/SourceCatalog';
 import { MangaRouteParams, ROUTE_SEARCH, ROUTE_SUWAYOMI_LIBRARY } from '../common/Route';
-import { BG, CARD, DIVIDER, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT } from '../common/Theme';
+import { BG, CARD, DIVIDER, DANGER, TEXT_MAIN, TEXT_SUB, TAB_BAR_HEIGHT, PRESS_SURFACE } from '../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 @Component
@@ -91,7 +91,7 @@ export struct SourcesPage {
             .width('100%')
             .constraintSize({ minHeight: 60 })
             .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.99 })
+            .clickEffect(PRESS_SURFACE)
             .onClick(() => {
               this.stack.pushPathByName(ROUTE_SUWAYOMI_LIBRARY, {} as MangaRouteParams);
             })

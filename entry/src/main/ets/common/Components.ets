@@ -35,7 +35,6 @@ export struct IconCircleButton {
     .width(Math.max(40, this.btnSize))
     .height(Math.max(40, this.btnSize))
     .backgroundColor(this.active ? PRIMARY_SOFT : this.bg)
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
     .onClick(() => {
       this.onTap();
     })

@@ -1,4 +1,4 @@
-import { PRIMARY } from '../../common/Theme';
+import { PRIMARY, PRESS_CELL } from '../../common/Theme';
 
 /**
  * 阅读器底栏入口：图标 + 文字，48vp 热区。颜色取系统 token，由外层 WithTheme(DARK) 固定为深色栏配色。
@@ -27,7 +27,7 @@ export struct HudButton {
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .accessibilityText(this.accessibilityLabel !== '' ? this.accessibilityLabel : this.label)
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.92 })
+    .clickEffect(PRESS_CELL)
     .onClick(() => {
       this.onTap();
     })

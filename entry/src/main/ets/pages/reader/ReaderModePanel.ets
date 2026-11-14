@@ -1,5 +1,5 @@
 import { ReaderMode } from '../../models/Models';
-import { PRIMARY, PRIMARY_SOFT } from '../../common/Theme';
+import { PRIMARY, PRIMARY_SOFT, PRESS_CELL } from '../../common/Theme';
 import { readerModeLabel } from '../../data/ReaderModeCycle';
 
 /** 各阅读模式的图标：底栏「模式」入口用它区分当前模式。 */
@@ -58,7 +58,7 @@ export struct ReaderModePanel {
         .alignItems(HorizontalAlign.Center)
         .borderRadius(8)
         .backgroundColor(this.mode === item.mode ? PRIMARY_SOFT : Color.Transparent)
-        .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.94 })
+        .clickEffect(PRESS_CELL)
         .onClick(() => {
           this.switchMode(item.mode);
         })

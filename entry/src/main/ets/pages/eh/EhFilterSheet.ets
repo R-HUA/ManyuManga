@@ -14,7 +14,7 @@ import {
 } from '../../data/eh/EhSearchFilter';
 import { IconCircleButton } from '../../common/Components';
 import { IMMERSIVE_REGULAR_MATERIAL } from '../../common/ImmersiveMaterials';
-import { CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, ON_PRIMARY } from '../../common/Theme';
+import { CARD, SUB_CARD, PRIMARY, TEXT_MAIN, TEXT_SUB, DIVIDER, ON_PRIMARY, PRESS_SURFACE } from '../../common/Theme';
 import { BOTTOM_RECT_HEIGHT_KEY } from '../../entryability/EntryAbility';
 
 class EhFlagRow {
@@ -143,7 +143,7 @@ export struct EhFilterSheet {
       .height(30)
       .borderRadius(15)
       .backgroundColor(this.draft.mode === mode ? CARD : Color.Transparent)
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+      .clickEffect(PRESS_SURFACE)
       .onClick(() => {
         this.draft.mode = mode;
         this.refreshDraft();
@@ -162,7 +162,7 @@ export struct EhFilterSheet {
       .height(30)
       .borderRadius(15)
       .backgroundColor(this.draft.minRating === value ? CARD : Color.Transparent)
-      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+      .clickEffect(PRESS_SURFACE)
       .onClick(() => {
         this.draft.minRating = value;
         this.refreshDraft();
@@ -193,7 +193,7 @@ export struct EhFilterSheet {
     .alignItems(VerticalAlign.Center)
     .borderRadius(8)
     .backgroundColor(this.draft.categoryOn(option.bit) ? option.color : SUB_CARD)
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })
+    .clickEffect(PRESS_SURFACE)
     .onClick(() => {
       this.draft.toggleCategory(option.bit);
       this.refreshDraft();

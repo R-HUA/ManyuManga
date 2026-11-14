@@ -12,8 +12,7 @@ import {
   ZONE_MENU,
   ZONE_NEXT,
   ZONE_IDLE,
-  ZONE_PREV
-} from '../../common/Theme';
+  ZONE_PREV, PRESS_SURFACE } from '../../common/Theme';
 
 @Component
 export struct ReaderZoneOverlay {
@@ -84,7 +83,7 @@ export struct ReaderZoneOverlay {
             .height('100%')
             .backgroundColor(this.zoneColor(this.actionAt(index)))
             .borderRadius(10)
-            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+            .clickEffect(PRESS_SURFACE)
             .onClick(() => {
               const taps: Array<number> = this.options.taps.slice();
               taps[index] = (taps[index] + 1) % TAP_ACTIONS.length;

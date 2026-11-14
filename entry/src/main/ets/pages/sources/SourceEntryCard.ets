@@ -9,7 +9,7 @@ import {
 } from '../../data/source/SourceCatalog';
 import { MangaRouteParams, ROUTE_EH_SITE, ROUTE_SOURCE_SETTINGS, ROUTE_SUWAYOMI_CONNECT } from '../../common/Route';
 import { errorMessage } from '../../models/Models';
-import { DANGER, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { DANGER, TEXT_MAIN, TEXT_SUB, PRESS_SURFACE } from '../../common/Theme';
 
 /**
  * 图源平铺列表行：无卡片底色、无左侧图标、无行内按钮，整行点击直接进入对应图源。
@@ -139,7 +139,7 @@ export struct SourceEntryCard {
     .width('100%')
     .constraintSize({ minHeight: 56 })
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.99 })
+    .clickEffect(PRESS_SURFACE)
     .onClick(() => this.onPrimaryBrowse())
   }
 

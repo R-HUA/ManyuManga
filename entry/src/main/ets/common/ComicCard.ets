@@ -1,4 +1,4 @@
-import { TEXT_MAIN, TEXT_SUB, DIVIDER, CHIP_BG, COVER_R, COVER_ASPECT_RATIO, ON_OVERLAY, OVERLAY_SCRIM } from './Theme';
+import { TEXT_MAIN, TEXT_SUB, DIVIDER, CHIP_BG, COVER_R, COVER_ASPECT_RATIO, BADGE_R, ON_OVERLAY, OVERLAY_SCRIM, PRESS_SURFACE } from './Theme';
 import { SourceCover } from './SourceCover';
 import { sourceApi } from '../data/SourceApi';
 import { sourceId } from '../data/Sources';
@@ -102,7 +102,7 @@ export struct ComicCard {
       .constraintSize({ maxWidth: '80%' })
       .padding({ left: 7, right: 7, top: 3, bottom: 3 })
       .backgroundColor(OVERLAY_SCRIM)
-      .borderRadius(8)
+      .borderRadius(BADGE_R)
       .margin(6)
   }
 
@@ -186,7 +186,7 @@ export struct ComicCard {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+    .clickEffect(PRESS_SURFACE)
     .onClick(() => {
       this.onCardClick();
     })

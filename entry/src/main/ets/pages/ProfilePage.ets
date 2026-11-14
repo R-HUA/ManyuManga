@@ -4,7 +4,7 @@ import {
   ROUTE_SOURCE_SETTINGS, ROUTE_STATS, ROUTE_STORAGE
 } from '../common/Route';
 import { HDS_TITLE_STYLE } from '../common/ImmersiveMaterials';
-import { BG, CARD, TEXT_MAIN, TEXT_SUB, DIVIDER, TAB_BAR_HEIGHT } from '../common/Theme';
+import { BG, CARD, TEXT_MAIN, TEXT_SUB, DIVIDER, TAB_BAR_HEIGHT, PRESS_SURFACE } from '../common/Theme';
 import { TOP_RECT_HEIGHT_KEY, BOTTOM_RECT_HEIGHT_KEY } from '../entryability/EntryAbility';
 
 /**
@@ -39,7 +39,7 @@ export struct ProfilePage {
     .width('100%')
     .constraintSize({ minHeight: 56 })
     .alignItems(VerticalAlign.Center)
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
+    .clickEffect(PRESS_SURFACE)
     .onClick(() => {
       onTap();
     })

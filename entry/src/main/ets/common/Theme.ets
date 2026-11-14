@@ -37,6 +37,13 @@ export const BADGE_R: number = 4;
 export const CHIP_R: number = 14;
 
 export const COVER_ASPECT_RATIO: number = 0.75;
+
+/**
+ * 自绘可点区域的按压缩放只用两档；原生 Button 用系统自带按压态，不再叠加 clickEffect。
+ * PRESS_SURFACE：卡片、列表行、分段项、芯片；PRESS_CELL：栏内图标格。
+ */
+export const PRESS_SURFACE: ClickEffect = { level: ClickEffectLevel.LIGHT, scale: 0.97 };
+export const PRESS_CELL: ClickEffect = { level: ClickEffectLevel.LIGHT, scale: 0.95 };
 /** HDS 悬浮页签默认高度，用于内容与续读条避让。 */
 export const TAB_BAR_HEIGHT: number = 56;
 /** HDS MINI 模式标题栏标准高度规范（56vp）。 */

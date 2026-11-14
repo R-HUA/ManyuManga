@@ -2,7 +2,7 @@
  * entry/src/main/ets/pages/reader/ReaderPictureSheet.ets
  * 阅读器底部「画面」浮卡内容：随底栏胶囊上方展开，与工具栏共享调色板，不占用整屏半模态。
  */
-import { PRIMARY, PRIMARY_SOFT } from '../../common/Theme';
+import { PRIMARY, PRIMARY_SOFT, PRESS_SURFACE } from '../../common/Theme';
 import { EMPTY_MATERIAL } from '../../common/ImmersiveMaterials';
 import { ReaderOptions, EYE_COMFORT_DEFAULT, EYE_COMFORT_MAX, EYE_COMFORT_MIN } from '../../data/ReaderOptions';
 import { Prefs } from '../../util/Prefs';
@@ -100,7 +100,7 @@ export struct ReaderPictureSheet {
     .justifyContent(FlexAlign.Center)
     .borderRadius(20)
     .backgroundColor(active ? PRIMARY_SOFT : Color.Transparent)
-    .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+    .clickEffect(PRESS_SURFACE)
     .onClick(() => {
       onTap();
     })
