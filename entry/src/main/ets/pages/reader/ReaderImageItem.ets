@@ -1,9 +1,23 @@
 import image from '@ohos.multimedia.image';
 import { cropPageWhitespace } from '../../data/ImageDecode';
-import { isPixelMapValid, loadPagePixelMap, releasePagePixelMap } from '../../data/ImageDecode';
+import { isPixelMapValid, loadPagePixelMap, PageLoadStage, releasePagePixelMap } from '../../data/ImageDecode';
 import { isRequestCancelled, RequestAbortGroup } from '../../util/RequestAbort';
 const PLACEHOLDER_BG: string = '#16161A';
-const FAILED_BG: string = '#201619';
+/** 加载超过这个时长仍未出图，才在原图位置显示当前阶段文字。 */
+const STAGE_HINT_DELAY_MS: number = 1000;
+
+export function pageStageText(stage: string): string {
+  if (stage === 'waiting') {
+    return '等待加载';
+  }
+  if (stage === 'downloading') {
+    return '正在下载';
+  }
+  if (stage === 'preparing') {
+    return '正在准备图片';
+  }
+  return '';
+}
 const SCRAMBLE_DEFAULT: number = 220980;
 
 @Component
@@ -104,6 +118,8 @@ export struct ReaderImageItem {
   /** true = 横向翻页整屏适配（ImageFit.Contain）；false = 纵向条漫整宽 */
   @Prop fitScreen: boolean = false;
   @Prop @Watch('onSourceChanged') cropWhite: boolean = false;
+  /** 纸色画布：占位与失败提示改用浅色主题的系统 token。 */
+  @Prop paper: boolean = false;
   onFailure: (filename: string, error: Error) => void = (): void => {};
   onMeasured: (filename: string, aspect: number) => void = (): void => {};
   @Prop @Watch('reportVisibility') active: boolean = true;
@@ -112,6 +128,11 @@ export struct ReaderImageItem {
   @State loading: boolean = true;
   @State failed: boolean = false;
   @State aspect: number = 0.7;
+  /** 当前真实阶段，只由 loadPagePixelMap 与裁白边节点推进。 */
+  @State stage: string = '';
+  /** 计时器只决定 1 秒后是否显示阶段文字，不推进阶段。 */
+  @State stageVisible: boolean = false;
+  private stageTimer: number = -1;
   private loadToken: number = 0;
   private inViewport: boolean = false;
   private displayed: boolean = false;
@@ -127,7 +148,33 @@ export struct ReaderImageItem {
     this.onDisplayed(this.displayedChapter, this.displayedFilename, false);
     this.loadToken++;
     this.signal.abortAll();
+    this.stopStageHint();
     this.releaseMap();
+  }
+
+  private stopStageHint(): void {
+    if (this.stageTimer >= 0) {
+      clearTimeout(this.stageTimer);
+      this.stageTimer = -1;
+    }
+    this.stageVisible = false;
+    this.stage = '';
+  }
+
+  private startStageHint(token: number): void {
+    this.stopStageHint();
+    this.stageTimer = setTimeout(() => {
+      this.stageTimer = -1;
+      if (token === this.loadToken && this.loading) {
+        this.stageVisible = true;
+      }
+    }, STAGE_HINT_DELAY_MS);
+  }
+
+  private reportStage(token: number, stage: PageLoadStage): void {
+    if (token === this.loadToken) {
+      this.stage = stage;
+    }
   }
 
   onSourceChanged(): void {
@@ -158,10 +205,12 @@ export struct ReaderImageItem {
     const signal: RequestAbortGroup = this.signal;
     this.loading = true;
     this.failed = false;
+    this.startStageHint(token);
     // 旧图保留到新图就位后再归还，不在请求开始时提前释放。
     try {
       let map: image.PixelMap | null = await loadPagePixelMap(
-        this.photoId, this.filename, this.scrambleId, this.targetWidth, signal);
+        this.photoId, this.filename, this.scrambleId, this.targetWidth, signal,
+        (stage: PageLoadStage): void => this.reportStage(token, stage));
       if (token !== this.loadToken) {
         if (map !== null) {
           releasePagePixelMap(map);
@@ -169,6 +218,7 @@ export struct ReaderImageItem {
         return;
       }
       if (map === null) {
+        this.stopStageHint();
         this.releaseMap();
         this.loading = false;
         this.failed = true;
@@ -176,6 +226,7 @@ export struct ReaderImageItem {
         return;
       }
       if (this.cropWhite) {
+        this.reportStage(token, 'preparing');
         const original: image.PixelMap = map;
         try { map = await cropPageWhitespace(original); }
         finally { releasePagePixelMap(original); }
@@ -194,6 +245,7 @@ export struct ReaderImageItem {
       this.onMeasured(this.filename, this.aspect);
       const previous: image.PixelMap | undefined = this.pixelMap;
       this.pixelMap = map;
+      this.stopStageHint();
       this.loading = false;
       if (previous !== undefined) {
         releasePagePixelMap(previous);
@@ -203,6 +255,7 @@ export struct ReaderImageItem {
         return;
       }
       if (token === this.loadToken) {
+        this.stopStageHint();
         this.releaseMap();
         this.loading = false;
         this.failed = true;
@@ -247,51 +300,71 @@ export struct ReaderImageItem {
   }
 
   @Builder
+  private LoadingBody() {
+    Column({ space: 8 }) {
+      LoadingProgress().width(26).height(26).color($r('sys.color.font_tertiary'))
+      if (this.stageVisible && pageStageText(this.stage) !== '') {
+        Text(pageStageText(this.stage))
+          .fontSize(12)
+          .fontColor($r('sys.color.font_secondary'))
+      }
+    }
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  private FailedBody() {
+    Column({ space: 8 }) {
+      Text('加载失败').fontSize(14).fontColor($r('sys.color.font_primary'))
+      Text('点按重试（自动切换线路）').fontSize(12).fontColor($r('sys.color.font_secondary'))
+    }
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder
+  private Placeholder(failed: boolean) {
+    WithTheme({ colorMode: this.paper ? ThemeColorMode.LIGHT : ThemeColorMode.DARK }) {
+      if (this.fitScreen) {
+        Column() {
+          if (failed) {
+            this.FailedBody()
+          } else {
+            this.LoadingBody()
+          }
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor($r('sys.color.comp_background_tertiary'))
+        .justifyContent(FlexAlign.Center)
+      } else {
+        Column() {
+          if (failed) {
+            this.FailedBody()
+          } else {
+            this.LoadingBody()
+          }
+        }
+        .width('100%')
+        .aspectRatio(this.aspect)
+        .backgroundColor($r('sys.color.comp_background_tertiary'))
+        .justifyContent(FlexAlign.Center)
+      }
+    }
+  }
+
+  @Builder
   private Content() {
     if (this.loading) {
-      if (this.fitScreen) {
-        Column() {
-          LoadingProgress().width(26).height(26).color('rgba(255,255,255,0.45)')
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor(PLACEHOLDER_BG)
-        .justifyContent(FlexAlign.Center)
-      } else {
-        Column() {
-          LoadingProgress().width(26).height(26).color('rgba(255,255,255,0.45)')
-        }
-        .width('100%')
-        .aspectRatio(this.aspect)
-        .backgroundColor(PLACEHOLDER_BG)
-        .justifyContent(FlexAlign.Center)
-      }
+      this.Placeholder(false)
     } else if (this.failed) {
-      if (this.fitScreen) {
-        Column({ space: 8 }) {
-          Text('加载失败').fontSize(14).fontColor('rgba(255,255,255,0.85)')
-          Text('点按重试（自动切换线路）').fontSize(12).fontColor('rgba(255,255,255,0.5)')
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor(FAILED_BG)
-        .justifyContent(FlexAlign.Center)
-        .onClick(() => {
-          this.doLoad();
-        })
-      } else {
-        Column({ space: 8 }) {
-          Text('加载失败').fontSize(14).fontColor('rgba(255,255,255,0.85)')
-          Text('点按重试（自动切换线路）').fontSize(12).fontColor('rgba(255,255,255,0.5)')
-        }
-        .width('100%')
-        .aspectRatio(this.aspect)
-        .backgroundColor(FAILED_BG)
-        .justifyContent(FlexAlign.Center)
-        .onClick(() => {
-          this.doLoad();
-        })
+      Column() {
+        this.Placeholder(true)
       }
+      .width('100%')
+      .height(this.fitScreen ? '100%' : 'auto')
+      .onClick(() => {
+        this.doLoad();
+      })
     } else if (this.pixelMap !== undefined) {
       this.DisplayImage(this.pixelMap, this.loadToken, this.displayedChapter, this.displayedFilename)
     }

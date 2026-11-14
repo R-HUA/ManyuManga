@@ -71,6 +71,7 @@ export struct ReaderPage {
             targetWidth: this.controller.targetWidthPx,
             fitScreen: false,
             cropWhite: this.options.cropWhite,
+            paper: this.bgPaper,
             active: this.readerActive && !this.inBackground,
             onDisplayed: (chapter: string, filename: string, visible: boolean): void => { this.controller.pageDisplayed(chapter, filename, visible); },
             onFailure: (filename: string, error: Error): void => { this.controller.pageFailed(filename, error); }
@@ -138,6 +139,7 @@ export struct ReaderPage {
                 targetWidth: this.controller.targetWidthPx,
                 fitScreen: true,
                 cropWhite: this.options.cropWhite,
+                paper: this.bgPaper,
                 active: this.readerActive && !this.inBackground,
                 onDisplayed: (chapter: string, filename: string, visible: boolean): void => { this.controller.pageDisplayed(chapter, filename, visible); },
                 onFailure: (filename: string, error: Error): void => { this.controller.pageFailed(filename, error); },

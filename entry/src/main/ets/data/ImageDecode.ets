@@ -203,8 +203,16 @@ function snapWidthTier(w: number): number {
   return THUMB_MAX;
 }
 
+/** 单页加载的真实阶段：排队等待解码槽位、从网络下载、解码（含解扰）。 */
+export type PageLoadStage = 'waiting' | 'downloading' | 'preparing';
+
+/**
+ * 加载单页位图。onStage 只在真实任务节点上报阶段：内存命中不上报；
+ * 等待解码槽位时为 waiting，缓存缺失需要联网时为 downloading，开始解码时为 preparing。
+ */
 export async function loadPagePixelMap(photoId: string, filename: string,
-  scrambleId: number, targetWidth: number, signal: RequestAbortGroup | null = null): Promise<image.PixelMap | null> {
+  scrambleId: number, targetWidth: number, signal: RequestAbortGroup | null = null,
+  onStage: ((stage: PageLoadStage) => void) | null = null): Promise<image.PixelMap | null> {
   targetWidth = snapWidthTier(targetWidth);
   const key: string = memoryKey(photoId, filename, scrambleId, targetWidth);
   const fast: image.PixelMap | null = await takeFromMemory(key);
@@ -213,6 +221,9 @@ export async function loadPagePixelMap(photoId: string, filename: string,
   }
   if (signal !== null) {
     signal.throwIfAborted();
+  }
+  if (onStage !== null) {
+    onStage('waiting');
   }
   const sem: DecodeSemaphore = await semFor();
   await sem.acquire();
@@ -228,6 +239,9 @@ export async function loadPagePixelMap(photoId: string, filename: string,
     if (isThumb) {
       const thumbPath: string | null = pageThumbPath(photoId, filename, targetWidth, scrambleId);
       if (thumbPath !== null && fileExists(thumbPath)) {
+        if (onStage !== null) {
+          onStage('preparing');
+        }
         const cached: image.PixelMap | null = await decodeFileAsync(thumbPath);
         if (cached !== null) {
           const borrowed: image.PixelMap | null = publishIntoMemory(key, cached);
@@ -235,12 +249,18 @@ export async function loadPagePixelMap(photoId: string, filename: string,
         }
       }
     }
+    if (onStage !== null && cachedRawFilePath(photoId, filename) === null) {
+      onStage('downloading');
+    }
     const bytes: ArrayBuffer | null = await fetchPageBytes(photoId, filename, signal);
     if (bytes === null) {
       return null;
     }
     if (signal !== null) {
       signal.throwIfAborted();
+    }
+    if (onStage !== null) {
+      onStage('preparing');
     }
     let pm: image.PixelMap | null = null;
     try {
