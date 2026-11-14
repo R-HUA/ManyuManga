@@ -90,7 +90,17 @@ export struct ReaderHud {
   }
 
   private togglePanel(kind: ReaderPanelKind): void {
-    this.panel = this.panel === kind ? 'none' : kind;
+    this.switchPanel(this.panel === kind ? 'none' : kind);
+  }
+
+  /** 面板切换：容器高度与内容淡入淡出在同一段动画里完成，避免高度硬跳。 */
+  private switchPanel(next: ReaderPanelKind): void {
+    if (next === this.panel) {
+      return;
+    }
+    this.getUIContext().animateTo({ duration: 200, curve: Curve.FastOutSlowIn }, () => {
+      this.panel = next;
+    });
   }
 
   @Builder
@@ -150,26 +160,36 @@ export struct ReaderHud {
           loadChapter: (chapterIdx: number, targetPage: number): Promise<void> => this.loadChapter(chapterIdx, targetPage),
           flushProgress: (): void => this.flushProgress(),
           close: (): void => {
-            this.panel = 'none';
+            this.switchPanel('none');
           }
         })
           .width('100%')
           .height(catalogPanelHeight(this.chapters.length, this.bookmarks.length, Math.min(this.maxPanelHeight, 420)))
           .padding({ left: 12, right: 12, top: 8 })
+          .transition(TransitionEffect.OPACITY)
       } else if (this.panel !== 'none') {
         Scroll() {
           Column({ space: 10 }) {
             if (this.sliderDragging && this.pages.length > 0) { this.DragPreview() }
             if (this.panel === 'progress') {
-              this.ProgressCard()
+              Column() {
+                this.ProgressCard()
+              }
+              .width('100%')
+              .transition(TransitionEffect.OPACITY)
             } else if (this.settingsOpen()) {
-              this.SettingsPanel()
+              Column() {
+                this.SettingsPanel()
+              }
+              .width('100%')
+              .transition(TransitionEffect.OPACITY)
             }
           }.width('100%').padding({ left: 16, right: 16, top: 12, bottom: 4 })
         }
         .width('100%')
         .constraintSize({ maxHeight: this.maxPanelHeight })
         .align(Alignment.TopStart).scrollBar(BarState.Off)
+        .transition(TransitionEffect.OPACITY)
       }
 
       Row() {
@@ -195,7 +215,7 @@ export struct ReaderHud {
           symbol: $r('sys.symbol.gearshape'),
           label: '设置',
           active: this.settingsOpen(),
-          onTap: (): void => { this.panel = this.settingsOpen() ? 'none' : 'prefs'; }
+          onTap: (): void => { this.switchPanel(this.settingsOpen() ? 'none' : 'prefs'); }
         })
       }
       .width('100%')

@@ -37,6 +37,12 @@ export struct WorkHeroInfo {
   @State titlePopup: boolean = false;
   @State descWidth: number = 0;
   @State descOverflow: boolean = false;
+  /** 简介展开收起动画期间固定的容器高度（vp），-1 表示自适应。 */
+  @State descHeight: number = -1;
+  /** 动画进行中不限行数，靠容器裁剪，避免收起时先截掉最后几行。 */
+  @State descAnimating: boolean = false;
+  private descCollapsedVp: number = 0;
+  private descFullVp: number = 0;
   private shownAlbumId: string = '';
   private shownTitle: string = '';
   private shownDescription: string = '';
@@ -88,6 +94,8 @@ export struct WorkHeroInfo {
     if (id !== this.shownAlbumId) {
       this.shownAlbumId = id;
       this.descExpanded = false;
+      this.descAnimating = false;
+      this.descHeight = -1;
       this.titlePopup = false;
     }
     const title: string = current === null ? '' : current.name;
@@ -143,6 +151,56 @@ export struct WorkHeroInfo {
     const description: string = this.album === null ? '' : this.album.description;
     this.descOverflow = this.clipped(description, this.descWidth, $r('sys.float.Body_M'), FontWeight.Regular,
       `${DESC_LINE_HEIGHT}fp`, DESC_MAX_LINES);
+    this.descCollapsedVp = 0;
+    this.descFullVp = 0;
+    if (!this.descOverflow) {
+      return;
+    }
+    try {
+      const options: MeasureOptions = {
+        textContent: description, constraintWidth: this.descWidth, fontSize: $r('sys.float.Body_M'),
+        fontWeight: FontWeight.Regular, lineHeight: `${DESC_LINE_HEIGHT}fp`
+      };
+      const limited: MeasureOptions = {
+        textContent: description, constraintWidth: this.descWidth, fontSize: $r('sys.float.Body_M'),
+        fontWeight: FontWeight.Regular, lineHeight: `${DESC_LINE_HEIGHT}fp`, maxLines: DESC_MAX_LINES
+      };
+      const full: SizeOptions = this.getUIContext().getMeasureUtils().measureTextSize(options);
+      const short: SizeOptions = this.getUIContext().getMeasureUtils().measureTextSize(limited);
+      this.descFullVp = this.getUIContext().px2vp(Number(full.height));
+      this.descCollapsedVp = this.getUIContext().px2vp(Number(short.height));
+    } catch (e) {
+      this.descCollapsedVp = 0;
+      this.descFullVp = 0;
+    }
+  }
+
+  /** 简介展开收起：固定起点高度，在 animateTo 里过渡到终点高度，结束后恢复自适应。 */
+  private toggleDescription(): void {
+    if (!this.descOverflow || this.descAnimating) {
+      return;
+    }
+    const expand: boolean = !this.descExpanded;
+    if (this.descCollapsedVp <= 0 || this.descFullVp <= this.descCollapsedVp) {
+      this.descExpanded = expand;
+      return;
+    }
+    this.descAnimating = true;
+    this.descHeight = expand ? this.descCollapsedVp : this.descFullVp;
+    if (expand) {
+      this.descExpanded = true;
+    }
+    this.getUIContext().animateTo({
+      duration: 250,
+      curve: Curve.Friction,
+      onFinish: (): void => {
+        this.descExpanded = expand;
+        this.descAnimating = false;
+        this.descHeight = -1;
+      }
+    }, () => {
+      this.descHeight = expand ? this.descFullVp : this.descCollapsedVp;
+    });
   }
 
   private copyTitle(): void {
@@ -325,31 +383,35 @@ export struct WorkHeroInfo {
               .fontSize(16)
               .fontWeight(FontWeight.Medium)
               .fontColor(TEXT_MAIN)
-            Text(this.album.description)
-              .fontColor(TEXT_MAIN)
-              .fontSize($r('sys.float.Body_M'))
-              .lineHeight(DESC_LINE_HEIGHT)
-              .maxLines(this.descExpanded ? Number.MAX_SAFE_INTEGER : DESC_MAX_LINES)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-              .onAreaChange((_old: Area, area: Area): void => {
-                const width: number = Number(area.width);
-                if (width !== this.descWidth) {
-                  this.descWidth = width;
-                  this.measureDescription();
-                }
-              })
-              .onClick(() => {
-                if (this.descOverflow) {
-                  this.descExpanded = !this.descExpanded;
-                }
-              })
+            Column() {
+              Text(this.album.description)
+                .fontColor(TEXT_MAIN)
+                .fontSize($r('sys.float.Body_M'))
+                .lineHeight(DESC_LINE_HEIGHT)
+                .maxLines(this.descExpanded || this.descAnimating ? Number.MAX_SAFE_INTEGER : DESC_MAX_LINES)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+                .onAreaChange((_old: Area, area: Area): void => {
+                  const width: number = Number(area.width);
+                  if (width !== this.descWidth) {
+                    this.descWidth = width;
+                    this.measureDescription();
+                  }
+                })
+                .onClick(() => {
+                  this.toggleDescription();
+                })
+            }
+            .width('100%')
+            .height(this.descHeight < 0 ? 'auto' : this.descHeight)
+            .alignItems(HorizontalAlign.Start)
+            .clip(true)
             if (this.descOverflow) {
               Row() {
                 Button(this.descExpanded ? '收起' : '展开',
                   { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
                   .onClick(() => {
-                    this.descExpanded = !this.descExpanded;
+                    this.toggleDescription();
                   })
               }
               .width('100%')
