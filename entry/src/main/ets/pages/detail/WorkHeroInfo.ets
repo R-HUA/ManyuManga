@@ -8,7 +8,7 @@ import { capabilitiesForSourceId } from '../../data/source/SourceContracts';
 import { presentationFor } from '../../data/source/SourceCatalog';
 import { LibraryWork } from '../../data/Library';
 import { SourceCover } from '../../common/SourceCover';
-import { ON_PRIMARY, TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
+import { TEXT_MAIN, TEXT_SUB } from '../../common/Theme';
 
 const TITLE_MAX_LINES: number = 3;
 const DESC_MAX_LINES: number = 3;
@@ -49,12 +49,21 @@ export struct WorkHeroInfo {
     return saved.chapterId !== '' && saved.totalPages > 0 && saved.page >= 0 && saved.page < saved.totalPages;
   }
 
-  private continueLabel(): string {
+  /** 续读位置：「读到第 12 话，第 8/51 页」；章节名优先取章节标题。 */
+  private resumeLine(): string {
     const saved: ReadingProgress | null = this.progress;
-    if (saved === null) {
-      return '继续阅读';
+    if (saved === null || !this.canContinue()) {
+      return '';
     }
-    return `继续阅读 P.${saved.page + 1}`;
+    const episodes: Array<Chapter> = this.album === null ? [] : this.album.episodes;
+    let chapterName: string = `第 ${saved.chapterIndex + 1} 话`;
+    if (saved.chapterIndex >= 0 && saved.chapterIndex < episodes.length) {
+      const title: string = episodes[saved.chapterIndex].title.trim();
+      if (title !== '') {
+        chapterName = title;
+      }
+    }
+    return `读到${chapterName}，第 ${saved.page + 1}/${saved.totalPages} 页`;
   }
 
   private sourceBadge(): string {
@@ -199,6 +208,28 @@ export struct WorkHeroInfo {
     .width('100%')
   }
 
+  @Builder
+  private ReadAction() {
+    Column({ space: 8 }) {
+      Button(this.canContinue() ? '继续阅读' : '开始阅读',
+        { buttonStyle: ButtonStyleMode.EMPHASIZED, controlSize: ControlSize.NORMAL })
+        .width('100%')
+        .constraintSize({ maxWidth: this.breakpoint === 'sm' ? '100%' : 448 })
+        .onClick(() => { this.read(); })
+      if (this.resumeLine() !== '') {
+        Text(this.resumeLine())
+          .fontSize(12)
+          .fontColor(TEXT_SUB)
+          .fontFeature('"tnum" 1')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .constraintSize({ maxWidth: this.breakpoint === 'sm' ? '100%' : 448 })
+      }
+    }
+    .width('100%')
+    .alignItems(this.breakpoint === 'sm' ? HorizontalAlign.Center : HorizontalAlign.Start)
+  }
+
   build() {
     if (this.album !== null) {
       Column({ space: 16 }) {
@@ -285,6 +316,9 @@ export struct WorkHeroInfo {
         .width('100%')
         .alignItems(VerticalAlign.Top)
 
+        // 主操作紧跟作品身份：先决定读不读、从哪里继续，再看简介和标签。
+        this.ReadAction()
+
         if (this.album.description !== '') {
           Column({ space: 8 }) {
             Text('简介')
@@ -330,17 +364,6 @@ export struct WorkHeroInfo {
           WorkTags({ aid: this.aid, terms: this.album.tags, sourceId: sourceId(this.aid), sourceName: this.sourceName })
         }
 
-        Button({ type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.EMPHASIZED }) {
-          Text(this.canContinue() ? this.continueLabel() : '开始阅读')
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(ON_PRIMARY)
-            .fontFeature('"tnum" 1')
-            .maxLines(1)
-        }
-        .width('100%')
-        .height(40)
-        .onClick(() => { this.read(); })
       }
       .padding({ left: 16, right: 16, top: this.topInset + 12, bottom: 16 })
       .alignItems(HorizontalAlign.Start)
